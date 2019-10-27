@@ -1,0 +1,30 @@
+{
+  "name": "lantern-devtools",
+  "version": "1.0.0",
+  "description": "Development tools for the Lantern web server",
+  "private": true,
+  "scripts": {
+    "test": "npm run test",
+    "start": "webpack-dev-server --inline --hot"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/temochka/lantern-devtools.git"
+  },
+  "author": "Artem Chistyakov",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/temochka/lantern-devtools/issues"
+  },
+  "homepage": "https://github.com/temochka/lantern-devtools#readme",
+  "devDependencies": {
+    "elm-hot-webpack-loader": "^1.1.2",
+    "elm-webpack-loader": "^6.0.0",
+    "ts-loader": "^6.2.1",
+    "typescript": "^3.6.4",
+    "webpack": "^4.41.2",
+    "webpack-cli": "^3.3.9",
+    "webpack-dev-server": "^3.9.0"
+  },
+  "dependencies": {}
+}
