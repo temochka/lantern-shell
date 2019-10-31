@@ -31,12 +31,13 @@ main =
 type alias Model =
     { clientCount : Int
     , serverCount : Int
+    , serverResponse : Maybe String
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { clientCount = 0, serverCount = 0 }, Cmd.none )
+    ( { clientCount = 0, serverCount = 0, serverResponse = Nothing }, Cmd.none )
 
 
 
@@ -66,7 +67,7 @@ update msg model =
                 newCount =
                     model.clientCount + 1
             in
-            ( { model | clientCount = newCount }, lanternRequest (String.fromInt newCount) )
+            ( { model | clientCount = newCount }, lanternRequest ("{\"id\":\"42\",\"type\":\"Echo\",\"text\":\"" ++ String.fromInt newCount ++ "\"}") )
 
         Decrement ->
             let
@@ -78,10 +79,10 @@ update msg model =
         LanternResponse response ->
             case String.toInt response of
                 Just newServerCount ->
-                    ( { model | serverCount = newServerCount }, Cmd.none )
+                    ( { model | serverCount = newServerCount, serverResponse = Just response }, Cmd.none )
 
                 Nothing ->
-                    ( model, Cmd.none )
+                    ( { model | serverResponse = Just response }, Cmd.none )
 
 
 
@@ -95,4 +96,5 @@ view model =
         , div [] [ text (String.fromInt model.clientCount) ]
         , button [ onClick Increment ] [ text "+" ]
         , div [] [ text ("Server: " ++ String.fromInt model.serverCount) ]
+        , div [] [ text ("Server response: " ++ (model.serverResponse |> Maybe.withDefault "none")) ]
         ]
