@@ -2,8 +2,9 @@ port module DevTools exposing (..)
 
 import Browser
 import Debug
-import Html exposing (Html, button, div, text)
-import Html.Events exposing (onClick)
+import Html exposing (Html, button, div, input, text)
+import Html.Attributes
+import Html.Events exposing (onClick, onInput)
 import Json.Decode
 import Json.Encode
 import Lantern
@@ -29,15 +30,14 @@ main =
 
 
 type alias Model =
-    { clientCount : Int
-    , serverCount : Int
+    { query : String
     , serverResponse : Maybe String
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { clientCount = 0, serverCount = 0, serverResponse = Nothing }, Cmd.none )
+    ( { query = "", serverResponse = Nothing }, Cmd.none )
 
 
 
@@ -54,35 +54,22 @@ subscriptions _ =
 
 
 type Msg
-    = Increment
-    | Decrement
+    = UpdateQuery String
+    | RunQuery
     | LanternResponse Lantern.Response
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        Increment ->
-            let
-                newCount =
-                    model.clientCount + 1
-            in
-            ( { model | clientCount = newCount }, lanternRequest ("{\"id\":\"42\",\"type\":\"Echo\",\"text\":\"" ++ String.fromInt newCount ++ "\"}") )
+        UpdateQuery query ->
+            ( { model | query = query }, Cmd.none )
 
-        Decrement ->
-            let
-                newCount =
-                    model.clientCount - 1
-            in
-            ( { model | clientCount = newCount }, lanternRequest (String.fromInt newCount) )
+        RunQuery ->
+            ( model, lanternRequest ("{\"id\":\"42\",\"type\":\"Query\",\"query\":\"" ++ model.query ++ "\"}") )
 
         LanternResponse response ->
-            case String.toInt response of
-                Just newServerCount ->
-                    ( { model | serverCount = newServerCount, serverResponse = Just response }, Cmd.none )
-
-                Nothing ->
-                    ( { model | serverResponse = Just response }, Cmd.none )
+            ( { model | serverResponse = Just response }, Cmd.none )
 
 
 
@@ -92,9 +79,7 @@ update msg model =
 view : Model -> Html Msg
 view model =
     div []
-        [ button [ onClick Decrement ] [ text "-" ]
-        , div [] [ text (String.fromInt model.clientCount) ]
-        , button [ onClick Increment ] [ text "+" ]
-        , div [] [ text ("Server: " ++ String.fromInt model.serverCount) ]
+        [ input [ Html.Attributes.type_ "text", onInput UpdateQuery ] []
+        , button [ onClick RunQuery ] [ text "Run" ]
         , div [] [ text ("Server response: " ++ (model.serverResponse |> Maybe.withDefault "none")) ]
         ]
