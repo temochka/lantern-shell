@@ -8,13 +8,15 @@ import Html.Events exposing (onClick, onInput)
 import Json.Decode
 import Json.Encode
 import Lantern
+import Lantern.Query
+import Lantern.Request
 import String
 
 
-port lanternRequest : Lantern.RequestPort msg
+port lanternRequestPort : Lantern.RequestPort msg
 
 
-port lanternResponse : Lantern.ResponsePort msg
+port lanternResponsePort : Lantern.ResponsePort msg
 
 
 
@@ -32,12 +34,13 @@ main =
 type alias Model =
     { query : String
     , serverResponse : Maybe String
+    , lanternState : Lantern.State
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
-    ( { query = "", serverResponse = Nothing }, Cmd.none )
+    ( { query = "", serverResponse = Nothing, lanternState = Lantern.initState }, Cmd.none )
 
 
 
@@ -46,7 +49,7 @@ init _ =
 
 subscriptions : model -> Sub Msg
 subscriptions _ =
-    lanternResponse LanternResponse
+    lanternResponsePort LanternResponse
 
 
 
@@ -66,7 +69,14 @@ update msg model =
             ( { model | query = query }, Cmd.none )
 
         RunQuery ->
-            ( model, lanternRequest ("{\"id\":\"42\",\"type\":\"Query\",\"query\":\"" ++ model.query ++ "\"}") )
+            let
+                query =
+                    Lantern.Query.withNoArguments model.query
+
+                ( lanternState, cmd ) =
+                    Lantern.request model.lanternState lanternRequestPort (Lantern.Request.Query query)
+            in
+            ( { model | lanternState = lanternState }, cmd )
 
         LanternResponse response ->
             ( { model | serverResponse = Just response }, Cmd.none )

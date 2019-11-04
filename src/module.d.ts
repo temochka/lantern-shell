@@ -11,7 +11,7 @@ interface OutPort {
 }
 
 interface DevToolsApp {
-  ports: { lanternRequest: InPort; lanternResponse: OutPort };
+  ports: { lanternRequestPort: InPort; lanternResponsePort: OutPort };
 }
 
 declare module "DevTools" {
