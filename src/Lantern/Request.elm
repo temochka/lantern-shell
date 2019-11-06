@@ -9,19 +9,19 @@ type Request
     | Query Query.Query
 
 
-encode : Int -> Request -> Json.Encode.Value
+encode : String -> Request -> Json.Encode.Value
 encode id request =
     case request of
         Echo text ->
             Json.Encode.object
-                [ ( "id", Json.Encode.string <| String.fromInt id )
+                [ ( "id", Json.Encode.string id )
                 , ( "type", Json.Encode.string "Echo" )
                 , ( "text", Json.Encode.string text )
                 ]
 
         Query query ->
             Json.Encode.object
-                [ ( "id", Json.Encode.string <| String.fromInt id )
+                [ ( "id", Json.Encode.string id )
                 , ( "type", Json.Encode.string "Query" )
                 , ( "query", Json.Encode.string query.source )
                 ]
