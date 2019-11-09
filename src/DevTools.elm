@@ -8,6 +8,7 @@ import Html.Events exposing (onClick, onInput)
 import Json.Decode
 import Json.Encode
 import Lantern
+import Lantern.Log
 import Lantern.Query
 import Lantern.Request
 import String
@@ -31,32 +32,30 @@ main =
 -- MODEL
 
 
-type alias QueryResult =
+type alias EditorQueryResult =
     ( Int, Int )
 
 
-decodeQueryResults : List Json.Decode.Value -> Msg
-decodeQueryResults results =
-    let
-        decoder =
-            Json.Decode.map2
-                Tuple.pair
-                (Json.Decode.field "1" Json.Decode.int)
-                (Json.Decode.field "2" Json.Decode.int)
-    in
-    results
-        |> List.map (Json.Decode.decodeValue decoder >> Result.toMaybe)
-        |> List.filterMap identity
-        |> QueryResult
+type Queries
+    = EditorQuery (List EditorQueryResult)
+
+
+editorQueryResultDecoder : Json.Decode.Decoder EditorQueryResult
+editorQueryResultDecoder =
+    Json.Decode.map2
+        Tuple.pair
+        (Json.Decode.field "1" Json.Decode.int)
+        (Json.Decode.field "2" Json.Decode.int)
 
 
 type alias Model =
     { query : String
-    , queryResult : List QueryResult
+    , queryResult : List EditorQueryResult
+    , queryError : Maybe Lantern.Error
     , ping : String
     , pong : String
     , serverResponse : Maybe String
-    , lanternState : Lantern.State Msg
+    , lanternState : Lantern.State Queries Msg
     }
 
 
@@ -68,6 +67,7 @@ init _ =
     in
     ( { query = ""
       , queryResult = []
+      , queryError = Nothing
       , ping = ""
       , pong = ""
       , serverResponse = Nothing
@@ -96,7 +96,7 @@ type Msg
     | RunQuery
     | RunPing
     | ReceivePong String
-    | QueryResult (List QueryResult)
+    | QueryResult (Result Lantern.Error Queries)
     | LanternMessage Lantern.Message
 
 
@@ -125,12 +125,17 @@ update msg model =
                     Lantern.Query.withNoArguments model.query
 
                 ( lanternState, cmd ) =
-                    Lantern.query model.lanternState query decodeQueryResults
+                    Lantern.query model.lanternState query (editorQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery) QueryResult
             in
             ( { model | lanternState = lanternState }, cmd )
 
-        QueryResult results ->
-            ( { model | queryResult = results }, Cmd.none )
+        QueryResult result ->
+            case result of
+                Err error ->
+                    ( { model | queryError = Just error }, Cmd.none )
+
+                Ok (EditorQuery queryResult) ->
+                    ( { model | queryResult = queryResult }, Cmd.none )
 
         LanternMessage message ->
             let
@@ -144,6 +149,14 @@ update msg model =
 -- VIEW
 
 
+logView : Lantern.Log.Log -> Html Msg
+logView log =
+    Html.ul []
+        (log.lines
+            |> List.map (\( _, line ) -> Html.li [] [ text line ])
+        )
+
+
 view : Model -> Html Msg
 view model =
     div []
@@ -151,12 +164,12 @@ view model =
             [ input [ Html.Attributes.type_ "text", onInput UpdateQuery ] []
             , button [ onClick RunQuery ] [ text "Run query" ]
             , div [] [ text ("Results: " ++ Debug.toString model.queryResult) ]
-            , div [] [ text ("Server responses: " ++ Debug.toString model.lanternState.selectQueryResponses) ]
+            , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
             ]
         , div []
             [ input [ Html.Attributes.type_ "text", onInput UpdatePing ] []
             , button [ onClick RunPing ] [ text "Run echo" ]
             , div [] [ text ("Results: " ++ Debug.toString model.pong) ]
-            , div [] [ text ("Server responses: " ++ Debug.toString model.lanternState.echoResponses) ]
             ]
+        , logView model.lanternState.log
         ]

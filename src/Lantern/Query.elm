@@ -17,9 +17,14 @@ type alias Query =
 
 
 type alias SelectResult =
-    List Json.Decode.Value
+    Json.Decode.Value
 
 
 withNoArguments : String -> Query
 withNoArguments query =
     { source = query, arguments = Dict.empty }
+
+
+decodeResult : SelectResult -> Json.Decode.Decoder query -> Result Json.Decode.Error query
+decodeResult result decoder =
+    Json.Decode.decodeValue decoder result

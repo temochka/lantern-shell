@@ -21,7 +21,7 @@ decoder =
                 (\requestType ->
                     case requestType of
                         "Query" ->
-                            Json.Decode.field "results" (Json.Decode.list Json.Decode.value)
+                            Json.Decode.field "results" Json.Decode.value
                                 |> Json.Decode.map Query
 
                         "Echo" ->

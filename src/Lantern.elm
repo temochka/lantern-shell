@@ -1,12 +1,17 @@
-module Lantern exposing (Message, RequestPort, Response, ResponsePort, State, echo, init, query, subscriptions, update)
+module Lantern exposing (Error, Message, RequestPort, Response, ResponsePort, State, echo, errorToString, init, query, subscriptions, update)
 
 import Dict exposing (Dict)
 import Json.Decode
 import Json.Encode
+import Lantern.Log as Log exposing (Log)
 import Lantern.Query
 import Lantern.Request
 import Lantern.Response
 import Task
+
+
+type Error
+    = Error String
 
 
 type alias RequestPort msg =
@@ -21,14 +26,13 @@ type alias Response =
     String
 
 
-type alias State msg =
+type alias State query msg =
     { requestId : Int
-    , requestsInFlight : RequestsInFlight msg
+    , requestsInFlight : RequestsInFlight query msg
     , requestPort : RequestPort msg
     , responsePort : ResponsePort msg
     , updater : Message -> msg
-    , echoResponses : List ( String, String )
-    , selectQueryResponses : List ( String, Lantern.Query.SelectResult )
+    , log : Log
     }
 
 
@@ -36,39 +40,38 @@ type Message
     = ResponseMsg Response
 
 
-type alias RequestsInFlight msg =
+type alias RequestsInFlight query msg =
     { echo : Dict String (String -> msg)
-    , query : Dict String (List Json.Decode.Value -> msg)
+    , query : Dict String ( Json.Decode.Decoder query, Result Error query -> msg )
     }
 
 
-emptyRequests : RequestsInFlight msg
+emptyRequests : RequestsInFlight query msg
 emptyRequests =
     { echo = Dict.empty
     , query = Dict.empty
     }
 
 
-init : RequestPort msg -> ResponsePort msg -> (Message -> msg) -> ( State msg, Cmd msg )
+init : RequestPort msg -> ResponsePort msg -> (Message -> msg) -> ( State query msg, Cmd msg )
 init requestPort responsePort updater =
     ( { requestId = 0
       , requestsInFlight = emptyRequests
       , requestPort = requestPort
       , responsePort = responsePort
       , updater = updater
-      , echoResponses = []
-      , selectQueryResponses = []
+      , log = Log.new
       }
     , Cmd.none
     )
 
 
-subscriptions : State msg -> Sub msg
+subscriptions : State query msg -> Sub msg
 subscriptions state =
     state.responsePort (ResponseMsg >> state.updater)
 
 
-echo : State msg -> String -> (String -> msg) -> ( State msg, Cmd msg )
+echo : State query msg -> String -> (String -> msg) -> ( State query msg, Cmd msg )
 echo ({ requestsInFlight } as state) payload handler =
     let
         requestsCounter =
@@ -80,14 +83,21 @@ echo ({ requestsInFlight } as state) payload handler =
         newRequestsInFlight =
             { requestsInFlight | echo = Dict.insert requestId handler requestsInFlight.echo }
 
+        request =
+            Lantern.Request.Echo payload
+
         newState =
-            { state | requestId = requestsCounter, requestsInFlight = newRequestsInFlight }
+            { state
+                | requestId = requestsCounter
+                , requestsInFlight = newRequestsInFlight
+                , log = Log.logRequest state.log requestId request
+            }
     in
-    ( newState, state.requestPort (Json.Encode.encode 0 (Lantern.Request.encode (String.fromInt newState.requestId) (Lantern.Request.Echo payload))) )
+    ( newState, state.requestPort (Json.Encode.encode 0 (Lantern.Request.encode (String.fromInt newState.requestId) request)) )
 
 
-query : State msg -> Lantern.Query.Query -> (List Json.Decode.Value -> msg) -> ( State msg, Cmd msg )
-query ({ requestsInFlight } as state) query_ handler =
+query : State query msg -> Lantern.Query.Query -> Json.Decode.Decoder query -> (Result Error query -> msg) -> ( State query msg, Cmd msg )
+query ({ requestsInFlight } as state) query_ decoder msg =
     let
         requestsCounter =
             state.requestId + 1
@@ -95,16 +105,26 @@ query ({ requestsInFlight } as state) query_ handler =
         requestId =
             String.fromInt requestsCounter
 
+        request =
+            Lantern.Request.Query query_
+
+        handler =
+            ( decoder, msg )
+
         newRequestsInFlight =
             { requestsInFlight | query = Dict.insert requestId handler requestsInFlight.query }
 
         newState =
-            { state | requestId = requestsCounter, requestsInFlight = newRequestsInFlight }
+            { state
+                | requestId = requestsCounter
+                , requestsInFlight = newRequestsInFlight
+                , log = Log.logRequest state.log requestId request
+            }
     in
-    ( newState, state.requestPort (Json.Encode.encode 0 (Lantern.Request.encode (String.fromInt newState.requestId) (Lantern.Request.Query query_))) )
+    ( newState, state.requestPort (Json.Encode.encode 0 (Lantern.Request.encode (String.fromInt newState.requestId) request)) )
 
 
-update : Message -> State msg -> ( State msg, Cmd msg )
+update : Message -> State query msg -> ( State query msg, Cmd msg )
 update msg ({ requestsInFlight } as state) =
     case msg of
         ResponseMsg payload ->
@@ -113,7 +133,7 @@ update msg ({ requestsInFlight } as state) =
                     Json.Decode.decodeString Lantern.Response.decoder payload
             in
             case response of
-                Ok ( id, Lantern.Response.Echo text ) ->
+                Ok ( id, (Lantern.Response.Echo text) as serverResponse ) ->
                     let
                         handler =
                             Dict.get id requestsInFlight.echo
@@ -122,7 +142,10 @@ update msg ({ requestsInFlight } as state) =
                             { requestsInFlight | echo = Dict.remove id requestsInFlight.echo }
 
                         newState =
-                            { state | echoResponses = ( id, text ) :: state.echoResponses, requestsInFlight = newRequestsInFlight }
+                            { state
+                                | requestsInFlight = newRequestsInFlight
+                                , log = Log.logResponse state.log id serverResponse
+                            }
                     in
                     case handler of
                         Just callback ->
@@ -131,7 +154,7 @@ update msg ({ requestsInFlight } as state) =
                         Nothing ->
                             ( newState, Cmd.none )
 
-                Ok ( id, Lantern.Response.Query r ) ->
+                Ok ( id, (Lantern.Response.Query r) as serverResponse ) ->
                     let
                         handler =
                             Dict.get id requestsInFlight.query
@@ -140,21 +163,30 @@ update msg ({ requestsInFlight } as state) =
                             { requestsInFlight | query = Dict.remove id requestsInFlight.query }
 
                         newState =
-                            { state | selectQueryResponses = ( id, r ) :: state.selectQueryResponses, requestsInFlight = newRequestsInFlight }
+                            { state
+                                | requestsInFlight = newRequestsInFlight
+                                , log = Log.logResponse state.log id serverResponse
+                            }
                     in
                     case handler of
-                        Just callback ->
-                            ( newState, Task.perform callback (Task.succeed r) )
+                        Just ( decoder, callback ) ->
+                            let
+                                parseResult =
+                                    Lantern.Query.decodeResult r decoder
+                                        |> Result.mapError (Json.Decode.errorToString >> Error)
+                            in
+                            ( newState, Task.perform callback (Task.succeed parseResult) )
 
                         Nothing ->
                             ( newState, Cmd.none )
 
-                Ok ( id, Lantern.Response.Unknown _ ) ->
-                    Debug.todo "do something"
+                Ok ( id, serverResponse ) ->
+                    ( { state | log = Log.logResponse state.log id serverResponse }, Cmd.none )
 
                 Err err ->
-                    let
-                        _ =
-                            Debug.log "parse error:" err
-                    in
-                    ( state, Cmd.none )
+                    ( { state | log = Log.log state.log Log.Error (Json.Decode.errorToString err) }, Cmd.none )
+
+
+errorToString : Error -> String
+errorToString (Error e) =
+    e
