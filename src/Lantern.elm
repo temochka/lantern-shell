@@ -1,4 +1,4 @@
-module Lantern exposing (Error, Message, RequestPort, Response, ResponsePort, State, echo, errorToString, init, query, subscriptions, update)
+module Lantern exposing (Error, Message, RequestPort, Response, ResponsePort, State, andThen, echo, errorToString, init, liveQuery, query, subscriptions, update)
 
 import Dict exposing (Dict)
 import Json.Decode
@@ -66,6 +66,15 @@ init requestPort responsePort updater =
     )
 
 
+andThen : (State query msg -> ( State query msg, Cmd msg )) -> ( State query msg, Cmd msg ) -> ( State query msg, Cmd msg )
+andThen thenFn ( state, cmd ) =
+    let
+        ( newState, newCmd ) =
+            thenFn state
+    in
+    ( newState, Cmd.batch [ cmd, newCmd ] )
+
+
 subscriptions : State query msg -> Sub msg
 subscriptions state =
     state.responsePort (ResponseMsg >> state.updater)
@@ -98,6 +107,34 @@ echo ({ requestsInFlight } as state) payload handler =
 
 query : State query msg -> Lantern.Query.Query -> Json.Decode.Decoder query -> (Result Error query -> msg) -> ( State query msg, Cmd msg )
 query ({ requestsInFlight } as state) query_ decoder msg =
+    let
+        requestsCounter =
+            state.requestId + 1
+
+        requestId =
+            String.fromInt requestsCounter
+
+        request =
+            Lantern.Request.Query query_
+
+        handler =
+            ( decoder, msg )
+
+        newRequestsInFlight =
+            { requestsInFlight | query = Dict.insert requestId handler requestsInFlight.query }
+
+        newState =
+            { state
+                | requestId = requestsCounter
+                , requestsInFlight = newRequestsInFlight
+                , log = Log.logRequest state.log requestId request
+            }
+    in
+    ( newState, state.requestPort (Json.Encode.encode 0 (Lantern.Request.encode (String.fromInt newState.requestId) request)) )
+
+
+liveQuery : Lantern.Query.Query -> Json.Decode.Decoder query -> (Result Error query -> msg) -> State query msg -> ( State query msg, Cmd msg )
+liveQuery query_ decoder msg ({ requestsInFlight } as state) =
     let
         requestsCounter =
             state.requestId + 1

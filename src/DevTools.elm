@@ -32,12 +32,17 @@ main =
 -- MODEL
 
 
+type alias Table =
+    { name : String }
+
+
 type alias EditorQueryResult =
     ( Int, Int )
 
 
 type Queries
     = EditorQuery (List EditorQueryResult)
+    | TablesQuery (List Table)
 
 
 editorQueryResultDecoder : Json.Decode.Decoder EditorQueryResult
@@ -48,6 +53,13 @@ editorQueryResultDecoder =
         (Json.Decode.field "2" Json.Decode.int)
 
 
+tableDecoder : Json.Decode.Decoder Table
+tableDecoder =
+    Json.Decode.map
+        Table
+        (Json.Decode.field "name" Json.Decode.string)
+
+
 type alias Model =
     { query : String
     , queryResult : List EditorQueryResult
@@ -55,6 +67,7 @@ type alias Model =
     , ping : String
     , pong : String
     , serverResponse : Maybe String
+    , tables : List Table
     , lanternState : Lantern.State Queries Msg
     }
 
@@ -64,6 +77,12 @@ init _ =
     let
         ( lanternState, lanternCmd ) =
             Lantern.init lanternRequestPort lanternResponsePort LanternMessage
+                |> Lantern.andThen
+                    (Lantern.liveQuery
+                        (Lantern.Query.withNoArguments "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+                        (tableDecoder |> Json.Decode.list |> Json.Decode.map TablesQuery)
+                        QueryResult
+                    )
     in
     ( { query = ""
       , queryResult = []
@@ -71,6 +90,7 @@ init _ =
       , ping = ""
       , pong = ""
       , serverResponse = Nothing
+      , tables = []
       , lanternState = lanternState
       }
     , lanternCmd
@@ -83,7 +103,9 @@ init _ =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Lantern.subscriptions model.lanternState
+    Sub.batch
+        [ Lantern.subscriptions model.lanternState
+        ]
 
 
 
@@ -137,6 +159,9 @@ update msg model =
                 Ok (EditorQuery queryResult) ->
                     ( { model | queryResult = queryResult }, Cmd.none )
 
+                Ok (TablesQuery queryResult) ->
+                    ( { model | tables = queryResult }, Cmd.none )
+
         LanternMessage message ->
             let
                 ( lanternState, lanternCmd ) =
@@ -166,6 +191,8 @@ view model =
             , div [] [ text ("Results: " ++ Debug.toString model.queryResult) ]
             , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
             ]
+        , div []
+            [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ text name ]) model.tables) ]
         , div []
             [ input [ Html.Attributes.type_ "text", onInput UpdatePing ] []
             , button [ onClick RunPing ] [ text "Run echo" ]
