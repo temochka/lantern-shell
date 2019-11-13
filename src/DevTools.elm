@@ -64,6 +64,9 @@ type alias Model =
     { query : String
     , queryResult : List EditorQueryResult
     , queryError : Maybe Lantern.Error
+    , ddl : String
+    , ddlResult : Bool
+    , ddlError : Maybe Lantern.Error
     , ping : String
     , pong : String
     , serverResponse : Maybe String
@@ -87,6 +90,9 @@ init _ =
     ( { query = ""
       , queryResult = []
       , queryError = Nothing
+      , ddl = ""
+      , ddlResult = False
+      , ddlError = Nothing
       , ping = ""
       , pong = ""
       , serverResponse = Nothing
@@ -115,8 +121,11 @@ subscriptions model =
 type Msg
     = UpdateQuery String
     | UpdatePing String
+    | UpdateDdl String
     | RunQuery
     | RunPing
+    | RunDdl
+    | DdlResult Bool
     | ReceivePong String
     | QueryResult (Result Lantern.Error Queries)
     | LanternMessage Lantern.Message
@@ -130,6 +139,9 @@ update msg model =
 
         UpdatePing ping ->
             ( { model | ping = ping }, Cmd.none )
+
+        UpdateDdl ddl ->
+            ( { model | ddl = ddl }, Cmd.none )
 
         RunPing ->
             let
@@ -150,6 +162,19 @@ update msg model =
                     Lantern.query model.lanternState query (editorQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery) QueryResult
             in
             ( { model | lanternState = lanternState }, cmd )
+
+        RunDdl ->
+            let
+                ddlQuery =
+                    Lantern.Query.withNoArguments model.ddl
+
+                ( lanternState, cmd ) =
+                    Lantern.migrate ddlQuery DdlResult model.lanternState
+            in
+            ( { model | ddlResult = False, lanternState = lanternState }, cmd )
+
+        DdlResult r ->
+            ( { model | ddlResult = r }, Cmd.none )
 
         QueryResult result ->
             case result of
@@ -185,17 +210,21 @@ logView log =
 view : Model -> Html Msg
 view model =
     div []
-        [ div []
-            [ input [ Html.Attributes.type_ "text", onInput UpdateQuery ] []
-            , button [ onClick RunQuery ] [ text "Run query" ]
+        [ Html.form [ Html.Events.onSubmit RunQuery ]
+            [ div [] [ Html.textarea [ onInput UpdateQuery, Html.Attributes.cols 80 ] [] ]
+            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run query" ] [] ]
             , div [] [ text ("Results: " ++ Debug.toString model.queryResult) ]
             , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
             ]
-        , div []
-            [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ text name ]) model.tables) ]
-        , div []
-            [ input [ Html.Attributes.type_ "text", onInput UpdatePing ] []
-            , button [ onClick RunPing ] [ text "Run echo" ]
+        , Html.form [ Html.Events.onSubmit RunDdl ]
+            [ div [] [ Html.textarea [ onInput UpdateDdl, Html.Attributes.cols 80 ] [] ]
+            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run DDL" ] [] ]
+            , div [] [ text ("Result: " ++ Debug.toString model.ddlResult) ]
+            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ text name ]) model.tables) ]
+            ]
+        , Html.form [ Html.Events.onSubmit RunPing ]
+            [ div [] [ Html.textarea [ onInput UpdatePing, Html.Attributes.cols 80 ] [] ]
+            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run echo" ] [] ]
             , div [] [ text ("Results: " ++ Debug.toString model.pong) ]
             ]
         , logView model.lanternState.log

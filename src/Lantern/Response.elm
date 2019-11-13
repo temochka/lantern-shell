@@ -8,6 +8,7 @@ import Lantern.Request
 type Response
     = Echo String
     | Query Lantern.Query.SelectResult
+    | Migration
     | Unknown Json.Decode.Value
 
 
@@ -27,6 +28,9 @@ decoder =
                         "Echo" ->
                             Json.Decode.field "text" Json.Decode.string
                                 |> Json.Decode.map Echo
+
+                        "Migration" ->
+                            Json.Decode.succeed Migration
 
                         _ ->
                             Json.Decode.map Unknown Json.Decode.value

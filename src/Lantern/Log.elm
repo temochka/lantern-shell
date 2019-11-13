@@ -37,6 +37,9 @@ logRequest currentLog requestId request =
         Lantern.Request.Query { source, arguments } ->
             log currentLog Info ("[#" ++ requestId ++ "] Query request: " ++ source ++ "(" ++ Debug.toString arguments ++ ")")
 
+        Lantern.Request.Migration { source } ->
+            log currentLog Info ("[#" ++ requestId ++ "] Migration request: " ++ source)
+
 
 logResponse : Log -> Lantern.Request.Id -> Lantern.Response.Response -> Log
 logResponse currentLog requestId response =
@@ -46,6 +49,9 @@ logResponse currentLog requestId response =
 
         Lantern.Response.Query result ->
             log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Json.Encode.encode 0 result)
+
+        Lantern.Response.Migration ->
+            log currentLog Info ("[#" ++ requestId ++ "] Migration response: ack")
 
         Lantern.Response.Unknown payload ->
             log currentLog Error ("[#" ++ requestId ++ "] Unknown resposne: " ++ Json.Encode.encode 0 payload)

@@ -11,6 +11,7 @@ type alias Id =
 type Request
     = Echo String
     | Query Query.Query
+    | Migration Query.Query
 
 
 encode : String -> Request -> Json.Encode.Value
@@ -28,4 +29,11 @@ encode id request =
                 [ ( "id", Json.Encode.string id )
                 , ( "type", Json.Encode.string "Query" )
                 , ( "query", Json.Encode.string query.source )
+                ]
+
+        Migration ddl ->
+            Json.Encode.object
+                [ ( "id", Json.Encode.string id )
+                , ( "type", Json.Encode.string "Migration" )
+                , ( "ddl", Json.Encode.string ddl.source )
                 ]

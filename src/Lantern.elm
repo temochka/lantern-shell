@@ -1,4 +1,4 @@
-module Lantern exposing (Error, Message, RequestPort, Response, ResponsePort, State, andThen, echo, errorToString, init, liveQuery, query, subscriptions, update)
+module Lantern exposing (Error, Message, RequestPort, Response, ResponsePort, State, andThen, echo, errorToString, init, liveQuery, migrate, query, subscriptions, update)
 
 import Dict exposing (Dict)
 import Json.Decode
@@ -43,6 +43,7 @@ type Message
 type alias RequestsInFlight query msg =
     { echo : Dict String (String -> msg)
     , query : Dict String ( Json.Decode.Decoder query, Result Error query -> msg )
+    , migration : Dict String (Bool -> msg)
     }
 
 
@@ -50,6 +51,7 @@ emptyRequests : RequestsInFlight query msg
 emptyRequests =
     { echo = Dict.empty
     , query = Dict.empty
+    , migration = Dict.empty
     }
 
 
@@ -161,6 +163,31 @@ liveQuery query_ decoder msg ({ requestsInFlight } as state) =
     ( newState, state.requestPort (Json.Encode.encode 0 (Lantern.Request.encode (String.fromInt newState.requestId) request)) )
 
 
+migrate : Lantern.Query.Query -> (Bool -> msg) -> State query msg -> ( State query msg, Cmd msg )
+migrate query_ msg ({ requestsInFlight } as state) =
+    let
+        requestsCounter =
+            state.requestId + 1
+
+        requestId =
+            String.fromInt requestsCounter
+
+        request =
+            Lantern.Request.Migration query_
+
+        newRequestsInFlight =
+            { requestsInFlight | migration = Dict.insert requestId msg requestsInFlight.migration }
+
+        newState =
+            { state
+                | requestId = requestsCounter
+                , requestsInFlight = newRequestsInFlight
+                , log = Log.logRequest state.log requestId request
+            }
+    in
+    ( newState, state.requestPort (Json.Encode.encode 0 (Lantern.Request.encode (String.fromInt newState.requestId) request)) )
+
+
 update : Message -> State query msg -> ( State query msg, Cmd msg )
 update msg ({ requestsInFlight } as state) =
     case msg of
@@ -213,6 +240,27 @@ update msg ({ requestsInFlight } as state) =
                                         |> Result.mapError (Json.Decode.errorToString >> Error)
                             in
                             ( newState, Task.perform callback (Task.succeed parseResult) )
+
+                        Nothing ->
+                            ( newState, Cmd.none )
+
+                Ok ( id, Lantern.Response.Migration ) ->
+                    let
+                        handler =
+                            Dict.get id requestsInFlight.migration
+
+                        newRequestsInFlight =
+                            { requestsInFlight | migration = Dict.remove id requestsInFlight.migration }
+
+                        newState =
+                            { state
+                                | requestsInFlight = newRequestsInFlight
+                                , log = Log.logResponse state.log id Lantern.Response.Migration
+                            }
+                    in
+                    case handler of
+                        Just callback ->
+                            ( newState, Task.perform callback (Task.succeed True) )
 
                         Nothing ->
                             ( newState, Cmd.none )
