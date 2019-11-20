@@ -205,13 +205,45 @@ logView log =
         )
 
 
+resultsTable : List FlexibleQueryResult -> Html Msg
+resultsTable results =
+    let
+        titles =
+            results |> List.head |> Maybe.map (Dict.keys >> List.sort) |> Maybe.withDefault []
+
+        valueToString val =
+            case val of
+                Lantern.Query.Null ->
+                    ""
+
+                Lantern.Query.Integer i ->
+                    String.fromInt i
+
+                Lantern.Query.Real r ->
+                    String.fromFloat r
+
+                Lantern.Query.Text t ->
+                    t
+
+        row result =
+            titles
+                |> List.map ((\t -> Dict.get t result) >> Maybe.map valueToString >> Maybe.withDefault "" >> (\s -> Html.td [] [ text s ]))
+                |> Html.tr []
+    in
+    Html.table []
+        [ Html.thead []
+            [ Html.tr [] (List.map (\t -> Html.th [] [ text t ]) titles) ]
+        , Html.tbody [] (List.map row results)
+        ]
+
+
 view : Model -> Html Msg
 view model =
     div []
         [ Html.form [ Html.Events.onSubmit RunQuery ]
             [ div [] [ Html.textarea [ onInput UpdateQuery, Html.Attributes.cols 80 ] [] ]
             , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run query" ] [] ]
-            , div [] [ text ("Results: " ++ Debug.toString model.queryResult) ]
+            , resultsTable model.queryResult
             , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
             ]
         , Html.form [ Html.Events.onSubmit RunDdl ]
