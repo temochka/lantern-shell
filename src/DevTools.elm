@@ -2,6 +2,7 @@ port module DevTools exposing (..)
 
 import Browser
 import Debug
+import Dict exposing (Dict)
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes
 import Html.Events exposing (onClick, onInput)
@@ -36,21 +37,18 @@ type alias Table =
     { name : String }
 
 
-type alias EditorQueryResult =
-    ( Int, Int )
+type alias FlexibleQueryResult =
+    Dict String Lantern.Query.Value
 
 
 type Queries
-    = EditorQuery (List EditorQueryResult)
+    = EditorQuery (List FlexibleQueryResult)
     | TablesQuery (List Table)
 
 
-editorQueryResultDecoder : Json.Decode.Decoder EditorQueryResult
-editorQueryResultDecoder =
-    Json.Decode.map2
-        Tuple.pair
-        (Json.Decode.field "1" Json.Decode.int)
-        (Json.Decode.field "2" Json.Decode.int)
+flexibleQueryResultDecoder : Json.Decode.Decoder FlexibleQueryResult
+flexibleQueryResultDecoder =
+    Json.Decode.dict Lantern.Query.valueDecoder
 
 
 tableDecoder : Json.Decode.Decoder Table
@@ -62,7 +60,7 @@ tableDecoder =
 
 type alias Model =
     { query : String
-    , queryResult : List EditorQueryResult
+    , queryResult : List FlexibleQueryResult
     , queryError : Maybe Lantern.Error
     , ddl : String
     , ddlResult : Bool
@@ -159,7 +157,7 @@ update msg model =
                     Lantern.Query.withNoArguments model.query
 
                 ( lanternState, cmd ) =
-                    Lantern.query model.lanternState query (editorQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery) QueryResult
+                    Lantern.query model.lanternState query (flexibleQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery) QueryResult
             in
             ( { model | lanternState = lanternState }, cmd )
 
