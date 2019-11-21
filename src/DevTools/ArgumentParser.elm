@@ -19,6 +19,8 @@ parserHelper identifiers =
             |> Parser.map (\id -> Parser.Loop (id :: identifiers))
         , singleQuotedString
             |> Parser.map (\id -> Parser.Loop identifiers)
+        , doubleQuotedString
+            |> Parser.map (\id -> Parser.Loop identifiers)
         , Parser.chompWhile (\c -> not <| isInterestingChar c)
             |> Parser.getChompedString
             |> Parser.map
@@ -43,7 +45,7 @@ identifier =
 
 isInterestingChar : Char -> Bool
 isInterestingChar c =
-    isIdentifierStart c || c == '\'' || c == '"'
+    isIdentifierStart c || c == '\'' || String.fromChar c == "\""
 
 
 
@@ -83,9 +85,9 @@ doubleQuotedString =
     let
         helper _ =
             Parser.oneOf
-                [ Parser.symbol "\"" |> Parser.map (always (Parser.Done ()))
-                , Parser.chompWhile (\c -> c /= '"')
-                    -- "
+                [ Parser.symbol "\\\"" |> Parser.map (always (Parser.Loop ()))
+                , Parser.symbol "\"" |> Parser.map (always (Parser.Done ()))
+                , Parser.chompWhile (\c -> String.fromChar c /= "\"")
                     |> Parser.getChompedString
                     |> Parser.map
                         (\s ->
