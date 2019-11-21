@@ -2,6 +2,7 @@ port module DevTools exposing (..)
 
 import Browser
 import Debug
+import DevTools.ArgumentParser as ArgumentParser
 import Dict exposing (Dict)
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes
@@ -60,6 +61,7 @@ tableDecoder =
 
 type alias Model =
     { query : String
+    , queryArguments : Dict String String
     , queryResult : List FlexibleQueryResult
     , queryError : Maybe Lantern.Error
     , ddl : String
@@ -86,6 +88,7 @@ init _ =
                     )
     in
     ( { query = ""
+      , queryArguments = Dict.empty
       , queryResult = []
       , queryError = Nothing
       , ddl = ""
@@ -133,7 +136,14 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         UpdateQuery query ->
-            ( { model | query = query }, Cmd.none )
+            let
+                argumentNames =
+                    ArgumentParser.parse query
+
+                arguments =
+                    argumentNames |> List.map (\n -> ( n, "" )) |> Dict.fromList
+            in
+            ( { model | query = query, queryArguments = arguments }, Cmd.none )
 
         UpdatePing ping ->
             ( { model | ping = ping }, Cmd.none )
@@ -244,6 +254,7 @@ view model =
             [ div [] [ Html.textarea [ onInput UpdateQuery, Html.Attributes.cols 80 ] [] ]
             , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run query" ] [] ]
             , resultsTable model.queryResult
+            , div [] [ text ("Arguments: " ++ Debug.toString model.queryArguments) ]
             , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
             ]
         , Html.form [ Html.Events.onSubmit RunDdl ]
