@@ -121,6 +121,7 @@ subscriptions model =
 
 type Msg
     = UpdateQuery String
+    | UpdateArgument String String
     | UpdatePing String
     | UpdateDdl String
     | RunQuery
@@ -141,9 +142,14 @@ update msg model =
                     ArgumentParser.parse query
 
                 arguments =
-                    argumentNames |> List.map (\n -> ( n, "" )) |> Dict.fromList
+                    argumentNames
+                        |> List.map (\n -> ( n, Dict.get n model.queryArguments |> Maybe.withDefault "" ))
+                        |> Dict.fromList
             in
             ( { model | query = query, queryArguments = arguments }, Cmd.none )
+
+        UpdateArgument name value ->
+            ( { model | queryArguments = Dict.insert name value model.queryArguments }, Cmd.none )
 
         UpdatePing ping ->
             ( { model | ping = ping }, Cmd.none )
@@ -164,7 +170,9 @@ update msg model =
         RunQuery ->
             let
                 query =
-                    Lantern.Query.withNoArguments model.query
+                    { source = model.query
+                    , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.queryArguments
+                    }
 
                 ( lanternState, cmd ) =
                     Lantern.query model.lanternState query (flexibleQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery) QueryResult
@@ -252,9 +260,16 @@ view model =
     div []
         [ Html.form [ Html.Events.onSubmit RunQuery ]
             [ div [] [ Html.textarea [ onInput UpdateQuery, Html.Attributes.cols 80 ] [] ]
+            , div []
+                (model.queryArguments
+                    |> Dict.toList
+                    |> List.map
+                        (\( name, value ) ->
+                            Html.label [] [ text (name ++ ": "), input [ Html.Attributes.type_ "text", onInput (UpdateArgument name), Html.Attributes.value value ] [] ]
+                        )
+                )
             , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run query" ] [] ]
             , resultsTable model.queryResult
-            , div [] [ text ("Arguments: " ++ Debug.toString model.queryArguments) ]
             , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
             ]
         , Html.form [ Html.Events.onSubmit RunDdl ]
