@@ -37,6 +37,9 @@ logRequest currentLog requestId request =
         Lantern.Request.Query { source, arguments } ->
             log currentLog Info ("[#" ++ requestId ++ "] Query request: " ++ source ++ "(" ++ Debug.toString arguments ++ ")")
 
+        Lantern.Request.LiveQuery queries ->
+            log currentLog Info ("[#" ++ requestId ++ "] Live query request: " ++ Debug.toString queries)
+
         Lantern.Request.Migration { source } ->
             log currentLog Info ("[#" ++ requestId ++ "] Migration request: " ++ source)
 
@@ -49,6 +52,9 @@ logResponse currentLog requestId response =
 
         Lantern.Response.Query result ->
             log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Json.Encode.encode 0 result)
+
+        Lantern.Response.LiveQuery result ->
+            log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Json.Encode.encode 0 (Json.Encode.list identity result))
 
         Lantern.Response.Migration ->
             log currentLog Info ("[#" ++ requestId ++ "] Migration response: ack")

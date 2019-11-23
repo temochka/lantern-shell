@@ -9,8 +9,10 @@ type Argument
     | Float Float
     | String String
 
+
 type alias Arguments =
     Dict String Argument
+
 
 type alias Query =
     { source : String

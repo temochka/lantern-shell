@@ -10,6 +10,7 @@ import Html.Events exposing (onClick, onInput)
 import Json.Decode
 import Json.Encode
 import Lantern
+import Lantern.Encoders
 import Lantern.Log
 import Lantern.Query
 import Lantern.Request
@@ -44,7 +45,16 @@ type alias FlexibleQueryResult =
 
 type Queries
     = EditorQuery (List FlexibleQueryResult)
-    | TablesQuery (List Table)
+
+
+type alias LiveQueries =
+    { databaseTables : Lantern.Query.Query
+    }
+
+
+type alias LiveResults =
+    { databaseTables : List Table
+    }
 
 
 flexibleQueryResultDecoder : Json.Decode.Decoder FlexibleQueryResult
@@ -64,40 +74,46 @@ type alias Model =
     , queryArguments : Dict String String
     , queryResult : List FlexibleQueryResult
     , queryError : Maybe Lantern.Error
+    , liveQueries : LiveQueries
+    , liveResults : LiveResults
     , ddl : String
     , ddlResult : Bool
     , ddlError : Maybe Lantern.Error
     , ping : String
     , pong : String
     , serverResponse : Maybe String
-    , tables : List Table
-    , lanternState : Lantern.State Queries Msg
+    , lanternState : Lantern.State Queries LiveResults Msg
     }
 
 
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
+        liveQueries =
+            { databaseTables = Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty }
+
         ( lanternState, lanternCmd ) =
             Lantern.init lanternRequestPort lanternResponsePort LanternMessage
                 |> Lantern.andThen
                     (Lantern.liveQuery
-                        (Lantern.Query.withNoArguments "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-                        (tableDecoder |> Json.Decode.list |> Json.Decode.map TablesQuery)
-                        QueryResult
+                        ( liveQueries.databaseTables, tableDecoder )
+                        LiveResults
+                        UpdateLiveResults
                     )
     in
     ( { query = ""
       , queryArguments = Dict.empty
       , queryResult = []
       , queryError = Nothing
+      , liveQueries = liveQueries
+      , liveResults =
+            { databaseTables = [] }
       , ddl = ""
       , ddlResult = False
       , ddlError = Nothing
       , ping = ""
       , pong = ""
       , serverResponse = Nothing
-      , tables = []
       , lanternState = lanternState
       }
     , lanternCmd
@@ -124,6 +140,7 @@ type Msg
     | UpdateArgument String String
     | UpdatePing String
     | UpdateDdl String
+    | UpdateLiveResults (Result Lantern.Error LiveResults)
     | RunQuery
     | RunPing
     | RunDdl
@@ -156,6 +173,14 @@ update msg model =
 
         UpdateDdl ddl ->
             ( { model | ddl = ddl }, Cmd.none )
+
+        UpdateLiveResults result ->
+            case result of
+                Err e ->
+                    ( { model | queryError = Just e }, Cmd.none )
+
+                Ok liveResults ->
+                    ( { model | liveResults = liveResults }, Cmd.none )
 
         RunPing ->
             let
@@ -199,9 +224,6 @@ update msg model =
 
                 Ok (EditorQuery queryResult) ->
                     ( { model | queryResult = queryResult }, Cmd.none )
-
-                Ok (TablesQuery queryResult) ->
-                    ( { model | tables = queryResult }, Cmd.none )
 
         LanternMessage message ->
             let
@@ -276,7 +298,7 @@ view model =
             [ div [] [ Html.textarea [ onInput UpdateDdl, Html.Attributes.cols 80 ] [] ]
             , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run DDL" ] [] ]
             , div [] [ text ("Result: " ++ Debug.toString model.ddlResult) ]
-            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ text name ]) model.tables) ]
+            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ text name ]) model.liveResults.databaseTables) ]
             ]
         , Html.form [ Html.Events.onSubmit RunPing ]
             [ div [] [ Html.textarea [ onInput UpdatePing, Html.Attributes.cols 80 ] [] ]
