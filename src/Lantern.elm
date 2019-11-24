@@ -20,9 +20,10 @@ module Lantern exposing
     , liveQuery8
     , liveQuery9
     , migrate
-    , query
+    , readerQuery
     , subscriptions
     , update
+    , writerQuery
     )
 
 import Dict exposing (Dict)
@@ -77,7 +78,8 @@ type Message
 
 type alias RequestsInFlight query msg =
     { echo : Dict String (String -> msg)
-    , query : Dict String ( Json.Decode.Decoder query, Result Error query -> msg )
+    , readerQuery : Dict String ( Json.Decode.Decoder query, Result Error query -> msg )
+    , writerQuery : Dict String (Bool -> msg)
     , migration : Dict String (Bool -> msg)
     }
 
@@ -85,7 +87,8 @@ type alias RequestsInFlight query msg =
 emptyRequests : RequestsInFlight query msg
 emptyRequests =
     { echo = Dict.empty
-    , query = Dict.empty
+    , readerQuery = Dict.empty
+    , writerQuery = Dict.empty
     , migration = Dict.empty
     }
 
@@ -143,8 +146,13 @@ echo ({ requestsInFlight } as state) payload handler =
     ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
 
 
-query : State query liveQuery msg -> Lantern.Query.Query -> Json.Decode.Decoder query -> (Result Error query -> msg) -> ( State query liveQuery msg, Cmd msg )
-query ({ requestsInFlight } as state) query_ decoder msg =
+readerQuery :
+    State query liveQuery msg
+    -> Lantern.Query.Query
+    -> Json.Decode.Decoder query
+    -> (Result Error query -> msg)
+    -> ( State query liveQuery msg, Cmd msg )
+readerQuery ({ requestsInFlight } as state) query decoder msg =
     let
         requestsCounter =
             state.requestId + 1
@@ -153,13 +161,42 @@ query ({ requestsInFlight } as state) query_ decoder msg =
             String.fromInt requestsCounter
 
         request =
-            Lantern.Request.ReaderQuery query_
+            Lantern.Request.ReaderQuery query
 
         handler =
             ( decoder, msg )
 
         newRequestsInFlight =
-            { requestsInFlight | query = Dict.insert requestId handler requestsInFlight.query }
+            { requestsInFlight | readerQuery = Dict.insert requestId handler requestsInFlight.readerQuery }
+
+        newState =
+            { state
+                | requestId = requestsCounter
+                , requestsInFlight = newRequestsInFlight
+                , log = Log.logRequest state.log requestId request
+            }
+    in
+    ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
+
+
+writerQuery :
+    State query liveQuery msg
+    -> Lantern.Query.Query
+    -> (Bool -> msg)
+    -> ( State query liveQuery msg, Cmd msg )
+writerQuery ({ requestsInFlight } as state) query msg =
+    let
+        requestsCounter =
+            state.requestId + 1
+
+        requestId =
+            String.fromInt requestsCounter
+
+        request =
+            Lantern.Request.WriterQuery query
+
+        newRequestsInFlight =
+            { requestsInFlight | writerQuery = Dict.insert requestId msg requestsInFlight.writerQuery }
 
         newState =
             { state
@@ -569,10 +606,10 @@ update msg ({ requestsInFlight } as state) =
                         Lantern.Response.ReaderQuery results ->
                             let
                                 handler =
-                                    Dict.get id requestsInFlight.query
+                                    Dict.get id requestsInFlight.readerQuery
 
                                 newRequestsInFlight =
-                                    { requestsInFlight | query = Dict.remove id requestsInFlight.query }
+                                    { requestsInFlight | readerQuery = Dict.remove id requestsInFlight.readerQuery }
 
                                 newState =
                                     { state
@@ -593,7 +630,25 @@ update msg ({ requestsInFlight } as state) =
                                     ( newState, Cmd.none )
 
                         Lantern.Response.WriterQuery result ->
-                            Debug.todo "Handle writer results"
+                            let
+                                handler =
+                                    Dict.get id requestsInFlight.writerQuery
+
+                                newRequestsInFlight =
+                                    { requestsInFlight | migration = Dict.remove id requestsInFlight.writerQuery }
+
+                                newState =
+                                    { state
+                                        | requestsInFlight = newRequestsInFlight
+                                        , log = Log.logResponse state.log id response
+                                    }
+                            in
+                            case handler of
+                                Just callback ->
+                                    ( newState, Task.perform callback (Task.succeed True) )
+
+                                Nothing ->
+                                    ( newState, Cmd.none )
 
                         Lantern.Response.LiveQuery results ->
                             let

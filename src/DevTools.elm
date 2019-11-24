@@ -70,8 +70,10 @@ tableDecoder =
 
 
 type alias Model =
-    { query : String
-    , queryArguments : Dict String String
+    { readerQuery : String
+    , readerQueryArguments : Dict String String
+    , writerQuery : String
+    , writerQueryArguments : Dict String String
     , queryResult : List FlexibleQueryResult
     , queryError : Maybe Lantern.Error
     , liveQueries : LiveQueries
@@ -101,8 +103,10 @@ init _ =
                         UpdateLiveResults
                     )
     in
-    ( { query = ""
-      , queryArguments = Dict.empty
+    ( { readerQuery = ""
+      , readerQueryArguments = Dict.empty
+      , writerQuery = ""
+      , writerQueryArguments = Dict.empty
       , queryResult = []
       , queryError = Nothing
       , liveQueries = liveQueries
@@ -126,9 +130,7 @@ init _ =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Sub.batch
-        [ Lantern.subscriptions model.lanternState
-        ]
+    Lantern.subscriptions model.lanternState
 
 
 
@@ -136,37 +138,56 @@ subscriptions model =
 
 
 type Msg
-    = UpdateQuery String
-    | UpdateArgument String String
+    = UpdateReaderQuery String
+    | UpdateReaderQueryArgument String String
+    | UpdateWriterQuery String
+    | UpdateWriterQueryArgument String String
     | UpdatePing String
     | UpdateDdl String
     | UpdateLiveResults (Result Lantern.Error LiveResults)
-    | RunQuery
+    | RunReaderQuery
+    | RunWriterQuery
     | RunPing
     | RunDdl
     | DdlResult Bool
     | ReceivePong String
-    | QueryResult (Result Lantern.Error Queries)
+    | ReaderQueryResult (Result Lantern.Error Queries)
+    | WriterQueryResult Bool
     | LanternMessage Lantern.Message
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
-        UpdateQuery query ->
+        UpdateReaderQuery query ->
             let
                 argumentNames =
                     ArgumentParser.parse query
 
                 arguments =
                     argumentNames
-                        |> List.map (\n -> ( n, Dict.get n model.queryArguments |> Maybe.withDefault "" ))
+                        |> List.map (\n -> ( n, Dict.get n model.readerQueryArguments |> Maybe.withDefault "" ))
                         |> Dict.fromList
             in
-            ( { model | query = query, queryArguments = arguments }, Cmd.none )
+            ( { model | readerQuery = query, readerQueryArguments = arguments }, Cmd.none )
 
-        UpdateArgument name value ->
-            ( { model | queryArguments = Dict.insert name value model.queryArguments }, Cmd.none )
+        UpdateReaderQueryArgument name value ->
+            ( { model | readerQueryArguments = Dict.insert name value model.readerQueryArguments }, Cmd.none )
+
+        UpdateWriterQuery query ->
+            let
+                argumentNames =
+                    ArgumentParser.parse query
+
+                arguments =
+                    argumentNames
+                        |> List.map (\n -> ( n, Dict.get n model.writerQueryArguments |> Maybe.withDefault "" ))
+                        |> Dict.fromList
+            in
+            ( { model | writerQuery = query, writerQueryArguments = arguments }, Cmd.none )
+
+        UpdateWriterQueryArgument name value ->
+            ( { model | writerQueryArguments = Dict.insert name value model.writerQueryArguments }, Cmd.none )
 
         UpdatePing ping ->
             ( { model | ping = ping }, Cmd.none )
@@ -192,15 +213,34 @@ update msg model =
         ReceivePong pong ->
             ( { model | pong = pong }, Cmd.none )
 
-        RunQuery ->
+        RunReaderQuery ->
             let
                 query =
-                    { source = model.query
-                    , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.queryArguments
+                    { source = model.readerQuery
+                    , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.readerQueryArguments
                     }
 
                 ( lanternState, cmd ) =
-                    Lantern.query model.lanternState query (flexibleQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery) QueryResult
+                    Lantern.readerQuery
+                        model.lanternState
+                        query
+                        (flexibleQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery)
+                        ReaderQueryResult
+            in
+            ( { model | lanternState = lanternState }, cmd )
+
+        RunWriterQuery ->
+            let
+                query =
+                    { source = model.writerQuery
+                    , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.writerQueryArguments
+                    }
+
+                ( lanternState, cmd ) =
+                    Lantern.writerQuery
+                        model.lanternState
+                        query
+                        WriterQueryResult
             in
             ( { model | lanternState = lanternState }, cmd )
 
@@ -217,13 +257,16 @@ update msg model =
         DdlResult r ->
             ( { model | ddlResult = r }, Cmd.none )
 
-        QueryResult result ->
+        ReaderQueryResult result ->
             case result of
                 Err error ->
                     ( { model | queryError = Just error }, Cmd.none )
 
                 Ok (EditorQuery queryResult) ->
                     ( { model | queryResult = queryResult }, Cmd.none )
+
+        WriterQueryResult _ ->
+            ( model, Cmd.none )
 
         LanternMessage message ->
             let
@@ -280,19 +323,31 @@ resultsTable results =
 view : Model -> Html Msg
 view model =
     div []
-        [ Html.form [ Html.Events.onSubmit RunQuery ]
-            [ div [] [ Html.textarea [ onInput UpdateQuery, Html.Attributes.cols 80 ] [] ]
+        [ Html.form [ Html.Events.onSubmit RunReaderQuery ]
+            [ div [] [ Html.textarea [ onInput UpdateReaderQuery, Html.Attributes.cols 80 ] [] ]
             , div []
-                (model.queryArguments
+                (model.readerQueryArguments
                     |> Dict.toList
                     |> List.map
                         (\( name, value ) ->
-                            Html.label [] [ text (name ++ ": "), input [ Html.Attributes.type_ "text", onInput (UpdateArgument name), Html.Attributes.value value ] [] ]
+                            Html.label [] [ text (name ++ ": "), input [ Html.Attributes.type_ "text", onInput (UpdateReaderQueryArgument name), Html.Attributes.value value ] [] ]
                         )
                 )
-            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run query" ] [] ]
+            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run reader query" ] [] ]
             , resultsTable model.queryResult
             , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
+            ]
+        , Html.form [ Html.Events.onSubmit RunWriterQuery ]
+            [ div [] [ Html.textarea [ onInput UpdateWriterQuery, Html.Attributes.cols 80 ] [] ]
+            , div []
+                (model.writerQueryArguments
+                    |> Dict.toList
+                    |> List.map
+                        (\( name, value ) ->
+                            Html.label [] [ text (name ++ ": "), input [ Html.Attributes.type_ "text", onInput (UpdateWriterQueryArgument name), Html.Attributes.value value ] [] ]
+                        )
+                )
+            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run writer query" ] [] ]
             ]
         , Html.form [ Html.Events.onSubmit RunDdl ]
             [ div [] [ Html.textarea [ onInput UpdateDdl, Html.Attributes.cols 80 ] [] ]
