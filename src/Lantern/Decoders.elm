@@ -2,7 +2,15 @@ module Lantern.Decoders exposing (response)
 
 import Dict
 import Json.Decode
+import Lantern.Query as Query
 import Lantern.Response as Response
+
+
+writerQueryResult : Json.Decode.Decoder Query.WriterResult
+writerQueryResult =
+    Json.Decode.map2 Query.WriterResult
+        (Json.Decode.field "changed_rows" Json.Decode.int)
+        (Json.Decode.field "last_insert_rowid" Json.Decode.int)
 
 
 response : Json.Decode.Decoder ( String, Response.Response )
@@ -14,9 +22,13 @@ response =
             |> Json.Decode.andThen
                 (\requestType ->
                     case requestType of
-                        "Query" ->
+                        "ReaderQuery" ->
                             Json.Decode.field "results" Json.Decode.value
-                                |> Json.Decode.map Response.Query
+                                |> Json.Decode.map Response.ReaderQuery
+
+                        "WriterQuery" ->
+                            Json.Decode.map Response.WriterQuery
+                                (Json.Decode.field "results" writerQueryResult)
 
                         "LiveQuery" ->
                             Json.Decode.field "results" (Json.Decode.dict Json.Decode.value)

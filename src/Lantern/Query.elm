@@ -27,8 +27,14 @@ type Value
     | Text String
 
 
-type alias SelectResult =
+type alias ReaderResult =
     Json.Decode.Value
+
+
+type alias WriterResult =
+    { changedRows : Int
+    , lastInsertRowId : Int
+    }
 
 
 valueDecoder : Json.Decode.Decoder Value
@@ -46,6 +52,6 @@ withNoArguments query =
     { source = query, arguments = Dict.empty }
 
 
-decodeResult : SelectResult -> Json.Decode.Decoder query -> Result Json.Decode.Error query
+decodeResult : ReaderResult -> Json.Decode.Decoder query -> Result Json.Decode.Error query
 decodeResult result decoder =
     Json.Decode.decodeValue decoder result

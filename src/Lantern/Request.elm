@@ -10,6 +10,7 @@ type alias Id =
 
 type Request
     = Echo String
-    | Query Query.Query
+    | ReaderQuery Query.Query
+    | WriterQuery Query.Query
     | LiveQuery (List Query.Query)
     | Migration Query.Query

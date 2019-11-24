@@ -42,12 +42,18 @@ request id encodedRequest =
                 , ( "text", Json.Encode.string text )
                 ]
 
-        Request.Query { source, arguments } ->
+        Request.ReaderQuery q ->
             Json.Encode.object
                 [ ( "id", Json.Encode.string id )
-                , ( "type", Json.Encode.string "Query" )
-                , ( "query", Json.Encode.string source )
-                , ( "arguments", queryArguments arguments )
+                , ( "type", Json.Encode.string "ReaderQuery" )
+                , ( "query", query q )
+                ]
+
+        Request.WriterQuery q ->
+            Json.Encode.object
+                [ ( "id", Json.Encode.string id )
+                , ( "type", Json.Encode.string "WriterQuery" )
+                , ( "query", query q )
                 ]
 
         Request.LiveQuery queries ->

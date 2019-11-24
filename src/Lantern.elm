@@ -153,7 +153,7 @@ query ({ requestsInFlight } as state) query_ decoder msg =
             String.fromInt requestsCounter
 
         request =
-            Lantern.Request.Query query_
+            Lantern.Request.ReaderQuery query_
 
         handler =
             ( decoder, msg )
@@ -566,7 +566,7 @@ update msg ({ requestsInFlight } as state) =
                                 Nothing ->
                                     ( newState, Cmd.none )
 
-                        Lantern.Response.Query results ->
+                        Lantern.Response.ReaderQuery results ->
                             let
                                 handler =
                                     Dict.get id requestsInFlight.query
@@ -591,6 +591,9 @@ update msg ({ requestsInFlight } as state) =
 
                                 Nothing ->
                                     ( newState, Cmd.none )
+
+                        Lantern.Response.WriterQuery result ->
+                            Debug.todo "Handle writer results"
 
                         Lantern.Response.LiveQuery results ->
                             let

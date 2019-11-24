@@ -34,7 +34,10 @@ logRequest currentLog requestId request =
         Lantern.Request.Echo text ->
             log currentLog Info ("[#" ++ requestId ++ "] Echo request: " ++ text)
 
-        Lantern.Request.Query { source, arguments } ->
+        Lantern.Request.ReaderQuery { source, arguments } ->
+            log currentLog Info ("[#" ++ requestId ++ "] Query request: " ++ source ++ "(" ++ Debug.toString arguments ++ ")")
+
+        Lantern.Request.WriterQuery { source, arguments } ->
             log currentLog Info ("[#" ++ requestId ++ "] Query request: " ++ source ++ "(" ++ Debug.toString arguments ++ ")")
 
         Lantern.Request.LiveQuery queries ->
@@ -50,8 +53,11 @@ logResponse currentLog requestId response =
         Lantern.Response.Echo text ->
             log currentLog Info ("[#" ++ requestId ++ "] Echo response: " ++ text)
 
-        Lantern.Response.Query result ->
+        Lantern.Response.ReaderQuery result ->
             log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Json.Encode.encode 0 result)
+
+        Lantern.Response.WriterQuery result ->
+            log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Debug.toString result)
 
         Lantern.Response.LiveQuery result ->
             log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Json.Encode.encode 0 (Json.Encode.list identity result))

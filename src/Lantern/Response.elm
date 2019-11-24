@@ -7,7 +7,8 @@ import Lantern.Request
 
 type Response
     = Echo String
-    | Query Lantern.Query.SelectResult
-    | LiveQuery (List Lantern.Query.SelectResult)
+    | ReaderQuery Lantern.Query.ReaderResult
+    | WriterQuery Lantern.Query.WriterResult
+    | LiveQuery (List Lantern.Query.ReaderResult)
     | Migration
     | Unknown Json.Decode.Value
