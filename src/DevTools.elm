@@ -3,6 +3,8 @@ port module DevTools exposing (..)
 import Browser
 import Debug
 import DevTools.ArgumentParser as ArgumentParser
+import DevTools.FlexiQuery as FlexiQuery
+import DevTools.TableViewer as TableViewer
 import Dict exposing (Dict)
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes
@@ -39,27 +41,20 @@ type alias Table =
     { name : String }
 
 
-type alias FlexibleQueryResult =
-    Dict String Lantern.Query.Value
-
-
 type Queries
-    = EditorQuery (List FlexibleQueryResult)
+    = EditorQuery (List FlexiQuery.Result)
 
 
 type alias LiveQueries =
     { databaseTables : Lantern.Query.Query
+    , tableViewerRows : Lantern.Query.Query
     }
 
 
 type alias LiveResults =
     { databaseTables : List Table
+    , tableViewerRows : List FlexiQuery.Result
     }
-
-
-flexibleQueryResultDecoder : Json.Decode.Decoder FlexibleQueryResult
-flexibleQueryResultDecoder =
-    Json.Decode.dict Lantern.Query.valueDecoder
 
 
 tableDecoder : Json.Decode.Decoder Table
@@ -74,10 +69,11 @@ type alias Model =
     , readerQueryArguments : Dict String String
     , writerQuery : String
     , writerQueryArguments : Dict String String
-    , queryResult : List FlexibleQueryResult
+    , queryResult : List FlexiQuery.Result
     , queryError : Maybe Lantern.Error
     , liveQueries : LiveQueries
     , liveResults : LiveResults
+    , tableViewer : TableViewer.TableViewer
     , ddl : String
     , ddlResult : Bool
     , ddlError : Maybe Lantern.Error
@@ -91,14 +87,20 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
+        tableViewer =
+            TableViewer.init
+
         liveQueries =
-            { databaseTables = Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty }
+            { databaseTables = Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty
+            , tableViewerRows = TableViewer.rowsQuery tableViewer
+            }
 
         ( lanternState, lanternCmd ) =
             Lantern.init lanternRequestPort lanternResponsePort LanternMessage
                 |> Lantern.andThen
-                    (Lantern.liveQuery
+                    (Lantern.liveQuery2
                         ( liveQueries.databaseTables, tableDecoder )
+                        ( liveQueries.tableViewerRows, TableViewer.rowDecoder )
                         LiveResults
                         UpdateLiveResults
                     )
@@ -111,7 +113,8 @@ init _ =
       , queryError = Nothing
       , liveQueries = liveQueries
       , liveResults =
-            { databaseTables = [] }
+            { databaseTables = [], tableViewerRows = [] }
+      , tableViewer = tableViewer
       , ddl = ""
       , ddlResult = False
       , ddlError = Nothing
@@ -154,6 +157,7 @@ type Msg
     | ReaderQueryResult (Result Lantern.Error Queries)
     | WriterQueryResult Bool
     | LanternMessage Lantern.Message
+    | LoadTable String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -201,7 +205,7 @@ update msg model =
                     ( { model | queryError = Just e }, Cmd.none )
 
                 Ok liveResults ->
-                    ( { model | liveResults = liveResults }, Cmd.none )
+                    ( { model | liveResults = liveResults, tableViewer = TableViewer.loadRows model.tableViewer liveResults.tableViewerRows }, Cmd.none )
 
         RunPing ->
             let
@@ -224,7 +228,7 @@ update msg model =
                     Lantern.readerQuery
                         model.lanternState
                         query
-                        (flexibleQueryResultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery)
+                        (FlexiQuery.resultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery)
                         ReaderQueryResult
             in
             ( { model | lanternState = lanternState }, cmd )
@@ -275,6 +279,27 @@ update msg model =
             in
             ( { model | lanternState = lanternState }, lanternCmd )
 
+        LoadTable table ->
+            let
+                newTableViewerState =
+                    TableViewer.loadTable model.tableViewer table
+
+                liveQueries =
+                    model.liveQueries
+
+                newLiveQueries =
+                    { liveQueries | tableViewerRows = TableViewer.rowsQuery newTableViewerState }
+
+                ( lanternState, lanternCmd ) =
+                    Lantern.liveQuery2
+                        ( newLiveQueries.databaseTables, tableDecoder )
+                        ( newLiveQueries.tableViewerRows, TableViewer.rowDecoder )
+                        LiveResults
+                        UpdateLiveResults
+                        model.lanternState
+            in
+            ( { model | tableViewer = newTableViewerState, liveQueries = newLiveQueries, lanternState = lanternState }, lanternCmd )
+
 
 
 -- VIEW
@@ -288,7 +313,7 @@ logView log =
         )
 
 
-resultsTable : List FlexibleQueryResult -> Html Msg
+resultsTable : List FlexiQuery.Result -> Html Msg
 resultsTable results =
     let
         titles =
@@ -353,7 +378,8 @@ view model =
             [ div [] [ Html.textarea [ onInput UpdateDdl, Html.Attributes.cols 80 ] [] ]
             , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run DDL" ] [] ]
             , div [] [ text ("Result: " ++ Debug.toString model.ddlResult) ]
-            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ text name ]) model.liveResults.databaseTables) ]
+            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ Html.a [ Html.Attributes.href "#", onClick (LoadTable name) ] [ Html.text name ] ]) model.liveResults.databaseTables) ]
+            , TableViewer.render model.tableViewer
             ]
         , Html.form [ Html.Events.onSubmit RunPing ]
             [ div [] [ Html.textarea [ onInput UpdatePing, Html.Attributes.cols 80 ] [] ]

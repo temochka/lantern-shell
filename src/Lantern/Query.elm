@@ -52,6 +52,11 @@ withNoArguments query =
     { source = query, arguments = Dict.empty }
 
 
+withArguments : String -> List ( String, Argument ) -> Query
+withArguments source arguments =
+    { source = source, arguments = Dict.fromList arguments }
+
+
 decodeResult : ReaderResult -> Json.Decode.Decoder query -> Result Json.Decode.Error query
 decodeResult result decoder =
     Json.Decode.decodeValue decoder result
