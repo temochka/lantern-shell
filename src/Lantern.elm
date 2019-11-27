@@ -316,108 +316,25 @@ update msg ({ requestsInFlight } as state) =
             in
             case parsedResponse of
                 Ok ( id, response ) ->
-                    case response of
-                        Lantern.Response.Echo _ ->
-                            let
-                                handler =
-                                    Dict.get id requestsInFlight
+                    let
+                        handler =
+                            Dict.get id requestsInFlight
 
-                                newRequestsInFlight =
-                                    Dict.remove id requestsInFlight
+                        newRequestsInFlight =
+                            Dict.remove id requestsInFlight
 
-                                newState =
-                                    { state
-                                        | requestsInFlight = newRequestsInFlight
-                                        , log = Log.logResponse state.log id response
-                                    }
-                            in
-                            case handler of
-                                Just callback ->
-                                    ( newState, Task.perform callback (Task.succeed response) )
+                        newState =
+                            { state
+                                | requestsInFlight = newRequestsInFlight
+                                , log = Log.logResponse state.log id response
+                            }
+                    in
+                    case handler of
+                        Just callback ->
+                            ( newState, Task.perform callback (Task.succeed response) )
 
-                                Nothing ->
-                                    ( newState, Cmd.none )
-
-                        Lantern.Response.ReaderQuery results ->
-                            let
-                                handler =
-                                    Dict.get id requestsInFlight
-
-                                newRequestsInFlight =
-                                    Dict.remove id requestsInFlight
-
-                                newState =
-                                    { state
-                                        | requestsInFlight = newRequestsInFlight
-                                        , log = Log.logResponse state.log id response
-                                    }
-                            in
-                            case handler of
-                                Just callback ->
-                                    ( newState, Task.perform callback (Task.succeed response) )
-
-                                Nothing ->
-                                    ( newState, Cmd.none )
-
-                        Lantern.Response.WriterQuery result ->
-                            let
-                                handler =
-                                    Dict.get id requestsInFlight
-
-                                newRequestsInFlight =
-                                    Dict.remove id requestsInFlight
-
-                                newState =
-                                    { state
-                                        | requestsInFlight = newRequestsInFlight
-                                        , log = Log.logResponse state.log id response
-                                    }
-                            in
-                            case handler of
-                                Just callback ->
-                                    ( newState, Task.perform callback (Task.succeed response) )
-
-                                Nothing ->
-                                    ( newState, Cmd.none )
-
-                        Lantern.Response.LiveQuery _ ->
-                            let
-                                handler =
-                                    Dict.get id requestsInFlight
-
-                                cmd =
-                                    handler
-                                        |> Maybe.map
-                                            (\h ->
-                                                Task.perform h (Task.succeed response)
-                                            )
-                                        |> Maybe.withDefault Cmd.none
-                            in
-                            ( state, cmd )
-
-                        Lantern.Response.Migration ->
-                            let
-                                handler =
-                                    Dict.get id requestsInFlight
-
-                                newRequestsInFlight =
-                                    Dict.remove id requestsInFlight
-
-                                newState =
-                                    { state
-                                        | requestsInFlight = newRequestsInFlight
-                                        , log = Log.logResponse state.log id Lantern.Response.Migration
-                                    }
-                            in
-                            case handler of
-                                Just callback ->
-                                    ( newState, Task.perform callback (Task.succeed response) )
-
-                                Nothing ->
-                                    ( newState, Cmd.none )
-
-                        Lantern.Response.Unknown _ ->
-                            ( { state | log = Log.logResponse state.log id response }, Cmd.none )
+                        Nothing ->
+                            ( newState, Cmd.none )
 
                 Err err ->
                     ( { state | log = Log.log state.log Log.Error (Json.Decode.errorToString err) }, Cmd.none )
