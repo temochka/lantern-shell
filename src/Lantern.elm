@@ -61,9 +61,9 @@ type alias LiveResultHandler liveQuery msg =
     }
 
 
-type alias State query liveQuery msg =
+type alias State liveQuery msg =
     { requestId : Int
-    , requestsInFlight : RequestsInFlight query msg
+    , requestsInFlight : RequestsInFlight msg
     , liveResultHandler : Maybe (LiveResultHandler liveQuery msg)
     , requestPort : RequestPort msg
     , responsePort : ResponsePort msg
@@ -76,15 +76,15 @@ type Message
     = ResponseMsg Response
 
 
-type alias RequestsInFlight query msg =
+type alias RequestsInFlight msg =
     { echo : Dict String (String -> msg)
-    , readerQuery : Dict String ( Json.Decode.Decoder query, Result Error query -> msg )
+    , readerQuery : Dict String (Lantern.Response.Response -> msg)
     , writerQuery : Dict String (Bool -> msg)
     , migration : Dict String (Bool -> msg)
     }
 
 
-emptyRequests : RequestsInFlight query msg
+emptyRequests : RequestsInFlight msg
 emptyRequests =
     { echo = Dict.empty
     , readerQuery = Dict.empty
@@ -93,7 +93,7 @@ emptyRequests =
     }
 
 
-init : RequestPort msg -> ResponsePort msg -> (Message -> msg) -> ( State query liveQuery msg, Cmd msg )
+init : RequestPort msg -> ResponsePort msg -> (Message -> msg) -> ( State liveQuery msg, Cmd msg )
 init requestPort responsePort updater =
     ( { requestId = 0
       , requestsInFlight = emptyRequests
@@ -107,7 +107,7 @@ init requestPort responsePort updater =
     )
 
 
-andThen : (State query liveQuery msg -> ( State query liveQuery msg, Cmd msg )) -> ( State query liveQuery msg, Cmd msg ) -> ( State query liveQuery msg, Cmd msg )
+andThen : (State liveQuery msg -> ( State liveQuery msg, Cmd msg )) -> ( State liveQuery msg, Cmd msg ) -> ( State liveQuery msg, Cmd msg )
 andThen thenFn ( state, cmd ) =
     let
         ( newState, newCmd ) =
@@ -116,12 +116,12 @@ andThen thenFn ( state, cmd ) =
     ( newState, Cmd.batch [ cmd, newCmd ] )
 
 
-subscriptions : State query liveQuery msg -> Sub msg
+subscriptions : State liveQuery msg -> Sub msg
 subscriptions state =
     state.responsePort (ResponseMsg >> state.updater)
 
 
-echo : State query liveQuery msg -> String -> (String -> msg) -> ( State query liveQuery msg, Cmd msg )
+echo : State liveQuery msg -> String -> (String -> msg) -> ( State liveQuery msg, Cmd msg )
 echo ({ requestsInFlight } as state) payload handler =
     let
         requestsCounter =
@@ -147,11 +147,11 @@ echo ({ requestsInFlight } as state) payload handler =
 
 
 readerQuery :
-    State query liveQuery msg
+    State liveQuery msg
     -> Lantern.Query.Query
-    -> Json.Decode.Decoder query
-    -> (Result Error query -> msg)
-    -> ( State query liveQuery msg, Cmd msg )
+    -> Json.Decode.Decoder a
+    -> (Result Error (List a) -> msg)
+    -> ( State liveQuery msg, Cmd msg )
 readerQuery ({ requestsInFlight } as state) query decoder msg =
     let
         requestsCounter =
@@ -163,8 +163,16 @@ readerQuery ({ requestsInFlight } as state) query decoder msg =
         request =
             Lantern.Request.ReaderQuery query
 
-        handler =
-            ( decoder, msg )
+        handler response =
+            case response of
+                Lantern.Response.ReaderQuery result ->
+                    result
+                        |> Json.Decode.decodeValue (Json.Decode.list decoder)
+                        |> Result.mapError (Json.Decode.errorToString >> Error)
+                        |> msg
+
+                _ ->
+                    msg (Err (Error "Unexpected response"))
 
         newRequestsInFlight =
             { requestsInFlight | readerQuery = Dict.insert requestId handler requestsInFlight.readerQuery }
@@ -180,10 +188,10 @@ readerQuery ({ requestsInFlight } as state) query decoder msg =
 
 
 writerQuery :
-    State query liveQuery msg
+    State liveQuery msg
     -> Lantern.Query.Query
     -> (Bool -> msg)
-    -> ( State query liveQuery msg, Cmd msg )
+    -> ( State liveQuery msg, Cmd msg )
 writerQuery ({ requestsInFlight } as state) query msg =
     let
         requestsCounter =
@@ -212,8 +220,8 @@ liveQuery :
     ( Lantern.Query.Query, Json.Decode.Decoder a )
     -> (List a -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery ( queryA, decoderA ) resultConstructor msg state =
     let
         decodeResults results =
@@ -236,8 +244,8 @@ liveQuery2 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder b )
     -> (List a -> List b -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery2 ( queryA, decoderA ) ( queryB, decoderB ) resultConstructor msg state =
     let
         decodeResults results =
@@ -262,8 +270,8 @@ liveQuery3 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder c )
     -> (List a -> List b -> List c -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery3 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) resultConstructor msg state =
     let
         decodeResults results =
@@ -290,8 +298,8 @@ liveQuery4 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder d )
     -> (List a -> List b -> List c -> List d -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery4 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( queryD, decoderD ) resultConstructor msg state =
     let
         decodeResults results =
@@ -320,8 +328,8 @@ liveQuery5 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder e )
     -> (List a -> List b -> List c -> List d -> List e -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery5 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( queryD, decoderD ) ( queryE, decoderE ) resultConstructor msg state =
     let
         decodeResults results =
@@ -352,8 +360,8 @@ liveQuery6 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder f )
     -> (List a -> List b -> List c -> List d -> List e -> List f -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery6 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( queryD, decoderD ) ( queryE, decoderE ) ( queryF, decoderF ) resultConstructor msg state =
     let
         decodeResults results =
@@ -386,8 +394,8 @@ liveQuery7 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder g )
     -> (List a -> List b -> List c -> List d -> List e -> List f -> List g -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery7 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( queryD, decoderD ) ( queryE, decoderE ) ( queryF, decoderF ) ( queryG, decoderG ) resultConstructor msg state =
     let
         decodeResults results =
@@ -422,8 +430,8 @@ liveQuery8 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder h )
     -> (List a -> List b -> List c -> List d -> List e -> List f -> List g -> List h -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery8 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( queryD, decoderD ) ( queryE, decoderE ) ( queryF, decoderF ) ( queryG, decoderG ) ( queryH, decoderH ) resultConstructor msg state =
     let
         decodeResults results =
@@ -460,8 +468,8 @@ liveQuery9 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder i )
     -> (List a -> List b -> List c -> List d -> List e -> List f -> List g -> List h -> List i -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery9 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( queryD, decoderD ) ( queryE, decoderE ) ( queryF, decoderF ) ( queryG, decoderG ) ( queryH, decoderH ) ( queryI, decoderI ) resultConstructor msg state =
     let
         decodeResults results =
@@ -500,8 +508,8 @@ liveQuery10 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder j )
     -> (List a -> List b -> List c -> List d -> List e -> List f -> List g -> List h -> List i -> List j -> liveQuery)
     -> (Result Error liveQuery -> msg)
-    -> State query liveQuery msg
-    -> ( State query liveQuery msg, Cmd msg )
+    -> State liveQuery msg
+    -> ( State liveQuery msg, Cmd msg )
 liveQuery10 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( queryD, decoderD ) ( queryE, decoderE ) ( queryF, decoderF ) ( queryG, decoderG ) ( queryH, decoderH ) ( queryI, decoderI ) ( queryJ, decoderJ ) resultConstructor msg state =
     let
         decodeResults results =
@@ -528,7 +536,7 @@ liveQuery10 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) ( que
     liveQuery_ [ queryA, queryB, queryC, queryD, queryE, queryF, queryG, queryH, queryI, queryJ ] liveResultHandler state
 
 
-liveQuery_ : List Lantern.Query.Query -> LiveResultHandler liveQuery msg -> State query liveQuery msg -> ( State query liveQuery msg, Cmd msg )
+liveQuery_ : List Lantern.Query.Query -> LiveResultHandler liveQuery msg -> State liveQuery msg -> ( State liveQuery msg, Cmd msg )
 liveQuery_ queries liveResultHandler state =
     let
         requestId =
@@ -546,7 +554,7 @@ liveQuery_ queries liveResultHandler state =
     ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request requestId request)) )
 
 
-migrate : Lantern.Query.Query -> (Bool -> msg) -> State query liveQuery msg -> ( State query liveQuery msg, Cmd msg )
+migrate : Lantern.Query.Query -> (Bool -> msg) -> State liveQuery msg -> ( State liveQuery msg, Cmd msg )
 migrate query_ msg ({ requestsInFlight } as state) =
     let
         requestsCounter =
@@ -571,7 +579,7 @@ migrate query_ msg ({ requestsInFlight } as state) =
     ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
 
 
-update : Message -> State query liveQuery msg -> ( State query liveQuery msg, Cmd msg )
+update : Message -> State liveQuery msg -> ( State liveQuery msg, Cmd msg )
 update msg ({ requestsInFlight } as state) =
     case msg of
         ResponseMsg payload ->
@@ -618,13 +626,8 @@ update msg ({ requestsInFlight } as state) =
                                     }
                             in
                             case handler of
-                                Just ( decoder, callback ) ->
-                                    let
-                                        parseResult =
-                                            Lantern.Query.decodeResult results decoder
-                                                |> Result.mapError (Json.Decode.errorToString >> Error)
-                                    in
-                                    ( newState, Task.perform callback (Task.succeed parseResult) )
+                                Just callback ->
+                                    ( newState, Task.perform callback (Task.succeed response) )
 
                                 Nothing ->
                                     ( newState, Cmd.none )

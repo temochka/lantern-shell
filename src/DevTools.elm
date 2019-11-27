@@ -41,10 +41,6 @@ type alias Table =
     { name : String }
 
 
-type Queries
-    = EditorQuery (List FlexiQuery.Result)
-
-
 type alias LiveQueries =
     { databaseTables : Lantern.Query.Query
     , tableViewerRows : Lantern.Query.Query
@@ -80,7 +76,7 @@ type alias Model =
     , ping : String
     , pong : String
     , serverResponse : Maybe String
-    , lanternState : Lantern.State Queries LiveResults Msg
+    , lanternState : Lantern.State LiveResults Msg
     }
 
 
@@ -154,7 +150,7 @@ type Msg
     | RunDdl
     | DdlResult Bool
     | ReceivePong String
-    | ReaderQueryResult (Result Lantern.Error Queries)
+    | ReaderQueryResult (Result Lantern.Error (List FlexiQuery.Result))
     | WriterQueryResult Bool
     | LanternMessage Lantern.Message
     | LoadTable String
@@ -228,7 +224,7 @@ update msg model =
                     Lantern.readerQuery
                         model.lanternState
                         query
-                        (FlexiQuery.resultDecoder |> Json.Decode.list |> Json.Decode.map EditorQuery)
+                        FlexiQuery.resultDecoder
                         ReaderQueryResult
             in
             ( { model | lanternState = lanternState }, cmd )
@@ -266,7 +262,7 @@ update msg model =
                 Err error ->
                     ( { model | queryError = Just error }, Cmd.none )
 
-                Ok (EditorQuery queryResult) ->
+                Ok queryResult ->
                     ( { model | queryResult = queryResult }, Cmd.none )
 
         WriterQueryResult _ ->
