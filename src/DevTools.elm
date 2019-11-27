@@ -76,7 +76,7 @@ type alias Model =
     , ping : String
     , pong : String
     , serverResponse : Maybe String
-    , lanternState : Lantern.State LiveResults Msg
+    , lanternState : Lantern.State Msg
     }
 
 
