@@ -1,15 +1,16 @@
 module Lantern exposing
-    ( Error
+    ( Connection
+    , Error
     , Message
     , RequestPort
     , Response
     , ResponsePort
-    , State
     , andThen
     , echo
     , errorToString
     , init
     , liveQuery2
+    , log
     , migrate
     , readerQuery
     , subscriptions
@@ -46,6 +47,10 @@ type alias Response =
     String
 
 
+type Connection msg
+    = Connection (State msg)
+
+
 type alias State msg =
     { requestId : Int
     , requestsInFlight : RequestsInFlight msg
@@ -64,35 +69,36 @@ type alias RequestsInFlight msg =
     Dict String (Lantern.Response.Response -> msg)
 
 
-init : RequestPort msg -> ResponsePort msg -> (Message -> msg) -> ( State msg, Cmd msg )
+init : RequestPort msg -> ResponsePort msg -> (Message -> msg) -> ( Connection msg, Cmd msg )
 init requestPort responsePort updater =
-    ( { requestId = 0
-      , requestsInFlight = Dict.empty
-      , requestPort = requestPort
-      , responsePort = responsePort
-      , updater = updater
-      , log = Log.new
-      }
+    ( Connection
+        { requestId = 0
+        , requestsInFlight = Dict.empty
+        , requestPort = requestPort
+        , responsePort = responsePort
+        , updater = updater
+        , log = Log.new
+        }
     , Cmd.none
     )
 
 
-andThen : (State msg -> ( State msg, Cmd msg )) -> ( State msg, Cmd msg ) -> ( State msg, Cmd msg )
-andThen thenFn ( state, cmd ) =
+andThen : (Connection msg -> ( Connection msg, Cmd msg )) -> ( Connection msg, Cmd msg ) -> ( Connection msg, Cmd msg )
+andThen thenFn ( connection, cmd ) =
     let
         ( newState, newCmd ) =
-            thenFn state
+            thenFn connection
     in
     ( newState, Cmd.batch [ cmd, newCmd ] )
 
 
-subscriptions : State msg -> Sub msg
-subscriptions state =
+subscriptions : Connection msg -> Sub msg
+subscriptions (Connection state) =
     state.responsePort (ResponseMsg >> state.updater)
 
 
-echo : State msg -> String -> (String -> msg) -> ( State msg, Cmd msg )
-echo ({ requestsInFlight } as state) payload msg =
+echo : Connection msg -> String -> (String -> msg) -> ( Connection msg, Cmd msg )
+echo (Connection ({ requestsInFlight } as state)) payload msg =
     let
         requestsCounter =
             state.requestId + 1
@@ -121,16 +127,16 @@ echo ({ requestsInFlight } as state) payload msg =
                 , log = Log.logRequest state.log requestId request
             }
     in
-    ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
+    ( Connection newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
 
 
 readerQuery :
-    State msg
+    Connection msg
     -> Lantern.Query.Query
     -> Json.Decode.Decoder a
     -> (Result Error (List a) -> msg)
-    -> ( State msg, Cmd msg )
-readerQuery ({ requestsInFlight } as state) query decoder msg =
+    -> ( Connection msg, Cmd msg )
+readerQuery (Connection ({ requestsInFlight } as state)) query decoder msg =
     let
         requestsCounter =
             state.requestId + 1
@@ -162,15 +168,15 @@ readerQuery ({ requestsInFlight } as state) query decoder msg =
                 , log = Log.logRequest state.log requestId request
             }
     in
-    ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
+    ( Connection newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
 
 
 writerQuery :
-    State msg
+    Connection msg
     -> Lantern.Query.Query
     -> (Bool -> msg)
-    -> ( State msg, Cmd msg )
-writerQuery ({ requestsInFlight } as state) query msg =
+    -> ( Connection msg, Cmd msg )
+writerQuery (Connection ({ requestsInFlight } as state)) query msg =
     let
         requestsCounter =
             state.requestId + 1
@@ -199,11 +205,11 @@ writerQuery ({ requestsInFlight } as state) query msg =
                 , log = Log.logRequest state.log requestId request
             }
     in
-    ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
+    ( Connection newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
 
 
-liveQuery_ : List Lantern.Query.Query -> (Lantern.Response.Response -> msg) -> State msg -> ( State msg, Cmd msg )
-liveQuery_ queries liveResultHandler state =
+liveQuery_ : List Lantern.Query.Query -> (Lantern.Response.Response -> msg) -> Connection msg -> ( Connection msg, Cmd msg )
+liveQuery_ queries liveResultHandler (Connection state) =
     let
         requestId =
             "LiveQuery"
@@ -220,15 +226,15 @@ liveQuery_ queries liveResultHandler state =
                 , requestsInFlight = newRequestsInFlight
             }
     in
-    ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request requestId request)) )
+    ( Connection newState, state.requestPort (Json.Encode.encode 0 (Encoders.request requestId request)) )
 
 
 liveQuery :
     ( Lantern.Query.Query, Json.Decode.Decoder a )
     -> (Result Error (List a) -> msg)
-    -> State msg
-    -> ( State msg, Cmd msg )
-liveQuery ( queryA, decoderA ) msg state =
+    -> Connection msg
+    -> ( Connection msg, Cmd msg )
+liveQuery ( queryA, decoderA ) msg connection =
     let
         handler response =
             case response of
@@ -244,7 +250,7 @@ liveQuery ( queryA, decoderA ) msg state =
                 _ ->
                     msg (Err (Error "unexpected response"))
     in
-    liveQuery_ [ queryA ] handler state
+    liveQuery_ [ queryA ] handler connection
 
 
 liveQuery2 :
@@ -252,9 +258,9 @@ liveQuery2 :
     -> ( Lantern.Query.Query, Json.Decode.Decoder b )
     -> (List a -> List b -> result)
     -> (Result Error result -> msg)
-    -> State msg
-    -> ( State msg, Cmd msg )
-liveQuery2 ( queryA, decoderA ) ( queryB, decoderB ) resultConstructor msg state =
+    -> Connection msg
+    -> ( Connection msg, Cmd msg )
+liveQuery2 ( queryA, decoderA ) ( queryB, decoderB ) resultConstructor msg connection =
     let
         handler response =
             case response of
@@ -270,11 +276,11 @@ liveQuery2 ( queryA, decoderA ) ( queryB, decoderB ) resultConstructor msg state
                 _ ->
                     msg (Err (Error "unexpected response"))
     in
-    liveQuery_ [ queryA, queryB ] handler state
+    liveQuery_ [ queryA, queryB ] handler connection
 
 
-migrate : Lantern.Query.Query -> (Bool -> msg) -> State msg -> ( State msg, Cmd msg )
-migrate query_ msg ({ requestsInFlight } as state) =
+migrate : Lantern.Query.Query -> (Bool -> msg) -> Connection msg -> ( Connection msg, Cmd msg )
+migrate query_ msg (Connection ({ requestsInFlight } as state)) =
     let
         requestsCounter =
             state.requestId + 1
@@ -303,11 +309,11 @@ migrate query_ msg ({ requestsInFlight } as state) =
                 , log = Log.logRequest state.log requestId request
             }
     in
-    ( newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
+    ( Connection newState, state.requestPort (Json.Encode.encode 0 (Encoders.request (String.fromInt newState.requestId) request)) )
 
 
-update : Message -> State msg -> ( State msg, Cmd msg )
-update msg ({ requestsInFlight } as state) =
+update : Message -> Connection msg -> ( Connection msg, Cmd msg )
+update msg (Connection ({ requestsInFlight } as state)) =
     case msg of
         ResponseMsg payload ->
             let
@@ -331,15 +337,20 @@ update msg ({ requestsInFlight } as state) =
                     in
                     case handler of
                         Just callback ->
-                            ( newState, Task.perform callback (Task.succeed response) )
+                            ( Connection newState, Task.perform callback (Task.succeed response) )
 
                         Nothing ->
-                            ( newState, Cmd.none )
+                            ( Connection newState, Cmd.none )
 
                 Err err ->
-                    ( { state | log = Log.log state.log Log.Error (Json.Decode.errorToString err) }, Cmd.none )
+                    ( Connection { state | log = Log.log state.log Log.Error (Json.Decode.errorToString err) }, Cmd.none )
 
 
 errorToString : Error -> String
 errorToString (Error e) =
     e
+
+
+log : Connection msg -> Log
+log (Connection state) =
+    state.log
