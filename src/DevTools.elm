@@ -91,15 +91,16 @@ init _ =
             , tableViewerRows = TableViewer.rowsQuery tableViewer
             }
 
-        ( lanternConnection, lanternCmd ) =
-            Lantern.init lanternRequestPort lanternResponsePort LanternMessage
-                |> Lantern.andThen
-                    (Lantern.liveQuery2
-                        ( liveQueries.databaseTables, tableDecoder )
-                        ( liveQueries.tableViewerRows, TableViewer.rowDecoder )
-                        LiveResults
-                        UpdateLiveResults
-                    )
+        lanternConnection =
+            Lantern.newConnection lanternRequestPort lanternResponsePort LanternMessage
+
+        lanternCmd =
+            Lantern.liveQuery2
+                ( liveQueries.databaseTables, tableDecoder )
+                ( liveQueries.tableViewerRows, TableViewer.rowDecoder )
+                LiveResults
+                UpdateLiveResults
+                lanternConnection
     in
     ( { readerQuery = ""
       , readerQueryArguments = Dict.empty
@@ -152,7 +153,7 @@ type Msg
     | ReceivePong String
     | ReaderQueryResult (Result Lantern.Error (List FlexiQuery.Result))
     | WriterQueryResult Bool
-    | LanternMessage Lantern.Message
+    | LanternMessage (Lantern.Message Msg)
     | LoadTable String
 
 
@@ -204,11 +205,7 @@ update msg model =
                     ( { model | liveResults = liveResults, tableViewer = TableViewer.loadRows model.tableViewer liveResults.tableViewerRows }, Cmd.none )
 
         RunPing ->
-            let
-                ( lanternConnection, cmd ) =
-                    Lantern.echo model.lanternConnection model.ping ReceivePong
-            in
-            ( { model | lanternConnection = lanternConnection }, cmd )
+            ( model, Lantern.echo model.ping ReceivePong model.lanternConnection )
 
         ReceivePong pong ->
             ( { model | pong = pong }, Cmd.none )
@@ -219,15 +216,14 @@ update msg model =
                     { source = model.readerQuery
                     , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.readerQueryArguments
                     }
-
-                ( lanternConnection, cmd ) =
-                    Lantern.readerQuery
-                        model.lanternConnection
-                        query
-                        FlexiQuery.resultDecoder
-                        ReaderQueryResult
             in
-            ( { model | lanternConnection = lanternConnection }, cmd )
+            ( model
+            , Lantern.readerQuery
+                query
+                FlexiQuery.resultDecoder
+                ReaderQueryResult
+                model.lanternConnection
+            )
 
         RunWriterQuery ->
             let
@@ -235,24 +231,20 @@ update msg model =
                     { source = model.writerQuery
                     , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.writerQueryArguments
                     }
-
-                ( lanternConnection, cmd ) =
-                    Lantern.writerQuery
-                        model.lanternConnection
-                        query
-                        WriterQueryResult
             in
-            ( { model | lanternConnection = lanternConnection }, cmd )
+            ( model
+            , Lantern.writerQuery
+                query
+                WriterQueryResult
+                model.lanternConnection
+            )
 
         RunDdl ->
             let
                 ddlQuery =
                     Lantern.Query.withNoArguments model.ddl
-
-                ( lanternConnection, cmd ) =
-                    Lantern.migrate ddlQuery DdlResult model.lanternConnection
             in
-            ( { model | ddlResult = False, lanternConnection = lanternConnection }, cmd )
+            ( model, Lantern.migrate ddlQuery DdlResult model.lanternConnection )
 
         DdlResult r ->
             ( { model | ddlResult = r }, Cmd.none )
@@ -285,16 +277,15 @@ update msg model =
 
                 newLiveQueries =
                     { liveQueries | tableViewerRows = TableViewer.rowsQuery newTableViewerState }
-
-                ( lanternConnection, lanternCmd ) =
-                    Lantern.liveQuery2
-                        ( newLiveQueries.databaseTables, tableDecoder )
-                        ( newLiveQueries.tableViewerRows, TableViewer.rowDecoder )
-                        LiveResults
-                        UpdateLiveResults
-                        model.lanternConnection
             in
-            ( { model | tableViewer = newTableViewerState, liveQueries = newLiveQueries, lanternConnection = lanternConnection }, lanternCmd )
+            ( { model | tableViewer = newTableViewerState, liveQueries = newLiveQueries }
+            , Lantern.liveQuery2
+                ( newLiveQueries.databaseTables, tableDecoder )
+                ( newLiveQueries.tableViewerRows, TableViewer.rowDecoder )
+                LiveResults
+                UpdateLiveResults
+                model.lanternConnection
+            )
 
 
 
