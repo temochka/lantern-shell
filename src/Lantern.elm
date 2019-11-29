@@ -1,17 +1,20 @@
 module Lantern exposing
     ( Connection
     , Error
+    , LiveQuery
     , Message
     , RequestPort
     , Response
     , ResponsePort
-    , andThen
     , echo
     , errorToString
-    , liveQuery2
+    , liveQueries
     , log
     , migrate
     , newConnection
+    , prepareLiveQuery
+    , prepareLiveQuery2
+    , prepareLiveQuery3
     , readerQuery
     , subscriptions
     , update
@@ -53,64 +56,65 @@ type Connection msg
 
 type alias State msg =
     { requestId : Int
+    , currentLiveQueryId : String
     , requestsInFlight : RequestsInFlight msg
     , requestPort : RequestPort msg
     , responsePort : ResponsePort msg
-    , updater : Message msg -> msg
+    , toMsg : Message msg -> msg
     , log : Log
     }
 
 
 type Message msg
     = ResponseMsg Response
-    | Request Lantern.Request.Request (Lantern.Response.Response -> msg)
+    | Request Lantern.Request.Request (ResponseHandler msg)
+
+
+type alias ResponseHandler msg =
+    Lantern.Response.Response -> List msg
 
 
 type alias RequestsInFlight msg =
-    Dict String (Lantern.Response.Response -> msg)
+    Dict String (ResponseHandler msg)
+
+
+type LiveQuery msg
+    = LiveQuery (List Lantern.Query.Query) (List Lantern.Query.ReaderResult -> msg)
 
 
 newConnection : RequestPort msg -> ResponsePort msg -> (Message msg -> msg) -> Connection msg
-newConnection requestPort responsePort updater =
+newConnection requestPort responsePort toMsg =
     Connection
         { requestId = 0
+        , currentLiveQueryId = ""
         , requestsInFlight = Dict.empty
         , requestPort = requestPort
         , responsePort = responsePort
-        , updater = updater
+        , toMsg = toMsg
         , log = Log.new
         }
 
 
-andThen : (Connection msg -> ( Connection msg, Cmd msg )) -> ( Connection msg, Cmd msg ) -> ( Connection msg, Cmd msg )
-andThen thenFn ( connection, cmd ) =
-    let
-        ( newState, newCmd ) =
-            thenFn connection
-    in
-    ( newState, Cmd.batch [ cmd, newCmd ] )
-
-
 subscriptions : Connection msg -> Sub msg
 subscriptions (Connection state) =
-    state.responsePort (ResponseMsg >> state.updater)
+    state.responsePort (ResponseMsg >> state.toMsg)
 
 
 echo : String -> (String -> msg) -> Connection msg -> Cmd msg
-echo payload msg (Connection ({ updater } as state)) =
+echo payload msg (Connection ({ toMsg } as state)) =
     let
         handler response =
             case response of
                 Lantern.Response.Echo text ->
-                    msg text
+                    [ msg text ]
 
                 _ ->
-                    msg "Server error"
+                    [ msg "Server error" ]
 
         request =
             Lantern.Request.Echo payload
     in
-    Task.perform updater (Task.succeed (Request request handler))
+    Task.perform toMsg (Task.succeed (Request request handler))
 
 
 readerQuery :
@@ -119,7 +123,7 @@ readerQuery :
     -> (Result Error (List a) -> msg)
     -> Connection msg
     -> Cmd msg
-readerQuery query decoder msg (Connection ({ updater } as state)) =
+readerQuery query decoder msg (Connection ({ toMsg } as state)) =
     let
         request =
             Lantern.Request.ReaderQuery query
@@ -131,11 +135,12 @@ readerQuery query decoder msg (Connection ({ updater } as state)) =
                         |> Json.Decode.decodeValue (Json.Decode.list decoder)
                         |> Result.mapError (Json.Decode.errorToString >> Error)
                         |> msg
+                        |> List.singleton
 
                 _ ->
-                    msg (Err (Error "Unexpected response"))
+                    [ msg (Err (Error "Unexpected response")) ]
     in
-    Task.perform updater (Task.succeed (Request request handler))
+    Task.perform toMsg (Task.succeed (Request request handler))
 
 
 writerQuery :
@@ -143,7 +148,7 @@ writerQuery :
     -> (Bool -> msg)
     -> Connection msg
     -> Cmd msg
-writerQuery query msg (Connection ({ updater } as state)) =
+writerQuery query msg (Connection ({ toMsg } as state)) =
     let
         request =
             Lantern.Request.WriterQuery query
@@ -151,75 +156,112 @@ writerQuery query msg (Connection ({ updater } as state)) =
         handler response =
             case response of
                 Lantern.Response.WriterQuery r ->
-                    msg True
+                    [ msg True ]
 
                 _ ->
-                    msg False
+                    [ msg False ]
     in
-    Task.perform updater (Task.succeed (Request request handler))
+    Task.perform toMsg (Task.succeed (Request request handler))
 
 
-liveQuery_ : List Lantern.Query.Query -> (Lantern.Response.Response -> msg) -> Connection msg -> Cmd msg
-liveQuery_ queries handler (Connection { updater }) =
+liveQueries : List (LiveQuery msg) -> Connection msg -> Cmd msg
+liveQueries orderedQueries (Connection { toMsg }) =
     let
         request =
-            Lantern.Request.LiveQuery queries
-    in
-    Task.perform updater (Task.succeed (Request request handler))
+            orderedQueries
+                |> List.map (\(LiveQuery queries _) -> queries)
+                |> Lantern.Request.LiveQuery
 
+        resultHandlers =
+            orderedQueries
+                |> List.indexedMap (\i (LiveQuery _ resultHandler) -> ( i, resultHandler ))
+                |> Dict.fromList
 
-liveQuery :
-    ( Lantern.Query.Query, Json.Decode.Decoder a )
-    -> (Result Error (List a) -> msg)
-    -> Connection msg
-    -> Cmd msg
-liveQuery ( queryA, decoderA ) msg connection =
-    let
         handler response =
             case response of
-                Lantern.Response.LiveQuery [ result ] ->
+                Lantern.Response.LiveQuery results ->
+                    results
+                        |> List.indexedMap
+                            (\i queryResults ->
+                                Dict.get i resultHandlers
+                                    |> Maybe.map (\resultHandler -> resultHandler queryResults)
+                            )
+                        |> List.filterMap identity
+
+                _ ->
+                    []
+    in
+    Task.perform toMsg (Task.succeed (Request request handler))
+
+
+prepareLiveQuery :
+    ( Lantern.Query.Query, Json.Decode.Decoder a )
+    -> (Result Error (List a) -> msg)
+    -> LiveQuery msg
+prepareLiveQuery ( queryA, decoderA ) msg =
+    let
+        handler results =
+            case results of
+                [ result ] ->
                     result
                         |> Json.Decode.decodeValue (Json.Decode.list decoderA)
                         |> Result.mapError (Json.Decode.errorToString >> Error)
                         |> msg
 
-                Lantern.Response.LiveQuery results ->
-                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length results))))
-
-                _ ->
-                    msg (Err (Error "unexpected response"))
+                unexpectedResults ->
+                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length unexpectedResults))))
     in
-    liveQuery_ [ queryA ] handler connection
+    LiveQuery [ queryA ] handler
 
 
-liveQuery2 :
+prepareLiveQuery2 :
     ( Lantern.Query.Query, Json.Decode.Decoder a )
     -> ( Lantern.Query.Query, Json.Decode.Decoder b )
-    -> (List a -> List b -> result)
-    -> (Result Error result -> msg)
-    -> Connection msg
-    -> Cmd msg
-liveQuery2 ( queryA, decoderA ) ( queryB, decoderB ) resultConstructor msg connection =
+    -> (Result Error ( List a, List b ) -> msg)
+    -> LiveQuery msg
+prepareLiveQuery2 ( queryA, decoderA ) ( queryB, decoderB ) msg =
     let
-        handler response =
-            case response of
-                Lantern.Response.LiveQuery [ resultA, resultB ] ->
-                    Result.map2 resultConstructor
-                        (resultA |> Json.Decode.decodeValue (Json.Decode.list decoderA) |> Result.mapError (Json.Decode.errorToString >> Error))
-                        (resultB |> Json.Decode.decodeValue (Json.Decode.list decoderB) |> Result.mapError (Json.Decode.errorToString >> Error))
+        handler results =
+            case results of
+                [ resultA, resultB ] ->
+                    Result.map2 Tuple.pair
+                        (resultA |> Json.Decode.decodeValue (Json.Decode.list decoderA))
+                        (resultB |> Json.Decode.decodeValue (Json.Decode.list decoderB))
+                        |> Result.mapError (Json.Decode.errorToString >> Error)
                         |> msg
 
-                Lantern.Response.LiveQuery results ->
-                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length results))))
-
-                _ ->
-                    msg (Err (Error "unexpected response"))
+                unexpectedResults ->
+                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length unexpectedResults))))
     in
-    liveQuery_ [ queryA, queryB ] handler connection
+    LiveQuery [ queryA, queryB ] handler
+
+
+prepareLiveQuery3 :
+    ( Lantern.Query.Query, Json.Decode.Decoder a )
+    -> ( Lantern.Query.Query, Json.Decode.Decoder b )
+    -> ( Lantern.Query.Query, Json.Decode.Decoder c )
+    -> (Result Error ( List a, List b, List c ) -> msg)
+    -> LiveQuery msg
+prepareLiveQuery3 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) msg =
+    let
+        handler results =
+            case results of
+                [ resultA, resultB, resultC ] ->
+                    Result.map3 (\a b c -> ( a, b, c ))
+                        (resultA |> Json.Decode.decodeValue (Json.Decode.list decoderA))
+                        (resultB |> Json.Decode.decodeValue (Json.Decode.list decoderB))
+                        (resultC |> Json.Decode.decodeValue (Json.Decode.list decoderC))
+                        |> Result.mapError (Json.Decode.errorToString >> Error)
+                        |> msg
+
+                unexpectedResults ->
+                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length unexpectedResults))))
+    in
+    LiveQuery [ queryA, queryB, queryC ] handler
 
 
 migrate : Lantern.Query.Query -> (Bool -> msg) -> Connection msg -> Cmd msg
-migrate query_ msg (Connection ({ updater } as state)) =
+migrate query_ msg (Connection ({ toMsg } as state)) =
     let
         request =
             Lantern.Request.Migration query_
@@ -227,33 +269,53 @@ migrate query_ msg (Connection ({ updater } as state)) =
         handler response =
             case response of
                 Lantern.Response.Migration ->
-                    msg True
+                    [ msg True ]
 
                 _ ->
-                    msg False
+                    [ msg False ]
     in
-    Task.perform updater (Task.succeed (Request request handler))
+    Task.perform toMsg (Task.succeed (Request request handler))
 
 
 update : Message msg -> Connection msg -> ( Connection msg, Cmd msg )
-update msg (Connection ({ requestsInFlight } as state)) =
+update msg (Connection state) =
     case msg of
         Request request handler ->
             let
                 ( requestsCounter, requestId ) =
+                    ( state.requestId + 1, String.fromInt (state.requestId + 1) )
+
+                isLiveQuery =
                     case request of
                         Lantern.Request.LiveQuery _ ->
-                            ( state.requestId, "LiveQuery" )
+                            True
 
                         _ ->
-                            ( state.requestId + 1, String.fromInt (state.requestId + 1) )
+                            False
+
+                invalidateOldHandler requestsInFlight =
+                    if isLiveQuery then
+                        Dict.remove state.currentLiveQueryId requestsInFlight
+
+                    else
+                        requestsInFlight
 
                 newRequestsInFlight =
-                    Dict.insert requestId handler requestsInFlight
+                    state.requestsInFlight
+                        |> invalidateOldHandler
+                        |> Dict.insert requestId handler
+
+                newCurrentLiveQueryId =
+                    if isLiveQuery then
+                        requestId
+
+                    else
+                        state.currentLiveQueryId
 
                 newState =
                     { state
                         | requestId = requestsCounter
+                        , currentLiveQueryId = newCurrentLiveQueryId
                         , requestsInFlight = newRequestsInFlight
                         , log = Log.logRequest state.log requestId request
                     }
@@ -271,10 +333,15 @@ update msg (Connection ({ requestsInFlight } as state)) =
                 Ok ( id, response ) ->
                     let
                         handler =
-                            Dict.get id requestsInFlight
+                            Dict.get id state.requestsInFlight
 
                         newRequestsInFlight =
-                            Dict.remove id requestsInFlight
+                            case response of
+                                Lantern.Response.LiveQuery _ ->
+                                    state.requestsInFlight
+
+                                _ ->
+                                    Dict.remove id state.requestsInFlight
 
                         newState =
                             { state
@@ -284,7 +351,7 @@ update msg (Connection ({ requestsInFlight } as state)) =
                     in
                     case handler of
                         Just callback ->
-                            ( Connection newState, Task.perform callback (Task.succeed response) )
+                            ( Connection newState, callback response |> List.map (\r -> Task.perform identity (Task.succeed r)) |> Cmd.batch )
 
                         Nothing ->
                             ( Connection newState, Cmd.none )

@@ -12,5 +12,5 @@ type Request
     = Echo String
     | ReaderQuery Query.Query
     | WriterQuery Query.Query
-    | LiveQuery (List Query.Query)
+    | LiveQuery (List (List Query.Query))
     | Migration Query.Query

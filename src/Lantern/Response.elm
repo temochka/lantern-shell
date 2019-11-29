@@ -9,6 +9,6 @@ type Response
     = Echo String
     | ReaderQuery Lantern.Query.ReaderResult
     | WriterQuery Lantern.Query.WriterResult
-    | LiveQuery (List Lantern.Query.ReaderResult)
+    | LiveQuery (List (List Lantern.Query.ReaderResult))
     | Migration
     | Unknown Json.Decode.Value

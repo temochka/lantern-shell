@@ -32,7 +32,7 @@ response =
 
                         "LiveQuery" ->
                             Json.Decode.field "results" (Json.Decode.dict Json.Decode.value)
-                                |> Json.Decode.map (Dict.toList >> List.sortBy Tuple.first >> List.map Tuple.second >> Response.LiveQuery)
+                                |> Json.Decode.map (dictToLiveQueryResponse >> Response.LiveQuery)
 
                         "Echo" ->
                             Json.Decode.field "text" Json.Decode.string
@@ -45,3 +45,39 @@ response =
                             Json.Decode.map Response.Unknown Json.Decode.value
                 )
         )
+
+
+dictToLiveQueryResponse : Dict.Dict String Json.Decode.Value -> List (List Query.ReaderResult)
+dictToLiveQueryResponse dict =
+    let
+        parseTag key =
+            key
+                |> String.split "/"
+                |> (\l ->
+                        case l of
+                            [ tag, number ] ->
+                                tag |> String.toInt |> Maybe.andThen (\numericTag -> String.toInt number |> Maybe.map (Tuple.pair numericTag))
+
+                            _ ->
+                                Nothing
+                   )
+
+        groupSortedResponses : List ( ( Int, Int ), Query.ReaderResult ) -> List (List Query.ReaderResult)
+        groupSortedResponses responses =
+            case responses of
+                ( ( tag, _ ), _ ) :: _ ->
+                    let
+                        ( head, tail ) =
+                            List.partition (\( ( otherTag, _ ), _ ) -> tag == otherTag) responses
+                    in
+                    List.map Tuple.second head :: groupSortedResponses tail
+
+                _ ->
+                    []
+    in
+    dict
+        |> Dict.toList
+        |> List.map (\( key, result ) -> parseTag key |> Maybe.map (\tag -> Tuple.pair tag result))
+        |> List.filterMap identity
+        |> List.sortBy Tuple.first
+        |> groupSortedResponses

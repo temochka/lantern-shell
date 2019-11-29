@@ -56,17 +56,21 @@ request id encodedRequest =
                 , ( "query", query q )
                 ]
 
-        Request.LiveQuery queries ->
+        Request.LiveQuery liveQueries ->
             let
+                taggedQuery tag index q =
+                    ( String.fromInt tag ++ "/" ++ String.fromInt index, q )
+
                 queryDict =
-                    queries
+                    liveQueries
                         |> List.indexedMap Tuple.pair
+                        |> List.concatMap (\( tag, queries ) -> List.indexedMap (taggedQuery tag) queries)
                         |> Dict.fromList
             in
             Json.Encode.object
                 [ ( "id", Json.Encode.string id )
                 , ( "type", Json.Encode.string "LiveQuery" )
-                , ( "queries", Json.Encode.dict String.fromInt query queryDict )
+                , ( "queries", Json.Encode.dict identity query queryDict )
                 ]
 
         Request.Migration ddl ->

@@ -60,7 +60,7 @@ logResponse currentLog requestId response =
             log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Debug.toString result)
 
         Lantern.Response.LiveQuery result ->
-            log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Json.Encode.encode 0 (Json.Encode.list identity result))
+            log currentLog Info ("[#" ++ requestId ++ "] Query response: " ++ Debug.toString result)
 
         Lantern.Response.Migration ->
             log currentLog Info ("[#" ++ requestId ++ "] Migration response: ack")

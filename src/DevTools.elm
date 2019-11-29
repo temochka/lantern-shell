@@ -41,18 +41,6 @@ type alias Table =
     { name : String }
 
 
-type alias LiveQueries =
-    { databaseTables : Lantern.Query.Query
-    , tableViewerRows : Lantern.Query.Query
-    }
-
-
-type alias LiveResults =
-    { databaseTables : List Table
-    , tableViewerRows : List FlexiQuery.Result
-    }
-
-
 tableDecoder : Json.Decode.Decoder Table
 tableDecoder =
     Json.Decode.map
@@ -67,8 +55,9 @@ type alias Model =
     , writerQueryArguments : Dict String String
     , queryResult : List FlexiQuery.Result
     , queryError : Maybe Lantern.Error
-    , liveQueries : LiveQueries
-    , liveResults : LiveResults
+    , databaseTables : List Table
+    , tableViewerRows : List FlexiQuery.Result
+    , tableViewerCount : Int
     , tableViewer : TableViewer.TableViewer
     , ddl : String
     , ddlResult : Bool
@@ -86,42 +75,54 @@ init _ =
         tableViewer =
             TableViewer.init
 
-        liveQueries =
-            { databaseTables = Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty
-            , tableViewerRows = TableViewer.rowsQuery tableViewer
-            }
-
         lanternConnection =
             Lantern.newConnection lanternRequestPort lanternResponsePort LanternMessage
 
+        model =
+            { readerQuery = ""
+            , readerQueryArguments = Dict.empty
+            , writerQuery = ""
+            , writerQueryArguments = Dict.empty
+            , queryResult = []
+            , queryError = Nothing
+            , databaseTables = []
+            , tableViewerRows = []
+            , tableViewerCount = 0
+            , tableViewer = tableViewer
+            , ddl = ""
+            , ddlResult = False
+            , ddlError = Nothing
+            , ping = ""
+            , pong = ""
+            , serverResponse = Nothing
+            , lanternConnection = lanternConnection
+            }
+
         lanternCmd =
-            Lantern.liveQuery2
-                ( liveQueries.databaseTables, tableDecoder )
-                ( liveQueries.tableViewerRows, TableViewer.rowDecoder )
-                LiveResults
-                UpdateLiveResults
-                lanternConnection
+            liveQueries model
     in
-    ( { readerQuery = ""
-      , readerQueryArguments = Dict.empty
-      , writerQuery = ""
-      , writerQueryArguments = Dict.empty
-      , queryResult = []
-      , queryError = Nothing
-      , liveQueries = liveQueries
-      , liveResults =
-            { databaseTables = [], tableViewerRows = [] }
-      , tableViewer = tableViewer
-      , ddl = ""
-      , ddlResult = False
-      , ddlError = Nothing
-      , ping = ""
-      , pong = ""
-      , serverResponse = Nothing
-      , lanternConnection = lanternConnection
-      }
+    ( model
     , lanternCmd
     )
+
+
+
+-- LIVE QUERIES
+
+
+liveQueries : Model -> Cmd Msg
+liveQueries model =
+    let
+        tablesQuery =
+            Lantern.prepareLiveQuery ( Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty, tableDecoder ) UpdateTables
+                |> Just
+
+        tableViewerQuery =
+            TableViewer.liveQuery model.tableViewer UpdateTableRows
+    in
+    Lantern.liveQueries
+        ([ tablesQuery, tableViewerQuery ] |> List.filterMap identity)
+        model.lanternConnection
 
 
 
@@ -144,7 +145,6 @@ type Msg
     | UpdateWriterQueryArgument String String
     | UpdatePing String
     | UpdateDdl String
-    | UpdateLiveResults (Result Lantern.Error LiveResults)
     | RunReaderQuery
     | RunWriterQuery
     | RunPing
@@ -155,6 +155,8 @@ type Msg
     | WriterQueryResult Bool
     | LanternMessage (Lantern.Message Msg)
     | LoadTable String
+    | UpdateTableRows (Result Lantern.Error ( List FlexiQuery.Result, List Int ))
+    | UpdateTables (Result Lantern.Error (List Table))
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -195,14 +197,6 @@ update msg model =
 
         UpdateDdl ddl ->
             ( { model | ddl = ddl }, Cmd.none )
-
-        UpdateLiveResults result ->
-            case result of
-                Err e ->
-                    ( { model | queryError = Just e }, Cmd.none )
-
-                Ok liveResults ->
-                    ( { model | liveResults = liveResults, tableViewer = TableViewer.loadRows model.tableViewer liveResults.tableViewerRows }, Cmd.none )
 
         RunPing ->
             ( model, Lantern.echo model.ping ReceivePong model.lanternConnection )
@@ -272,20 +266,35 @@ update msg model =
                 newTableViewerState =
                     TableViewer.loadTable model.tableViewer table
 
-                liveQueries =
-                    model.liveQueries
-
-                newLiveQueries =
-                    { liveQueries | tableViewerRows = TableViewer.rowsQuery newTableViewerState }
+                newState =
+                    { model | tableViewer = newTableViewerState }
             in
-            ( { model | tableViewer = newTableViewerState, liveQueries = newLiveQueries }
-            , Lantern.liveQuery2
-                ( newLiveQueries.databaseTables, tableDecoder )
-                ( newLiveQueries.tableViewerRows, TableViewer.rowDecoder )
-                LiveResults
-                UpdateLiveResults
-                model.lanternConnection
+            ( newState
+            , liveQueries newState
             )
+
+        UpdateTables result ->
+            case result of
+                Err err ->
+                    Debug.todo "implement error handling"
+
+                Ok tables ->
+                    ( { model | databaseTables = tables }, Cmd.none )
+
+        UpdateTableRows result ->
+            case result of
+                Err err ->
+                    Debug.todo "implement error handling"
+
+                Ok ( rows, count ) ->
+                    let
+                        newTableViewer =
+                            TableViewer.loadRows
+                                model.tableViewer
+                                rows
+                                (count |> List.head |> Maybe.withDefault 0)
+                    in
+                    ( { model | tableViewer = newTableViewer }, Cmd.none )
 
 
 
@@ -365,7 +374,7 @@ view model =
             [ div [] [ Html.textarea [ onInput UpdateDdl, Html.Attributes.cols 80 ] [] ]
             , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run DDL" ] [] ]
             , div [] [ text ("Result: " ++ Debug.toString model.ddlResult) ]
-            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ Html.a [ Html.Attributes.href "#", onClick (LoadTable name) ] [ Html.text name ] ]) model.liveResults.databaseTables) ]
+            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ Html.a [ Html.Attributes.href "#", onClick (LoadTable name) ] [ Html.text name ] ]) model.databaseTables) ]
             , TableViewer.render model.tableViewer
             ]
         , Html.form [ Html.Events.onSubmit RunPing ]

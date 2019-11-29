@@ -1,15 +1,17 @@
-module DevTools.TableViewer exposing (State(..), TableViewer, init, loadRows, loadTable, render, rowDecoder, rowsQuery)
+module DevTools.TableViewer exposing (State(..), TableViewer, init, liveQuery, loadRows, loadTable, render, rowDecoder)
 
 import DevTools.FlexiQuery as FlexiQuery
 import Dict
 import Html
+import Json.Decode
+import Lantern
 import Lantern.Query
 
 
 type State
     = Inactive
     | Loading String
-    | Loaded String (List FlexiQuery.Result)
+    | Loaded String (List FlexiQuery.Result) Int
 
 
 type alias TableViewer =
@@ -31,45 +33,54 @@ rowDecoder =
     FlexiQuery.resultDecoder
 
 
-rowsQuery : TableViewer -> Lantern.Query.Query
-rowsQuery { rowsPerPage, page, state } =
+liveQuery : TableViewer -> (Result Lantern.Error ( List FlexiQuery.Result, List Int ) -> msg) -> Maybe (Lantern.LiveQuery msg)
+liveQuery { rowsPerPage, page, state } toMsg =
     let
         offset =
             (page - 1) * rowsPerPage
 
-        query table =
+        rowsQuery table =
             Lantern.Query.withArguments
                 ("SELECT * FROM "
                     ++ table
-                    ++ " LIMIT "
-                    ++ String.fromInt offset
-                    ++ ","
-                    ++ String.fromInt rowsPerPage
+                    ++ " LIMIT $limit OFFSET $offset"
                 )
-                []
+                [ ( "$limit", Lantern.Query.Int rowsPerPage )
+                , ( "$offset", Lantern.Query.Int offset )
+                ]
+
+        countQuery table =
+            Lantern.Query.withNoArguments
+                ("SELECT COUNT(*) AS 'count' FROM " ++ table)
+
+        query table =
+            Lantern.prepareLiveQuery2
+                ( rowsQuery table, rowDecoder )
+                ( countQuery table, Json.Decode.field "count" Json.Decode.int )
+                toMsg
     in
     case state of
         Inactive ->
-            Lantern.Query.withNoArguments "SELECT 1"
+            Nothing
 
         Loading table ->
-            query table
+            Just (query table)
 
-        Loaded table _ ->
-            query table
+        Loaded table _ _ ->
+            Just (query table)
 
 
-loadRows : TableViewer -> List FlexiQuery.Result -> TableViewer
-loadRows tableViewer rows =
+loadRows : TableViewer -> List FlexiQuery.Result -> Int -> TableViewer
+loadRows tableViewer rows total =
     case tableViewer.state of
         Inactive ->
             tableViewer
 
         Loading table ->
-            { tableViewer | state = Loaded table rows }
+            { tableViewer | state = Loaded table rows total }
 
-        Loaded table _ ->
-            { tableViewer | state = Loaded table rows }
+        Loaded table _ _ ->
+            { tableViewer | state = Loaded table rows total }
 
 
 loadTable : TableViewer -> String -> TableViewer
@@ -86,7 +97,7 @@ render { rowsPerPage, state } =
         Loading table ->
             Html.div [] [ Html.text <| "loading " ++ table ]
 
-        Loaded table results ->
+        Loaded table results _ ->
             let
                 titles =
                     results |> List.head |> Maybe.map (Dict.keys >> List.sort) |> Maybe.withDefault []
