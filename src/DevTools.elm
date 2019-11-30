@@ -5,6 +5,7 @@ import Debug
 import DevTools.ArgumentParser as ArgumentParser
 import DevTools.FlexiQuery as FlexiQuery
 import DevTools.TableViewer as TableViewer
+import DevTools.Ui.StatusBar as StatusBar exposing (StatusBar)
 import Dict exposing (Dict)
 import Html exposing (Html, button, div, input, text)
 import Html.Attributes
@@ -66,6 +67,7 @@ type alias Model =
     , pong : String
     , serverResponse : Maybe String
     , lanternConnection : Lantern.Connection Msg
+    , statusBar : StatusBar
     }
 
 
@@ -96,6 +98,7 @@ init _ =
             , pong = ""
             , serverResponse = Nothing
             , lanternConnection = lanternConnection
+            , statusBar = StatusBar.new
             }
 
         lanternCmd =
@@ -157,6 +160,7 @@ type Msg
     | LoadTable String
     | UpdateTableRows (Result Lantern.Error ( List FlexiQuery.Result, List Int ))
     | UpdateTables (Result Lantern.Error (List Table))
+    | UpdateStatusBar StatusBar.Message
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -296,6 +300,10 @@ update msg model =
                     in
                     ( { model | tableViewer = newTableViewer }, Cmd.none )
 
+        UpdateStatusBar statusBarMsg ->
+            StatusBar.update statusBarMsg model.statusBar
+                |> Tuple.mapFirst (\statusBar -> { model | statusBar = statusBar })
+
 
 
 -- VIEW
@@ -341,8 +349,8 @@ resultsTable results =
         ]
 
 
-view : Model -> Html Msg
-view model =
+tools : Model -> Html Msg
+tools model =
     div []
         [ Html.form [ Html.Events.onSubmit RunReaderQuery ]
             [ div [] [ Html.textarea [ onInput UpdateReaderQuery, Html.Attributes.cols 80 ] [] ]
@@ -384,3 +392,8 @@ view model =
             ]
         , logView (Lantern.log model.lanternConnection)
         ]
+
+
+view : Model -> Html Msg
+view model =
+    StatusBar.render model.statusBar UpdateStatusBar (tools model)
