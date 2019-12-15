@@ -7,9 +7,10 @@ import DevTools.FlexiQuery as FlexiQuery
 import DevTools.TableViewer as TableViewer
 import DevTools.Ui.StatusBar as StatusBar exposing (StatusBar)
 import Dict exposing (Dict)
-import Html exposing (Html, button, div, input, text)
-import Html.Attributes
-import Html.Events exposing (onClick, onInput)
+import Element exposing (Element)
+import Element.Font
+import Element.Input
+import Html exposing (Html)
 import Json.Decode
 import Json.Encode
 import Lantern
@@ -17,6 +18,11 @@ import Lantern.Encoders
 import Lantern.Log
 import Lantern.Query
 import Lantern.Request
+import LanternUi
+import LanternUi.FuzzySelect
+import LanternUi.Input
+import LanternUi.Theme exposing (lightTheme)
+import ProcessTable exposing (ProcessTable)
 import String
 
 
@@ -68,6 +74,9 @@ type alias Model =
     , serverResponse : Maybe String
     , lanternConnection : Lantern.Connection Msg
     , statusBar : StatusBar
+    , processTable : ProcessTable App
+    , appLauncher : LanternUi.FuzzySelect.FuzzySelect App
+    , theme : LanternUi.Theme.Theme
     }
 
 
@@ -99,6 +108,9 @@ init _ =
             , serverResponse = Nothing
             , lanternConnection = lanternConnection
             , statusBar = StatusBar.new
+            , processTable = ProcessTable.empty
+            , appLauncher = LanternUi.FuzzySelect.new [ ( "Run query", ReaderQueryApp ), ( "Run mutator", WriterQueryApp ), ( "Run migration", MigrationApp ), ( "Show tables", TableViewerApp ), ( "Run echo", EchoApp ), ( "Show logs", LogViewerApp ) ]
+            , theme = LanternUi.Theme.lightTheme
             }
 
         lanternCmd =
@@ -138,6 +150,19 @@ subscriptions model =
 
 
 
+-- APPS
+
+
+type App
+    = ReaderQueryApp
+    | WriterQueryApp
+    | MigrationApp
+    | TableViewerApp
+    | EchoApp
+    | LogViewerApp
+
+
+
 -- UPDATE
 
 
@@ -157,10 +182,12 @@ type Msg
     | ReaderQueryResult (Result Lantern.Error (List FlexiQuery.Result))
     | WriterQueryResult Bool
     | LanternMessage (Lantern.Message Msg)
+    | AppLauncherMessage (LanternUi.FuzzySelect.Message App)
     | LoadTable String
     | UpdateTableRows (Result Lantern.Error ( List FlexiQuery.Result, List Int ))
     | UpdateTables (Result Lantern.Error (List Table))
     | UpdateStatusBar StatusBar.Message
+    | LaunchApp App
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -265,6 +292,17 @@ update msg model =
             in
             ( { model | lanternConnection = lanternConnection }, lanternCmd )
 
+        AppLauncherMessage proxiedMsg ->
+            ( { model | appLauncher = LanternUi.FuzzySelect.update proxiedMsg model.appLauncher }, Cmd.none )
+
+        LaunchApp app ->
+            ( { model
+                | processTable = ProcessTable.launch model.processTable app
+                , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
+              }
+            , Cmd.none
+            )
+
         LoadTable table ->
             let
                 newTableViewerState =
@@ -309,20 +347,26 @@ update msg model =
 -- VIEW
 
 
-logView : Lantern.Log.Log -> Html Msg
-logView log =
-    Html.ul []
-        (log.lines
-            |> List.map (\( _, line ) -> Html.li [] [ text line ])
-        )
+renderLogViewerApp : Model -> Element Msg
+renderLogViewerApp model =
+    LanternUi.panel
+        model.theme
+        []
+        [ model.lanternConnection
+            |> Lantern.log
+            |> .lines
+            |> List.map (\( _, line ) -> Element.text line)
+            |> Element.column
+                [ Element.width Element.fill
+                , LanternUi.listSpacing
+                , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
+                ]
+        ]
 
 
-resultsTable : List FlexiQuery.Result -> Html Msg
+resultsTable : List FlexiQuery.Result -> Element Msg
 resultsTable results =
     let
-        titles =
-            results |> List.head |> Maybe.map (Dict.keys >> List.sort) |> Maybe.withDefault []
-
         valueToString val =
             case val of
                 Lantern.Query.Null ->
@@ -337,63 +381,185 @@ resultsTable results =
                 Lantern.Query.Text t ->
                     t
 
-        row result =
-            titles
-                |> List.map ((\t -> Dict.get t result) >> Maybe.map valueToString >> Maybe.withDefault "" >> (\s -> Html.td [] [ text s ]))
-                |> Html.tr []
+        columns =
+            results
+                |> List.head
+                |> Maybe.map (Dict.keys >> List.sort)
+                |> Maybe.withDefault []
+                |> List.map
+                    (\title ->
+                        { header = Element.text title
+                        , width = Element.fill
+                        , view = \row -> Dict.get title row |> Maybe.map valueToString |> Maybe.withDefault "" |> Element.text
+                        }
+                    )
     in
-    Html.table []
-        [ Html.thead []
-            [ Html.tr [] (List.map (\t -> Html.th [] [ text t ]) titles) ]
-        , Html.tbody [] (List.map row results)
+    Element.table []
+        { data = results
+        , columns = columns
+        }
+
+
+renderReaderQueryApp : Model -> Element Msg
+renderReaderQueryApp model =
+    LanternUi.panel model.theme
+        []
+        [ LanternUi.Input.multiline model.theme
+            []
+            { onChange = UpdateReaderQuery
+            , text = model.readerQuery
+            , placeholder = Nothing
+            , spellcheck = False
+            , label = Element.Input.labelHidden "Reader query"
+            }
+        , Element.column []
+            (model.readerQueryArguments
+                |> Dict.toList
+                |> List.map
+                    (\( name, value ) ->
+                        LanternUi.Input.text model.theme
+                            []
+                            { onChange = UpdateReaderQueryArgument name
+                            , text = value
+                            , placeholder = Nothing
+                            , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
+                            }
+                    )
+            )
+        , LanternUi.Input.button model.theme
+            []
+            { onPress = Just RunReaderQuery
+            , label = Element.text "Run reader query"
+            }
+        , resultsTable model.queryResult
+        , Element.text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault ""))
         ]
 
 
-tools : Model -> Html Msg
+renderWriterQueryApp : Model -> Element Msg
+renderWriterQueryApp model =
+    LanternUi.panel model.theme
+        []
+        [ LanternUi.Input.multiline model.theme
+            []
+            { onChange = UpdateWriterQuery
+            , text = model.writerQuery
+            , placeholder = Nothing
+            , spellcheck = False
+            , label = Element.Input.labelHidden "Writer query"
+            }
+        , Element.column []
+            (model.writerQueryArguments
+                |> Dict.toList
+                |> List.map
+                    (\( name, value ) ->
+                        LanternUi.Input.text model.theme
+                            []
+                            { onChange = UpdateWriterQueryArgument name
+                            , text = value
+                            , placeholder = Nothing
+                            , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
+                            }
+                    )
+            )
+        , LanternUi.Input.button model.theme
+            []
+            { onPress = Just RunWriterQuery
+            , label = Element.text "Run writer query"
+            }
+        ]
+
+
+renderMigrationApp : Model -> Element Msg
+renderMigrationApp model =
+    LanternUi.panel model.theme
+        []
+        [ LanternUi.Input.multiline model.theme
+            []
+            { onChange = UpdateDdl
+            , text = model.ddl
+            , placeholder = Nothing
+            , spellcheck = False
+            , label = Element.Input.labelHidden "Migration"
+            }
+        , LanternUi.Input.button model.theme
+            []
+            { onPress = Just RunDdl
+            , label = Element.text "Run DDL"
+            }
+        ]
+
+
+renderTableViewerApp : Model -> Element Msg
+renderTableViewerApp model =
+    let
+        tableList =
+            model.databaseTables
+                |> List.map (\{ name } -> Element.Input.button [] { label = Element.text name, onPress = Just (LoadTable name) })
+    in
+    LanternUi.panel model.theme
+        []
+        [ Element.row [ Element.width Element.fill ]
+            [ Element.column [ Element.width (Element.fillPortion 2) ] tableList
+            , Element.el [ Element.width (Element.fillPortion 5) ] (TableViewer.render model.tableViewer)
+            ]
+        ]
+
+
+renderEchoApp : Model -> Element Msg
+renderEchoApp model =
+    LanternUi.panel model.theme
+        []
+        [ LanternUi.Input.multiline model.theme
+            []
+            { onChange = UpdatePing
+            , text = model.ping
+            , placeholder = Nothing
+            , spellcheck = False
+            , label = Element.Input.labelHidden "Echo"
+            }
+        , LanternUi.Input.button model.theme
+            []
+            { onPress = Just RunPing
+            , label = Element.text "Run echo"
+            }
+        , Element.text ("Results: " ++ Debug.toString model.pong)
+        ]
+
+
+tools : Model -> Element Msg
 tools model =
-    div []
-        [ Html.form [ Html.Events.onSubmit RunReaderQuery ]
-            [ div [] [ Html.textarea [ onInput UpdateReaderQuery, Html.Attributes.cols 80 ] [] ]
-            , div []
-                (model.readerQueryArguments
-                    |> Dict.toList
-                    |> List.map
-                        (\( name, value ) ->
-                            Html.label [] [ text (name ++ ": "), input [ Html.Attributes.type_ "text", onInput (UpdateReaderQueryArgument name), Html.Attributes.value value ] [] ]
-                        )
-                )
-            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run reader query" ] [] ]
-            , resultsTable model.queryResult
-            , div [] [ text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault "")) ]
-            ]
-        , Html.form [ Html.Events.onSubmit RunWriterQuery ]
-            [ div [] [ Html.textarea [ onInput UpdateWriterQuery, Html.Attributes.cols 80 ] [] ]
-            , div []
-                (model.writerQueryArguments
-                    |> Dict.toList
-                    |> List.map
-                        (\( name, value ) ->
-                            Html.label [] [ text (name ++ ": "), input [ Html.Attributes.type_ "text", onInput (UpdateWriterQueryArgument name), Html.Attributes.value value ] [] ]
-                        )
-                )
-            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run writer query" ] [] ]
-            ]
-        , Html.form [ Html.Events.onSubmit RunDdl ]
-            [ div [] [ Html.textarea [ onInput UpdateDdl, Html.Attributes.cols 80 ] [] ]
-            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run DDL" ] [] ]
-            , div [] [ text ("Result: " ++ Debug.toString model.ddlResult) ]
-            , div [] [ text "Tables:", Html.ul [] (List.map (\{ name } -> Html.li [] [ Html.a [ Html.Attributes.href "#", onClick (LoadTable name) ] [ Html.text name ] ]) model.databaseTables) ]
-            , TableViewer.render model.tableViewer
-            ]
-        , Html.form [ Html.Events.onSubmit RunPing ]
-            [ div [] [ Html.textarea [ onInput UpdatePing, Html.Attributes.cols 80 ] [] ]
-            , div [] [ input [ Html.Attributes.type_ "submit", Html.Attributes.value "Run echo" ] [] ]
-            , div [] [ text ("Results: " ++ Debug.toString model.pong) ]
-            ]
-        , logView (Lantern.log model.lanternConnection)
-        ]
+    model.processTable
+        |> ProcessTable.processes
+        |> List.map
+            (\process ->
+                case ProcessTable.processApp process of
+                    ReaderQueryApp ->
+                        renderReaderQueryApp model
+
+                    WriterQueryApp ->
+                        renderWriterQueryApp model
+
+                    MigrationApp ->
+                        renderMigrationApp model
+
+                    TableViewerApp ->
+                        renderTableViewerApp model
+
+                    EchoApp ->
+                        renderEchoApp model
+
+                    LogViewerApp ->
+                        renderLogViewerApp model
+            )
+        |> Element.column [ Element.width Element.fill ]
+
+
+renderAppLauncher : Model -> Element Msg
+renderAppLauncher model =
+    LanternUi.FuzzySelect.render lightTheme model.appLauncher AppLauncherMessage LaunchApp
 
 
 view : Model -> Html Msg
 view model =
-    StatusBar.render model.statusBar UpdateStatusBar (tools model)
+    StatusBar.render model.statusBar UpdateStatusBar (Element.column [ Element.width Element.fill ] [ renderAppLauncher model, tools model ])

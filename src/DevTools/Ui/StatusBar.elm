@@ -22,7 +22,7 @@ type alias ToMsg msg =
 
 new : StatusBar
 new =
-    { showWindow = False }
+    { showWindow = True }
 
 
 statusBar : StatusBar -> ToMsg msg -> Element msg
@@ -42,6 +42,7 @@ window options toMsg content =
         ]
         (Element.el
             [ Border.color (Element.rgb 0 0 0)
+            , Border.width 1
             , Element.width Element.fill
             , Element.height Element.fill
             , Element.centerX
@@ -51,12 +52,12 @@ window options toMsg content =
         )
 
 
-render : StatusBar -> ToMsg msg -> Html msg -> Html msg
+render : StatusBar -> ToMsg msg -> Element msg -> Html msg
 render options toMsg content =
     let
         windowContent =
             if options.showWindow then
-                window options toMsg (Element.html content)
+                window options toMsg content
 
             else
                 Element.none

@@ -2,7 +2,7 @@ module DevTools.TableViewer exposing (State(..), TableViewer, init, liveQuery, l
 
 import DevTools.FlexiQuery as FlexiQuery
 import Dict
-import Html
+import Element exposing (Element)
 import Json.Decode
 import Lantern
 import Lantern.Query
@@ -88,20 +88,17 @@ loadTable tableViewer table =
     { tableViewer | state = Loading table, page = 1 }
 
 
-render : TableViewer -> Html.Html msg
+render : TableViewer -> Element msg
 render { rowsPerPage, state } =
     case state of
         Inactive ->
-            Html.div [] []
+            Element.none
 
         Loading table ->
-            Html.div [] [ Html.text <| "loading " ++ table ]
+            Element.el [] (Element.text <| "loading" ++ table)
 
         Loaded table results _ ->
             let
-                titles =
-                    results |> List.head |> Maybe.map (Dict.keys >> List.sort) |> Maybe.withDefault []
-
                 valueToString val =
                     case val of
                         Lantern.Query.Null ->
@@ -116,14 +113,24 @@ render { rowsPerPage, state } =
                         Lantern.Query.Text t ->
                             t
 
-                row result =
-                    titles
-                        |> List.map ((\t -> Dict.get t result) >> Maybe.map valueToString >> Maybe.withDefault "" >> (\s -> Html.td [] [ Html.text s ]))
-                        |> Html.tr []
+                columns =
+                    results
+                        |> List.head
+                        |> Maybe.map (Dict.keys >> List.sort)
+                        |> Maybe.withDefault []
+                        |> List.map
+                            (\title ->
+                                { header = Element.text title
+                                , width = Element.fill
+                                , view = \row -> Dict.get title row |> Maybe.map valueToString |> Maybe.withDefault "" |> Element.text
+                                }
+                            )
             in
-            Html.table []
-                [ Html.caption [] [ Html.text table ]
-                , Html.thead []
-                    [ Html.tr [] (List.map (\t -> Html.th [] [ Html.text t ]) titles) ]
-                , Html.tbody [] (List.map row results)
+            Element.column
+                [ Element.width Element.fill ]
+                [ Element.text table
+                , Element.table []
+                    { data = results
+                    , columns = columns
+                    }
                 ]
