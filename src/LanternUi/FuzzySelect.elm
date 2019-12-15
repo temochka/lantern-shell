@@ -80,7 +80,7 @@ update msg model =
 
 reset : FuzzySelect a -> FuzzySelect a
 reset select =
-    { select | active = False, query = "", cursor = 0 }
+    { select | active = False, query = "", cursor = 0, matches = select.options }
 
 
 selectedMatch : FuzzySelect a -> Maybe a
