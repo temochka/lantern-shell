@@ -109,7 +109,11 @@ init _ =
             , lanternConnection = lanternConnection
             , statusBar = StatusBar.new
             , processTable = ProcessTable.empty
-            , appLauncher = LanternUi.FuzzySelect.new [ ( "Run query", ReaderQueryApp ), ( "Run mutator", WriterQueryApp ), ( "Run migration", MigrationApp ), ( "Show tables", TableViewerApp ), ( "Run echo", EchoApp ), ( "Show logs", LogViewerApp ) ]
+            , appLauncher =
+                LanternUi.FuzzySelect.new
+                    { options = [ ( "Run query", ReaderQueryApp ), ( "Run mutator", WriterQueryApp ), ( "Run migration", MigrationApp ), ( "Show tables", TableViewerApp ), ( "Run echo", EchoApp ), ( "Show logs", LogViewerApp ) ]
+                    , placeholder = Nothing
+                    }
             , theme = LanternUi.Theme.lightTheme
             }
 
@@ -557,9 +561,15 @@ tools model =
 
 renderAppLauncher : Model -> Element Msg
 renderAppLauncher model =
-    LanternUi.FuzzySelect.render lightTheme model.appLauncher AppLauncherMessage LaunchApp
+    Element.row
+        [ Element.width Element.fill, Element.spacing 10 ]
+        [ Element.text ">"
+        , LanternUi.FuzzySelect.render lightTheme model.appLauncher AppLauncherMessage LaunchApp
+        ]
 
 
 view : Model -> Html Msg
 view model =
-    StatusBar.render model.statusBar UpdateStatusBar (Element.column [ Element.width Element.fill ] [ renderAppLauncher model, tools model ])
+    StatusBar.render model.statusBar
+        UpdateStatusBar
+        (Element.column [ Element.width Element.fill, Element.padding 15, Element.spacing 15 ] [ renderAppLauncher model, tools model ])

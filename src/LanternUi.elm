@@ -1,6 +1,7 @@
 module LanternUi exposing (listSpacing, panel)
 
 import Element exposing (Element)
+import Element.Border
 import LanternUi.Theme exposing (Theme)
 
 
@@ -16,11 +17,20 @@ panelContentSpacing =
 
 panelContentPadding : Element.Attribute msg
 panelContentPadding =
-    Element.padding 5
+    Element.padding 10
 
 
 panel : Theme -> List (Element.Attribute msg) -> List (Element msg) -> Element msg
 panel theme attributes elements =
     Element.column
-        ([ panelContentSpacing, panelContentPadding, Element.width Element.fill, Element.scrollbarX ] ++ attributes)
+        ([ panelContentSpacing
+         , panelContentPadding
+         , Element.width Element.fill
+         , Element.scrollbarX
+         , Element.Border.solid
+         , Element.Border.width 1
+         , Element.Border.color theme.borderColor
+         ]
+            ++ attributes
+        )
         elements

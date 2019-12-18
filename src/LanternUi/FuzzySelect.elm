@@ -17,15 +17,17 @@ type alias FuzzySelect a =
     , matches : List ( String, a )
     , query : String
     , active : Bool
+    , placeholder : Maybe String
     }
 
 
-new : List ( String, a ) -> FuzzySelect a
-new options =
+new : { options : List ( String, a ), placeholder : Maybe String } -> FuzzySelect a
+new { options, placeholder } =
     { options = options
     , matches = options
     , cursor = 0
     , query = ""
+    , placeholder = placeholder
     , active = False
     }
 
@@ -148,4 +150,4 @@ render theme select toMsg onSelected =
         , Element.Events.onLoseFocus (toMsg Deactivate)
         , Element.htmlAttribute (Html.Events.on "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
         ]
-        { onChange = UpdateQuery >> toMsg, text = select.query, placeholder = Nothing, label = Element.Input.labelHidden "Query" }
+        { onChange = UpdateQuery >> toMsg, text = select.query, placeholder = select.placeholder |> Maybe.map (Element.text >> Element.Input.placeholder []), label = Element.Input.labelHidden "Query" }
