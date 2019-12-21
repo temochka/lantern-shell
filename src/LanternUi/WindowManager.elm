@@ -1,6 +1,8 @@
 module LanternUi.WindowManager exposing (Message, WindowManager, new, render, syncProcesses, update)
 
 import Element exposing (Element)
+import Element.Events
+import Html.Attributes
 import ProcessTable
 import Set
 
@@ -18,6 +20,7 @@ type alias WindowManager =
 
 type Message
     = Nop
+    | Focus ProcessTable.Pid
 
 
 new : List ProcessTable.Pid -> WindowManager
@@ -50,20 +53,22 @@ syncProcesses runningPids ({ layout, focus } as windowManager) =
                 MasterStack _ _ ->
                     MasterStack (List.head pids) (List.drop 1 pids)
 
-        refreshPids wmPids pmPids =
+        refreshPids wmPids pmPids accPids =
             case wmPids of
                 pid :: rest ->
-                    if Set.member pid pmPids then
-                        pid :: refreshPids rest (Set.remove pid pmPids)
+                    (if Set.member pid pmPids then
+                        pid :: accPids
 
-                    else
-                        refreshPids rest pmPids
+                     else
+                        accPids
+                    )
+                        |> refreshPids rest (Set.remove pid pmPids)
 
                 [] ->
-                    Set.toList pmPids
+                    List.sortBy negate (Set.toList pmPids) ++ accPids
 
         newWmPids =
-            refreshPids layoutToPids (Set.fromList runningPids)
+            refreshPids layoutToPids (Set.fromList runningPids) []
 
         newFocus =
             focus
@@ -85,43 +90,63 @@ update msg windowManager =
         Nop ->
             windowManager
 
+        Focus pid ->
+            { windowManager | focus = Just pid }
 
-render : (ProcessTable.Pid -> Element msg) -> WindowManager -> Element msg
-render renderer { focus, layout } =
+
+render : { spacing : Int, padding : Int } -> (ProcessTable.Pid -> Bool -> Element msg) -> (Message -> msg) -> WindowManager -> Element msg
+render { spacing, padding } renderer wrapMsg { focus, layout } =
     let
-        toWindowPane =
-            renderer >> windowPane
+        windowPane pid =
+            Element.el
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Element.Events.onMouseEnter (wrapMsg (Focus pid))
+                , Element.Events.onFocus (wrapMsg (Focus pid))
+                , Element.htmlAttribute (Html.Attributes.tabindex 0)
+                ]
+                (renderer pid (focus |> Maybe.map ((==) pid) |> Maybe.withDefault False))
     in
     case layout of
         Stack windows ->
             let
                 windowPanes =
                     windows
-                        |> List.map toWindowPane
+                        |> List.map windowPane
             in
             Element.column
                 [ Element.width Element.fill
                 , Element.height Element.fill
+                , Element.spacing spacing
+                , Element.padding padding
                 ]
                 windowPanes
 
         MasterStack masterWindow windows ->
             let
                 masterWindowPane =
-                    masterWindow |> Maybe.map toWindowPane |> Maybe.withDefault Element.none
+                    masterWindow |> Maybe.map windowPane |> Maybe.withDefault Element.none
 
                 windowPanes =
-                    List.map toWindowPane windows
+                    List.map windowPane windows
             in
             Element.row
-                [ Element.width Element.fill, Element.height Element.fill ]
-                [ Element.el [ Element.width (Element.fillPortion 3), Element.clip, Element.height Element.fill ] masterWindowPane
-                , Element.column [ Element.width (Element.fillPortion 2), Element.clip ] windowPanes
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Element.padding padding
+                , Element.spacing spacing
                 ]
-
-
-windowPane : Element msg -> Element msg
-windowPane content =
-    Element.el
-        [ Element.width Element.fill, Element.height Element.fill ]
-        content
+                [ Element.el
+                    [ Element.width (Element.fillPortion 3)
+                    , Element.height Element.fill
+                    , Element.spacing spacing
+                    ]
+                    masterWindowPane
+                , Element.column
+                    [ Element.width (Element.fillPortion 2)
+                    , Element.height Element.fill
+                    , Element.spacing spacing
+                    , Element.alignTop
+                    ]
+                    windowPanes
+                ]

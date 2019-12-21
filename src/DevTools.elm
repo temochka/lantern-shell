@@ -8,6 +8,8 @@ import DevTools.TableViewer as TableViewer
 import DevTools.Ui.StatusBar as StatusBar exposing (StatusBar)
 import Dict exposing (Dict)
 import Element exposing (Element)
+import Element.Background
+import Element.Border
 import Element.Font
 import Element.Input
 import Html exposing (Html)
@@ -380,21 +382,18 @@ update msg model =
 -- VIEW
 
 
-renderLogViewerApp : Model -> Element Msg
+renderLogViewerApp : Model -> List (Element Msg)
 renderLogViewerApp model =
-    LanternUi.panel
-        model.theme
-        []
-        [ model.lanternConnection
-            |> Lantern.log
-            |> .lines
-            |> List.map (\( _, line ) -> Element.text line)
-            |> Element.column
-                [ Element.width Element.fill
-                , LanternUi.listSpacing
-                , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
-                ]
-        ]
+    [ model.lanternConnection
+        |> Lantern.log
+        |> .lines
+        |> List.map (\( _, line ) -> Element.text line)
+        |> Element.column
+            [ Element.width Element.fill
+            , LanternUi.listSpacing
+            , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
+            ]
+    ]
 
 
 resultsTable : List FlexiQuery.Result -> Element Msg
@@ -433,165 +432,173 @@ resultsTable results =
         }
 
 
-renderReaderQueryApp : Model -> Element Msg
+renderReaderQueryApp : Model -> List (Element Msg)
 renderReaderQueryApp model =
-    LanternUi.panel model.theme
+    [ LanternUi.Input.multiline model.theme
         []
-        [ LanternUi.Input.multiline model.theme
-            []
-            { onChange = UpdateReaderQuery
-            , text = model.readerQuery
-            , placeholder = Nothing
-            , spellcheck = False
-            , label = Element.Input.labelHidden "Reader query"
-            }
-        , Element.column []
-            (model.readerQueryArguments
-                |> Dict.toList
-                |> List.map
-                    (\( name, value ) ->
-                        LanternUi.Input.text model.theme
-                            []
-                            { onChange = UpdateReaderQueryArgument name
-                            , text = value
-                            , placeholder = Nothing
-                            , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
-                            }
-                    )
-            )
-        , LanternUi.Input.button model.theme
-            []
-            { onPress = Just RunReaderQuery
-            , label = Element.text "Run reader query"
-            }
-        , resultsTable model.queryResult
-        , Element.text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault ""))
-        ]
+        { onChange = UpdateReaderQuery
+        , text = model.readerQuery
+        , placeholder = Nothing
+        , spellcheck = False
+        , label = Element.Input.labelHidden "Reader query"
+        }
+    , Element.column []
+        (model.readerQueryArguments
+            |> Dict.toList
+            |> List.map
+                (\( name, value ) ->
+                    LanternUi.Input.text model.theme
+                        []
+                        { onChange = UpdateReaderQueryArgument name
+                        , text = value
+                        , placeholder = Nothing
+                        , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
+                        }
+                )
+        )
+    , LanternUi.Input.button model.theme
+        []
+        { onPress = Just RunReaderQuery
+        , label = Element.text "Run reader query"
+        }
+    , resultsTable model.queryResult
+    , Element.text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault ""))
+    ]
 
 
-renderWriterQueryApp : Model -> Element Msg
+renderWriterQueryApp : Model -> List (Element Msg)
 renderWriterQueryApp model =
-    LanternUi.panel model.theme
+    [ LanternUi.Input.multiline model.theme
         []
-        [ LanternUi.Input.multiline model.theme
-            []
-            { onChange = UpdateWriterQuery
-            , text = model.writerQuery
-            , placeholder = Nothing
-            , spellcheck = False
-            , label = Element.Input.labelHidden "Writer query"
-            }
-        , Element.column []
-            (model.writerQueryArguments
-                |> Dict.toList
-                |> List.map
-                    (\( name, value ) ->
-                        LanternUi.Input.text model.theme
-                            []
-                            { onChange = UpdateWriterQueryArgument name
-                            , text = value
-                            , placeholder = Nothing
-                            , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
-                            }
-                    )
-            )
-        , LanternUi.Input.button model.theme
-            []
-            { onPress = Just RunWriterQuery
-            , label = Element.text "Run writer query"
-            }
-        ]
+        { onChange = UpdateWriterQuery
+        , text = model.writerQuery
+        , placeholder = Nothing
+        , spellcheck = False
+        , label = Element.Input.labelHidden "Writer query"
+        }
+    , Element.column []
+        (model.writerQueryArguments
+            |> Dict.toList
+            |> List.map
+                (\( name, value ) ->
+                    LanternUi.Input.text model.theme
+                        []
+                        { onChange = UpdateWriterQueryArgument name
+                        , text = value
+                        , placeholder = Nothing
+                        , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
+                        }
+                )
+        )
+    , LanternUi.Input.button model.theme
+        []
+        { onPress = Just RunWriterQuery
+        , label = Element.text "Run writer query"
+        }
+    ]
 
 
-renderMigrationApp : Model -> Element Msg
+renderMigrationApp : Model -> List (Element Msg)
 renderMigrationApp model =
-    LanternUi.panel model.theme
+    [ LanternUi.Input.multiline model.theme
         []
-        [ LanternUi.Input.multiline model.theme
-            []
-            { onChange = UpdateDdl
-            , text = model.ddl
-            , placeholder = Nothing
-            , spellcheck = False
-            , label = Element.Input.labelHidden "Migration"
-            }
-        , LanternUi.Input.button model.theme
-            []
-            { onPress = Just RunDdl
-            , label = Element.text "Run DDL"
-            }
-        ]
+        { onChange = UpdateDdl
+        , text = model.ddl
+        , placeholder = Nothing
+        , spellcheck = False
+        , label = Element.Input.labelHidden "Migration"
+        }
+    , LanternUi.Input.button model.theme
+        []
+        { onPress = Just RunDdl
+        , label = Element.text "Run DDL"
+        }
+    ]
 
 
-renderTableViewerApp : Model -> Element Msg
+renderTableViewerApp : Model -> List (Element Msg)
 renderTableViewerApp model =
     let
         tableList =
             model.databaseTables
                 |> List.map (\{ name } -> Element.Input.button [] { label = Element.text name, onPress = Just (LoadTable name) })
     in
-    LanternUi.panel model.theme
-        []
-        [ Element.row [ Element.width Element.fill ]
-            [ Element.column [ Element.width (Element.fillPortion 2) ] tableList
-            , Element.el [ Element.width (Element.fillPortion 5) ] (TableViewer.render model.tableViewer)
-            ]
+    [ Element.row [ Element.width Element.fill ]
+        [ Element.column [ Element.width (Element.fillPortion 2) ] tableList
+        , Element.el [ Element.width (Element.fillPortion 5) ] (TableViewer.render model.tableViewer)
         ]
+    ]
 
 
-renderEchoApp : Model -> Element Msg
+renderEchoApp : Model -> List (Element Msg)
 renderEchoApp model =
-    LanternUi.panel model.theme
+    [ LanternUi.Input.multiline model.theme
         []
-        [ LanternUi.Input.multiline model.theme
-            []
-            { onChange = UpdatePing
-            , text = model.ping
-            , placeholder = Nothing
-            , spellcheck = False
-            , label = Element.Input.labelHidden "Echo"
-            }
-        , LanternUi.Input.button model.theme
-            []
-            { onPress = Just RunPing
-            , label = Element.text "Run echo"
-            }
-        , Element.text ("Results: " ++ Debug.toString model.pong)
-        ]
+        { onChange = UpdatePing
+        , text = model.ping
+        , placeholder = Nothing
+        , spellcheck = False
+        , label = Element.Input.labelHidden "Echo"
+        }
+    , LanternUi.Input.button model.theme
+        []
+        { onPress = Just RunPing
+        , label = Element.text "Run echo"
+        }
+    , Element.text ("Results: " ++ Debug.toString model.pong)
+    ]
 
 
-renderApp : Model -> ProcessTable.Process App -> Element Msg
-renderApp model process =
-    case ProcessTable.processApp process of
-        ReaderQueryApp ->
-            renderReaderQueryApp model
+renderApp : Model -> Bool -> ProcessTable.Process App -> Element Msg
+renderApp model focused process =
+    let
+        content =
+            case ProcessTable.processApp process of
+                ReaderQueryApp ->
+                    renderReaderQueryApp model
 
-        WriterQueryApp ->
-            renderWriterQueryApp model
+                WriterQueryApp ->
+                    renderWriterQueryApp model
 
-        MigrationApp ->
-            renderMigrationApp model
+                MigrationApp ->
+                    renderMigrationApp model
 
-        TableViewerApp ->
-            renderTableViewerApp model
+                TableViewerApp ->
+                    renderTableViewerApp model
 
-        EchoApp ->
-            renderEchoApp model
+                EchoApp ->
+                    renderEchoApp model
 
-        LogViewerApp ->
-            renderLogViewerApp model
+                LogViewerApp ->
+                    renderLogViewerApp model
+
+        border =
+            if focused then
+                Element.Border.shadow
+                    { offset = ( 0.0, 0.0 )
+                    , size = 0.1
+                    , blur = 4.0
+                    , color = model.theme.panelShadow
+                    }
+
+            else
+                LanternUi.noneAttribute
+    in
+    LanternUi.panel model.theme
+        [ border ]
+        content
 
 
 tools : Model -> Element Msg
 tools model =
     let
-        wrapRender pid =
+        wrapRender pid focused =
             pid
                 |> ProcessTable.lookup model.processTable
-                |> Maybe.map (renderApp model)
+                |> Maybe.map (renderApp model focused)
                 |> Maybe.withDefault Element.none
     in
-    LanternUi.WindowManager.render wrapRender model.windowManager
+    LanternUi.WindowManager.render { spacing = 5, padding = 0 } wrapRender WindowManagerMessage model.windowManager
 
 
 renderAppLauncher : Model -> Element Msg
@@ -607,4 +614,11 @@ view : Model -> Html Msg
 view model =
     StatusBar.render model.statusBar
         UpdateStatusBar
-        (Element.column [ Element.width Element.fill, Element.padding 15, Element.spacing 15 ] [ renderAppLauncher model, tools model ])
+        (Element.column
+            [ Element.width Element.fill
+            , Element.height Element.fill
+            , Element.padding 15
+            , Element.spacing 15
+            ]
+            [ renderAppLauncher model, tools model ]
+        )

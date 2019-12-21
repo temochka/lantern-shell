@@ -1,7 +1,8 @@
-module LanternUi exposing (listSpacing, panel)
+module LanternUi exposing (fullWidthColumn, listSpacing, noneAttribute, panel)
 
 import Element exposing (Element)
 import Element.Border
+import Html.Attributes
 import LanternUi.Theme exposing (Theme)
 
 
@@ -26,7 +27,8 @@ panel theme attributes elements =
         ([ panelContentSpacing
          , panelContentPadding
          , Element.width Element.fill
-         , Element.scrollbarX
+         , Element.height Element.fill
+         , Element.clip
          , Element.Border.solid
          , Element.Border.width 1
          , Element.Border.color theme.borderColor
@@ -34,3 +36,15 @@ panel theme attributes elements =
             ++ attributes
         )
         elements
+
+
+fullWidthColumn : List (Element.Attribute msg) -> List (Element msg) -> Element msg
+fullWidthColumn attributes elements =
+    Element.column
+        ([ Element.width Element.fill ] ++ attributes)
+        elements
+
+
+noneAttribute : Element.Attribute msg
+noneAttribute =
+    Element.htmlAttribute (Html.Attributes.classList [])
