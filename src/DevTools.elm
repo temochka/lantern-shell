@@ -22,6 +22,7 @@ import LanternUi
 import LanternUi.FuzzySelect
 import LanternUi.Input
 import LanternUi.Theme exposing (lightTheme)
+import LanternUi.WindowManager
 import ProcessTable exposing (ProcessTable)
 import String
 
@@ -75,6 +76,7 @@ type alias Model =
     , lanternConnection : Lantern.Connection Msg
     , statusBar : StatusBar
     , processTable : ProcessTable App
+    , windowManager : LanternUi.WindowManager.WindowManager
     , appLauncher : LanternUi.FuzzySelect.FuzzySelect App
     , theme : LanternUi.Theme.Theme
     }
@@ -88,6 +90,12 @@ init _ =
 
         lanternConnection =
             Lantern.newConnection lanternRequestPort lanternResponsePort LanternMessage
+
+        processTable =
+            ProcessTable.empty
+                |> ProcessTable.launch TableViewerApp
+                |> ProcessTable.launch ReaderQueryApp
+                |> ProcessTable.launch WriterQueryApp
 
         model =
             { readerQuery = ""
@@ -108,10 +116,18 @@ init _ =
             , serverResponse = Nothing
             , lanternConnection = lanternConnection
             , statusBar = StatusBar.new
-            , processTable = ProcessTable.empty
+            , processTable = processTable
+            , windowManager = LanternUi.WindowManager.new (ProcessTable.pids processTable)
             , appLauncher =
                 LanternUi.FuzzySelect.new
-                    { options = [ ( "Run query", ReaderQueryApp ), ( "Run mutator", WriterQueryApp ), ( "Run migration", MigrationApp ), ( "Show tables", TableViewerApp ), ( "Run echo", EchoApp ), ( "Show logs", LogViewerApp ) ]
+                    { options =
+                        [ ( "Run query", ReaderQueryApp )
+                        , ( "Run mutator", WriterQueryApp )
+                        , ( "Run migration", MigrationApp )
+                        , ( "Show tables", TableViewerApp )
+                        , ( "Run echo", EchoApp )
+                        , ( "Show logs", LogViewerApp )
+                        ]
                     , placeholder = Nothing
                     }
             , theme = LanternUi.Theme.lightTheme
@@ -192,6 +208,7 @@ type Msg
     | UpdateTables (Result Lantern.Error (List Table))
     | UpdateStatusBar StatusBar.Message
     | LaunchApp App
+    | WindowManagerMessage LanternUi.WindowManager.Message
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -300,8 +317,13 @@ update msg model =
             ( { model | appLauncher = LanternUi.FuzzySelect.update proxiedMsg model.appLauncher }, Cmd.none )
 
         LaunchApp app ->
+            let
+                newProcessTable =
+                    ProcessTable.launch app model.processTable
+            in
             ( { model
-                | processTable = ProcessTable.launch model.processTable app
+                | processTable = newProcessTable
+                , windowManager = LanternUi.WindowManager.syncProcesses (ProcessTable.pids newProcessTable) model.windowManager
                 , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
               }
             , Cmd.none
@@ -345,6 +367,13 @@ update msg model =
         UpdateStatusBar statusBarMsg ->
             StatusBar.update statusBarMsg model.statusBar
                 |> Tuple.mapFirst (\statusBar -> { model | statusBar = statusBar })
+
+        WindowManagerMessage proxiedMsg ->
+            let
+                newWindowManager =
+                    LanternUi.WindowManager.update proxiedMsg model.windowManager
+            in
+            ( { model | windowManager = newWindowManager }, Cmd.none )
 
 
 
@@ -531,32 +560,38 @@ renderEchoApp model =
         ]
 
 
+renderApp : Model -> ProcessTable.Process App -> Element Msg
+renderApp model process =
+    case ProcessTable.processApp process of
+        ReaderQueryApp ->
+            renderReaderQueryApp model
+
+        WriterQueryApp ->
+            renderWriterQueryApp model
+
+        MigrationApp ->
+            renderMigrationApp model
+
+        TableViewerApp ->
+            renderTableViewerApp model
+
+        EchoApp ->
+            renderEchoApp model
+
+        LogViewerApp ->
+            renderLogViewerApp model
+
+
 tools : Model -> Element Msg
 tools model =
-    model.processTable
-        |> ProcessTable.processes
-        |> List.map
-            (\process ->
-                case ProcessTable.processApp process of
-                    ReaderQueryApp ->
-                        renderReaderQueryApp model
-
-                    WriterQueryApp ->
-                        renderWriterQueryApp model
-
-                    MigrationApp ->
-                        renderMigrationApp model
-
-                    TableViewerApp ->
-                        renderTableViewerApp model
-
-                    EchoApp ->
-                        renderEchoApp model
-
-                    LogViewerApp ->
-                        renderLogViewerApp model
-            )
-        |> Element.column [ Element.width Element.fill ]
+    let
+        wrapRender pid =
+            pid
+                |> ProcessTable.lookup model.processTable
+                |> Maybe.map (renderApp model)
+                |> Maybe.withDefault Element.none
+    in
+    LanternUi.WindowManager.render wrapRender model.windowManager
 
 
 renderAppLauncher : Model -> Element Msg
