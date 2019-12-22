@@ -1,6 +1,8 @@
 port module DevTools exposing (..)
 
 import Browser
+import Browser.Dom
+import Browser.Events
 import Debug
 import DevTools.ArgumentParser as ArgumentParser
 import DevTools.FlexiQuery as FlexiQuery
@@ -15,6 +17,7 @@ import Element.Input
 import Html exposing (Html)
 import Json.Decode
 import Json.Encode
+import Keyboard.Event
 import Lantern
 import Lantern.Encoders
 import Lantern.Log
@@ -27,6 +30,7 @@ import LanternUi.Theme exposing (lightTheme)
 import LanternUi.WindowManager
 import ProcessTable exposing (ProcessTable)
 import String
+import Task
 
 
 port lanternRequestPort : Lantern.RequestPort msg
@@ -132,6 +136,7 @@ init _ =
                         ]
                     , placeholder = Nothing
                     }
+                    |> LanternUi.FuzzySelect.setId "lanternAppLauncher"
             , theme = LanternUi.Theme.lightTheme
             }
 
@@ -168,7 +173,10 @@ liveQueries model =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
-    Lantern.subscriptions model.lanternConnection
+    Sub.batch
+        [ Lantern.subscriptions model.lanternConnection
+        , Browser.Events.onKeyDown handleShortcuts
+        ]
 
 
 
@@ -189,7 +197,12 @@ type App
 
 
 type Msg
-    = UpdateReaderQuery String
+    = Nop
+    | NextWindow
+    | PrevWindow
+    | CloseApp
+    | FocusAppLauncher
+    | UpdateReaderQuery String
     | UpdateReaderQueryArgument String String
     | UpdateWriterQuery String
     | UpdateWriterQueryArgument String String
@@ -216,6 +229,31 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Nop ->
+            ( model, Cmd.none )
+
+        NextWindow ->
+            LanternUi.WindowManager.nextWindow model.windowManager Nop (\wm -> { model | windowManager = wm })
+
+        PrevWindow ->
+            LanternUi.WindowManager.prevWindow model.windowManager Nop (\wm -> { model | windowManager = wm })
+
+        CloseApp ->
+            let
+                newProcessTable =
+                    model.windowManager.focus
+                        |> Maybe.map (\pid -> ProcessTable.kill pid model.processTable)
+                        |> Maybe.withDefault model.processTable
+            in
+            LanternUi.WindowManager.syncProcesses
+                (ProcessTable.pids newProcessTable)
+                model.windowManager
+                Nop
+                (\wm -> { model | processTable = newProcessTable, windowManager = wm })
+
+        FocusAppLauncher ->
+            ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
+
         UpdateReaderQuery query ->
             let
                 argumentNames =
@@ -323,13 +361,17 @@ update msg model =
                 newProcessTable =
                     ProcessTable.launch app model.processTable
             in
-            ( { model
-                | processTable = newProcessTable
-                , windowManager = LanternUi.WindowManager.syncProcesses (ProcessTable.pids newProcessTable) model.windowManager
-                , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
-              }
-            , Cmd.none
-            )
+            LanternUi.WindowManager.syncProcesses
+                (ProcessTable.pids newProcessTable)
+                model.windowManager
+                Nop
+                (\wm ->
+                    { model
+                        | processTable = newProcessTable
+                        , windowManager = wm
+                        , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
+                    }
+                )
 
         LoadTable table ->
             let
@@ -376,6 +418,30 @@ update msg model =
                     LanternUi.WindowManager.update proxiedMsg model.windowManager
             in
             ( { model | windowManager = newWindowManager }, Cmd.none )
+
+
+handleShortcuts : Json.Decode.Decoder Msg
+handleShortcuts =
+    let
+        dispatchKeyPress keyPress =
+            case ( keyPress.ctrlKey, keyPress.key ) of
+                ( True, Just "." ) ->
+                    FocusAppLauncher
+
+                ( True, Just "j" ) ->
+                    NextWindow
+
+                ( True, Just "k" ) ->
+                    PrevWindow
+
+                ( True, Just "w" ) ->
+                    CloseApp
+
+                _ ->
+                    Nop
+    in
+    Keyboard.Event.decodeKeyboardEvent
+        |> Json.Decode.map dispatchKeyPress
 
 
 

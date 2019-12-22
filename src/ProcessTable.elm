@@ -1,4 +1,4 @@
-module ProcessTable exposing (Pid, Process, ProcessTable, empty, launch, lookup, pids, processApp, processes)
+module ProcessTable exposing (Pid, Process, ProcessTable, empty, kill, launch, lookup, pids, processApp, processes)
 
 import Dict exposing (Dict)
 
@@ -73,3 +73,8 @@ launch app processTable =
             }
     in
     { processTable | pid = pid, processes = Dict.insert pid newProcess processTable.processes }
+
+
+kill : Pid -> ProcessTable app -> ProcessTable app
+kill pid table =
+    { table | processes = Dict.remove pid table.processes }

@@ -1,13 +1,15 @@
-module LanternUi.FuzzySelect exposing (FuzzySelect, Message, new, render, reset, update)
+module LanternUi.FuzzySelect exposing (FuzzySelect, Message, new, render, reset, setId, update)
 
 import Element exposing (Element)
 import Element.Background
 import Element.Events
 import Element.Input
+import Html.Attributes
 import Html.Events
 import Json.Decode
 import Keyboard.Event
 import Keyboard.Key
+import LanternUi
 import LanternUi.Theme exposing (Theme)
 
 
@@ -18,6 +20,7 @@ type alias FuzzySelect a =
     , query : String
     , active : Bool
     , placeholder : Maybe String
+    , id : Maybe String
     }
 
 
@@ -29,6 +32,7 @@ new { options, placeholder } =
     , query = ""
     , placeholder = placeholder
     , active = False
+    , id = Nothing
     }
 
 
@@ -40,6 +44,11 @@ type Message a
     | Activate
     | Deactivate
     | Nop
+
+
+setId : String -> FuzzySelect a -> FuzzySelect a
+setId id select =
+    { select | id = Just id }
 
 
 update : Message a -> FuzzySelect a -> FuzzySelect a
@@ -149,5 +158,6 @@ render theme select toMsg onSelected =
         , Element.Events.onFocus (toMsg Activate)
         , Element.Events.onLoseFocus (toMsg Deactivate)
         , Element.htmlAttribute (Html.Events.on "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
+        , select.id |> Maybe.map (Html.Attributes.id >> Element.htmlAttribute) |> Maybe.withDefault LanternUi.noneAttribute
         ]
         { onChange = UpdateQuery >> toMsg, text = select.query, placeholder = select.placeholder |> Maybe.map (Element.text >> Element.Input.placeholder []), label = Element.Input.labelHidden "Query" }
