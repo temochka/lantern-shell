@@ -137,6 +137,7 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                 , Element.height Element.fill
                 , Element.spacing spacing
                 , Element.padding padding
+                , Element.clip
                 ]
                 windowPanes
 
@@ -153,18 +154,23 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                 , Element.height Element.fill
                 , Element.padding padding
                 , Element.spacing spacing
+                , Element.clip
                 ]
                 [ Element.el
                     [ Element.width (Element.fillPortion 3)
                     , Element.height Element.fill
-                    , Element.spacing spacing
+                    , Element.spacing (3 + spacing)
+                    , Element.padding 3
+                    , Element.clip
                     ]
                     masterWindowPane
                 , Element.column
                     [ Element.width (Element.fillPortion 2)
                     , Element.height Element.fill
-                    , Element.spacing spacing
+                    , Element.spacing (6 + spacing)
                     , Element.alignTop
+                    , Element.padding 3
+                    , Element.clip
                     ]
                     windowPanes
                 ]

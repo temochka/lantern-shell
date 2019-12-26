@@ -685,6 +685,7 @@ view model =
             , Element.height Element.fill
             , Element.padding 15
             , Element.spacing 15
+            , Element.clipX
             ]
             [ renderAppLauncher model, tools model ]
         )
