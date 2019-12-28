@@ -8,8 +8,13 @@ import Element exposing (Element)
 import Element.Input
 import Lantern
 import Lantern.Query
+import LanternUi
 import LanternUi.Input
 import LanternUi.Theme
+
+
+type alias Context =
+    { theme : LanternUi.Theme.Theme }
 
 
 type alias Model =
@@ -34,8 +39,8 @@ type Message
     | Run
 
 
-update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
-update msg model =
+update : Context -> Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
+update _ msg model =
     case msg of
         Update query ->
             let
@@ -75,34 +80,46 @@ update msg model =
                     ( { model | result = Just (Ok queryResult) }, Cmd.none )
 
 
-view : LanternUi.Theme.Theme -> Model -> List (Element (Lantern.Message Message))
-view theme model =
-    [ LanternUi.Input.multiline theme
+view : Context -> Model -> Element (Lantern.Message Message)
+view { theme } model =
+    LanternUi.columnLayout
+        theme
         []
-        { onChange = Update >> Lantern.AppMessage
-        , text = model.query
-        , placeholder = Nothing
-        , spellcheck = False
-        , label = Element.Input.labelHidden "Reader query"
+        [ LanternUi.Input.multiline theme
+            []
+            { onChange = Update >> Lantern.AppMessage
+            , text = model.query
+            , placeholder = Nothing
+            , spellcheck = False
+            , label = Element.Input.labelHidden "Reader query"
+            }
+        , Element.column []
+            (model.arguments
+                |> Dict.toList
+                |> List.map
+                    (\( name, value ) ->
+                        LanternUi.Input.text theme
+                            []
+                            { onChange = UpdateArgument name >> Lantern.AppMessage
+                            , text = value
+                            , placeholder = Nothing
+                            , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
+                            }
+                    )
+            )
+        , LanternUi.Input.button theme
+            []
+            { onPress = Just (Lantern.AppMessage Run)
+            , label = Element.text "Run reader query"
+            }
+        , ResultsTable.render (model.result |> Maybe.withDefault (Ok []) |> Result.withDefault [])
+        ]
+
+
+lanternApp : Lantern.App Context Model Message
+lanternApp =
+    Lantern.simpleApp
+        { model = init
+        , view = view
+        , update = update
         }
-    , Element.column []
-        (model.arguments
-            |> Dict.toList
-            |> List.map
-                (\( name, value ) ->
-                    LanternUi.Input.text theme
-                        []
-                        { onChange = UpdateArgument name >> Lantern.AppMessage
-                        , text = value
-                        , placeholder = Nothing
-                        , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
-                        }
-                )
-        )
-    , LanternUi.Input.button theme
-        []
-        { onPress = Just (Lantern.AppMessage Run)
-        , label = Element.text "Run reader query"
-        }
-    , ResultsTable.render (model.result |> Maybe.withDefault (Ok []) |> Result.withDefault [])
-    ]

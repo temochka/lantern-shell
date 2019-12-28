@@ -1,4 +1,4 @@
-module LanternUi exposing (fullWidthColumn, listSpacing, noneAttribute, panel)
+module LanternUi exposing (columnLayout, fullWidthColumn, listSpacing, noneAttribute, panel)
 
 import Element exposing (Element)
 import Element.Border
@@ -11,27 +11,32 @@ listSpacing =
     Element.spacing 5
 
 
-panelContentSpacing : Element.Attribute msg
-panelContentSpacing =
-    Element.spacing 5
-
-
 panelContentPadding : Element.Attribute msg
 panelContentPadding =
     Element.padding 10
 
 
-panel : Theme -> List (Element.Attribute msg) -> List (Element msg) -> Element msg
-panel theme attributes elements =
-    Element.column
-        ([ panelContentSpacing
-         , panelContentPadding
+panel : Theme -> List (Element.Attribute msg) -> Element msg -> Element msg
+panel theme attributes element =
+    Element.el
+        ([ panelContentPadding
          , Element.width Element.fill
          , Element.height Element.fill
          , Element.clip
          , Element.Border.solid
          , Element.Border.width 1
          , Element.Border.color theme.borderColor
+         ]
+            ++ attributes
+        )
+        element
+
+
+columnLayout theme attributes elements =
+    Element.column
+        ([ Element.spacing 5
+         , Element.width Element.fill
+         , Element.height Element.fill
          ]
             ++ attributes
         )

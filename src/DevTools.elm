@@ -198,14 +198,27 @@ wrapAppMessage pid msg =
             LanternMessage (Lantern.map (AppMessage pid) lanternMessage)
 
 
-processAppMessage : ProcessTable.Pid -> AppMessage -> App -> ( App, Cmd Msg )
-processAppMessage pid msg app =
-    case ( app, msg ) of
-        ( ReaderQueryApp model, ReaderQueryMsg appMsg ) ->
-            ReaderQueryApp.update appMsg model |> Tuple.mapFirst ReaderQueryApp |> Tuple.mapSecond (Cmd.map (Lantern.map ReaderQueryMsg >> wrapAppMessage pid))
+processAppMessage : Model -> ProcessTable.Pid -> AppMessage -> Result String ( App, Cmd Msg )
+processAppMessage model pid msg =
+    pid
+        |> ProcessTable.lookup model.processTable
+        |> Result.fromMaybe "Unknown process"
+        |> Result.andThen
+            (\process ->
+                let
+                    app =
+                        ProcessTable.processApp process
+                in
+                case ( app, msg ) of
+                    ( ReaderQueryApp appModel, ReaderQueryMsg appMsg ) ->
+                        ReaderQueryApp.update { theme = model.theme } appMsg appModel
+                            |> Tuple.mapFirst ReaderQueryApp
+                            |> Tuple.mapSecond (Cmd.map (Lantern.map ReaderQueryMsg >> wrapAppMessage pid))
+                            |> Ok
 
-        _ ->
-            ( app, Cmd.none )
+                    _ ->
+                        Err "Process cannot handle message"
+            )
 
 
 
@@ -402,19 +415,17 @@ update msg model =
         AppMessage pid proxiedMsg ->
             let
                 result =
-                    pid
-                        |> ProcessTable.lookup model.processTable
-                        |> Maybe.map (ProcessTable.processApp >> processAppMessage pid proxiedMsg)
+                    processAppMessage model pid proxiedMsg
 
                 newProcessTable =
                     case result of
-                        Just ( app, _ ) ->
+                        Ok ( app, _ ) ->
                             ProcessTable.mapProcess (always app) pid model.processTable
 
-                        Nothing ->
+                        Err _ ->
                             model.processTable
             in
-            ( { model | processTable = newProcessTable }, result |> Maybe.map Tuple.second |> Maybe.withDefault Cmd.none )
+            ( { model | processTable = newProcessTable }, result |> Result.map Tuple.second |> Result.withDefault Cmd.none )
 
 
 handleShortcuts : Json.Decode.Decoder Msg
@@ -584,23 +595,23 @@ renderApp model focused process =
         content =
             case ProcessTable.processApp process of
                 ReaderQueryApp appModel ->
-                    ReaderQueryApp.view model.theme appModel
-                        |> List.map (\e -> Element.map (Lantern.map ReaderQueryMsg >> wrapAppMessage process.pid) e)
+                    ReaderQueryApp.view { theme = model.theme } appModel
+                        |> Element.map (Lantern.map ReaderQueryMsg >> wrapAppMessage process.pid)
 
                 WriterQueryApp ->
-                    renderWriterQueryApp model
+                    renderWriterQueryApp model |> LanternUi.columnLayout model.theme []
 
                 MigrationApp ->
-                    renderMigrationApp model
+                    renderMigrationApp model |> LanternUi.columnLayout model.theme []
 
                 TableViewerApp ->
-                    renderTableViewerApp model
+                    renderTableViewerApp model |> LanternUi.columnLayout model.theme []
 
                 EchoApp ->
-                    renderEchoApp model
+                    renderEchoApp model |> LanternUi.columnLayout model.theme []
 
                 LogViewerApp ->
-                    renderLogViewerApp model
+                    renderLogViewerApp model |> LanternUi.columnLayout model.theme []
 
         border =
             if focused then

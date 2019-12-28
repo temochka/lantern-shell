@@ -1,5 +1,6 @@
 module Lantern exposing
-    ( Connection
+    ( App
+    , Connection
     , Error
     , LiveQuery
     , Message(..)
@@ -17,12 +18,14 @@ module Lantern exposing
     , prepareLiveQuery2
     , prepareLiveQuery3
     , readerQuery
+    , simpleApp
     , update
     , wrapResponse
     , writerQuery
     )
 
 import Dict exposing (Dict)
+import Element exposing (Element)
 import Json.Decode
 import Json.Encode
 import Lantern.Decoders as Decoders
@@ -85,6 +88,29 @@ type alias RequestsInFlight msg =
 
 type LiveQuery msg
     = LiveQuery (List Lantern.Query.Query) (List Lantern.Query.ReaderResult -> msg)
+
+
+type alias App ctx model msg =
+    { model : model
+    , view : ctx -> model -> Element (Message msg)
+    , update : ctx -> msg -> model -> ( model, Cmd (Message msg) )
+    }
+
+
+simpleApp :
+    { model : model
+    , view :
+        ctx
+        -> model
+        -> Element (Message msg)
+    , update : ctx -> msg -> model -> ( model, Cmd (Message msg) )
+    }
+    -> App ctx model msg
+simpleApp def =
+    { model = def.model
+    , view = def.view
+    , update = def.update
+    }
 
 
 newConnection : RequestPort msg -> ResponsePort msg -> Connection msg
