@@ -2,7 +2,7 @@ module Lantern exposing
     ( Connection
     , Error
     , LiveQuery
-    , Message
+    , Message(..)
     , RequestPort
     , Response
     , ResponsePort
@@ -17,8 +17,8 @@ module Lantern exposing
     , prepareLiveQuery2
     , prepareLiveQuery3
     , readerQuery
-    , subscriptions
     , update
+    , wrapResponse
     , writerQuery
     )
 
@@ -61,12 +61,16 @@ type alias State msg =
     , requestsInFlight : RequestsInFlight msg
     , requestPort : RequestPort msg
     , responsePort : ResponsePort msg
-    , toMsg : Message msg -> msg
     , log : Log
     }
 
 
 type Message msg
+    = Message (InternalMessage msg)
+    | AppMessage msg
+
+
+type InternalMessage msg
     = ResponseMsg Response
     | Request Lantern.Request.Request (ResponseHandler msg)
 
@@ -83,26 +87,31 @@ type LiveQuery msg
     = LiveQuery (List Lantern.Query.Query) (List Lantern.Query.ReaderResult -> msg)
 
 
-newConnection : RequestPort msg -> ResponsePort msg -> (Message msg -> msg) -> Connection msg
-newConnection requestPort responsePort toMsg =
+newConnection : RequestPort msg -> ResponsePort msg -> Connection msg
+newConnection requestPort responsePort =
     Connection
         { requestId = 0
         , currentLiveQueryId = ""
         , requestsInFlight = Dict.empty
         , requestPort = requestPort
         , responsePort = responsePort
-        , toMsg = toMsg
         , log = Log.new
         }
 
 
-subscriptions : Connection msg -> Sub msg
-subscriptions (Connection state) =
-    state.responsePort (ResponseMsg >> state.toMsg)
+wrapResponse : String -> Message msg
+wrapResponse response =
+    Message (ResponseMsg response)
 
 
-echo : String -> (String -> msg) -> Connection msg -> Cmd msg
-echo payload msg (Connection ({ toMsg } as state)) =
+
+-- subscriptions : Connection msg -> Sub msg
+-- subscriptions (Connection state) =
+--     state.responsePort (ResponseMsg >> Message)
+
+
+echo : String -> (String -> msg) -> Cmd (Message msg)
+echo payload msg =
     let
         handler response =
             case response of
@@ -115,7 +124,7 @@ echo payload msg (Connection ({ toMsg } as state)) =
         request =
             Lantern.Request.Echo payload
     in
-    Task.perform toMsg (Task.succeed (Request request handler))
+    Task.perform Message (Task.succeed (Request request handler))
 
 
 readerQuery :
@@ -140,15 +149,14 @@ readerQuery query decoder msg =
                 _ ->
                     [ msg (Err (Error "Unexpected response")) ]
     in
-    Task.perform identity (Task.succeed (Request request handler))
+    Task.perform Message (Task.succeed (Request request handler))
 
 
 writerQuery :
     Lantern.Query.Query
     -> (Bool -> msg)
-    -> Connection msg
-    -> Cmd msg
-writerQuery query msg (Connection ({ toMsg } as state)) =
+    -> Cmd (Message msg)
+writerQuery query msg =
     let
         request =
             Lantern.Request.WriterQuery query
@@ -161,11 +169,11 @@ writerQuery query msg (Connection ({ toMsg } as state)) =
                 _ ->
                     [ msg False ]
     in
-    Task.perform toMsg (Task.succeed (Request request handler))
+    Task.perform Message (Task.succeed (Request request handler))
 
 
-liveQueries : List (LiveQuery msg) -> Connection msg -> Cmd msg
-liveQueries orderedQueries (Connection { toMsg }) =
+liveQueries : List (LiveQuery msg) -> Cmd (Message msg)
+liveQueries orderedQueries =
     let
         request =
             orderedQueries
@@ -191,7 +199,7 @@ liveQueries orderedQueries (Connection { toMsg }) =
                 _ ->
                     []
     in
-    Task.perform toMsg (Task.succeed (Request request handler))
+    Task.perform Message (Task.succeed (Request request handler))
 
 
 prepareLiveQuery :
@@ -260,8 +268,8 @@ prepareLiveQuery3 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC )
     LiveQuery [ queryA, queryB, queryC ] handler
 
 
-migrate : Lantern.Query.Query -> (Bool -> msg) -> Connection msg -> Cmd msg
-migrate query_ msg (Connection ({ toMsg } as state)) =
+migrate : Lantern.Query.Query -> (Bool -> msg) -> Cmd (Message msg)
+migrate query_ msg =
     let
         request =
             Lantern.Request.Migration query_
@@ -274,10 +282,10 @@ migrate query_ msg (Connection ({ toMsg } as state)) =
                 _ ->
                     [ msg False ]
     in
-    Task.perform toMsg (Task.succeed (Request request handler))
+    Task.perform Message (Task.succeed (Request request handler))
 
 
-update : Message msg -> Connection msg -> ( Connection msg, Cmd msg )
+update : InternalMessage msg -> Connection msg -> ( Connection msg, Cmd msg )
 update msg (Connection state) =
     case msg of
         Request request handler ->
@@ -373,8 +381,13 @@ log (Connection state) =
 map : (a -> b) -> Message a -> Message b
 map f msg =
     case msg of
-        Request request handler ->
-            Request request (\response -> List.map f (handler response))
+        AppMessage appMsg ->
+            AppMessage (f appMsg)
 
-        ResponseMsg response ->
-            ResponseMsg response
+        Message lanternMsg ->
+            case lanternMsg of
+                Request request handler ->
+                    Message (Request request (\response -> List.map f (handler response)))
+
+                ResponseMsg response ->
+                    Message (ResponseMsg response)

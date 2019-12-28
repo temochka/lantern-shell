@@ -20,7 +20,6 @@ import Json.Decode
 import Json.Encode
 import Keyboard.Event
 import Lantern
-import Lantern.App
 import Lantern.Encoders
 import Lantern.Log
 import Lantern.Query
@@ -93,7 +92,7 @@ init _ =
             TableViewer.init
 
         lanternConnection =
-            Lantern.newConnection lanternRequestPort lanternResponsePort LanternMessage
+            Lantern.newConnection lanternRequestPort lanternResponsePort
 
         processTable =
             ProcessTable.empty
@@ -135,7 +134,7 @@ init _ =
             }
 
         lanternCmd =
-            liveQueries model
+            liveQueries model |> Cmd.map LanternMessage
     in
     ( model
     , lanternCmd
@@ -146,7 +145,7 @@ init _ =
 -- LIVE QUERIES
 
 
-liveQueries : Model -> Cmd Msg
+liveQueries : Model -> Cmd (Lantern.Message Msg)
 liveQueries model =
     let
         tablesQuery =
@@ -158,7 +157,6 @@ liveQueries model =
     in
     Lantern.liveQueries
         ([ tablesQuery, tableViewerQuery ] |> List.filterMap identity)
-        model.lanternConnection
 
 
 
@@ -168,7 +166,7 @@ liveQueries model =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ Lantern.subscriptions model.lanternConnection
+        [ lanternResponsePort (Lantern.wrapResponse >> LanternMessage)
         , Browser.Events.onKeyDown handleShortcuts
         ]
 
@@ -190,21 +188,21 @@ type AppMessage
     = ReaderQueryMsg ReaderQueryApp.Message
 
 
-wrapAppMessage : ProcessTable.Pid -> Lantern.App.Message AppMessage -> Msg
+wrapAppMessage : ProcessTable.Pid -> Lantern.Message AppMessage -> Msg
 wrapAppMessage pid msg =
     case msg of
-        Lantern.App.LanternMessage lanternMsg ->
-            LanternMessage (Lantern.map (AppMessage pid) lanternMsg)
-
-        Lantern.App.AppMessage appMsg ->
+        Lantern.AppMessage appMsg ->
             AppMessage pid appMsg
+
+        lanternMessage ->
+            LanternMessage (Lantern.map (AppMessage pid) lanternMessage)
 
 
 processAppMessage : ProcessTable.Pid -> AppMessage -> App -> ( App, Cmd Msg )
 processAppMessage pid msg app =
     case ( app, msg ) of
         ( ReaderQueryApp model, ReaderQueryMsg appMsg ) ->
-            ReaderQueryApp.update appMsg model |> Tuple.mapFirst ReaderQueryApp |> Tuple.mapSecond (Cmd.map (Lantern.App.mapMessage ReaderQueryMsg >> wrapAppMessage pid))
+            ReaderQueryApp.update appMsg model |> Tuple.mapFirst ReaderQueryApp |> Tuple.mapSecond (Cmd.map (Lantern.map ReaderQueryMsg >> wrapAppMessage pid))
 
         _ ->
             ( app, Cmd.none )
@@ -291,7 +289,7 @@ update msg model =
             ( { model | ddl = ddl }, Cmd.none )
 
         RunPing ->
-            ( model, Lantern.echo model.ping ReceivePong model.lanternConnection )
+            ( model, Lantern.echo model.ping ReceivePong |> Cmd.map LanternMessage )
 
         ReceivePong pong ->
             ( { model | pong = pong }, Cmd.none )
@@ -307,7 +305,7 @@ update msg model =
             , Lantern.writerQuery
                 query
                 WriterQueryResult
-                model.lanternConnection
+                |> Cmd.map LanternMessage
             )
 
         RunDdl ->
@@ -315,7 +313,7 @@ update msg model =
                 ddlQuery =
                     Lantern.Query.withNoArguments model.ddl
             in
-            ( model, Lantern.migrate ddlQuery DdlResult model.lanternConnection )
+            ( model, Lantern.migrate ddlQuery DdlResult |> Cmd.map LanternMessage )
 
         DdlResult r ->
             ( { model | ddlResult = r }, Cmd.none )
@@ -324,11 +322,16 @@ update msg model =
             ( model, Cmd.none )
 
         LanternMessage message ->
-            let
-                ( lanternConnection, lanternCmd ) =
-                    Lantern.update message model.lanternConnection
-            in
-            ( { model | lanternConnection = lanternConnection }, lanternCmd )
+            case message of
+                Lantern.Message lanternMessage ->
+                    let
+                        ( lanternConnection, lanternCmd ) =
+                            Lantern.update lanternMessage model.lanternConnection
+                    in
+                    ( { model | lanternConnection = lanternConnection }, lanternCmd )
+
+                Lantern.AppMessage appMessage ->
+                    update appMessage model
 
         AppLauncherMessage proxiedMsg ->
             ( { model | appLauncher = LanternUi.FuzzySelect.update proxiedMsg model.appLauncher }, Cmd.none )
@@ -359,7 +362,7 @@ update msg model =
                     { model | tableViewer = newTableViewerState }
             in
             ( newState
-            , liveQueries newState
+            , liveQueries newState |> Cmd.map LanternMessage
             )
 
         UpdateTables result ->
@@ -582,7 +585,7 @@ renderApp model focused process =
             case ProcessTable.processApp process of
                 ReaderQueryApp appModel ->
                     ReaderQueryApp.view model.theme appModel
-                        |> List.map (\e -> Element.map (Lantern.App.mapMessage ReaderQueryMsg >> wrapAppMessage process.pid) e)
+                        |> List.map (\e -> Element.map (Lantern.map ReaderQueryMsg >> wrapAppMessage process.pid) e)
 
                 WriterQueryApp ->
                     renderWriterQueryApp model

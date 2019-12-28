@@ -7,7 +7,6 @@ import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Input
 import Lantern
-import Lantern.App
 import Lantern.Query
 import LanternUi.Input
 import LanternUi.Theme
@@ -35,7 +34,7 @@ type Message
     | Run
 
 
-update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
+update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
 update msg model =
     case msg of
         Update query ->
@@ -65,7 +64,6 @@ update msg model =
                 query
                 FlexiQuery.resultDecoder
                 HandleResult
-                |> Cmd.map Lantern.App.LanternMessage
             )
 
         HandleResult result ->
@@ -77,11 +75,11 @@ update msg model =
                     ( { model | result = Just (Ok queryResult) }, Cmd.none )
 
 
-view : LanternUi.Theme.Theme -> Model -> List (Element (Lantern.App.Message Message))
+view : LanternUi.Theme.Theme -> Model -> List (Element (Lantern.Message Message))
 view theme model =
     [ LanternUi.Input.multiline theme
         []
-        { onChange = Update >> Lantern.App.AppMessage
+        { onChange = Update >> Lantern.AppMessage
         , text = model.query
         , placeholder = Nothing
         , spellcheck = False
@@ -94,7 +92,7 @@ view theme model =
                 (\( name, value ) ->
                     LanternUi.Input.text theme
                         []
-                        { onChange = UpdateArgument name >> Lantern.App.AppMessage
+                        { onChange = UpdateArgument name >> Lantern.AppMessage
                         , text = value
                         , placeholder = Nothing
                         , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
@@ -103,7 +101,7 @@ view theme model =
         )
     , LanternUi.Input.button theme
         []
-        { onPress = Just (Lantern.App.AppMessage Run)
+        { onPress = Just (Lantern.AppMessage Run)
         , label = Element.text "Run reader query"
         }
     , ResultsTable.render (model.result |> Maybe.withDefault (Ok []) |> Result.withDefault [])
