@@ -10,6 +10,7 @@ module Lantern exposing
     , errorToString
     , liveQueries
     , log
+    , map
     , migrate
     , newConnection
     , prepareLiveQuery
@@ -367,3 +368,13 @@ errorToString (Error e) =
 log : Connection msg -> Log
 log (Connection state) =
     state.log
+
+
+map : (a -> b) -> Message a -> Message b
+map f msg =
+    case msg of
+        Request request handler ->
+            Request request (\response -> List.map f (handler response))
+
+        ResponseMsg response ->
+            ResponseMsg response

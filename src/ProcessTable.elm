@@ -1,4 +1,4 @@
-module ProcessTable exposing (Pid, Process, ProcessTable, empty, kill, launch, lookup, pids, processApp, processes)
+module ProcessTable exposing (Pid, Process, ProcessTable, empty, kill, launch, lookup, mapProcess, pids, processApp, processes)
 
 import Dict exposing (Dict)
 
@@ -78,3 +78,15 @@ launch app processTable =
 kill : Pid -> ProcessTable app -> ProcessTable app
 kill pid table =
     { table | processes = Dict.remove pid table.processes }
+
+
+mapProcess : (app -> app) -> Pid -> ProcessTable app -> ProcessTable app
+mapProcess f pid processTable =
+    { processTable
+        | processes = Dict.update pid (Maybe.map (mapApp f)) processTable.processes
+    }
+
+
+mapApp : (app -> app) -> Process app -> Process app
+mapApp f ({ application } as process) =
+    { process | application = f application }

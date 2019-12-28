@@ -4,6 +4,7 @@ import Browser
 import Browser.Dom
 import Browser.Events
 import Debug
+import DevTools.Apps.ReaderQuery as ReaderQueryApp
 import DevTools.ArgumentParser as ArgumentParser
 import DevTools.FlexiQuery as FlexiQuery
 import DevTools.TableViewer as TableViewer
@@ -19,6 +20,7 @@ import Json.Decode
 import Json.Encode
 import Keyboard.Event
 import Lantern
+import Lantern.App
 import Lantern.Encoders
 import Lantern.Log
 import Lantern.Query
@@ -63,12 +65,8 @@ tableDecoder =
 
 
 type alias Model =
-    { readerQuery : String
-    , readerQueryArguments : Dict String String
-    , writerQuery : String
+    { writerQuery : String
     , writerQueryArguments : Dict String String
-    , queryResult : List FlexiQuery.Result
-    , queryError : Maybe Lantern.Error
     , databaseTables : List Table
     , tableViewerRows : List FlexiQuery.Result
     , tableViewerCount : Int
@@ -100,16 +98,12 @@ init _ =
         processTable =
             ProcessTable.empty
                 |> ProcessTable.launch TableViewerApp
-                |> ProcessTable.launch ReaderQueryApp
+                |> ProcessTable.launch (ReaderQueryApp ReaderQueryApp.init)
                 |> ProcessTable.launch WriterQueryApp
 
         model =
-            { readerQuery = ""
-            , readerQueryArguments = Dict.empty
-            , writerQuery = ""
+            { writerQuery = ""
             , writerQueryArguments = Dict.empty
-            , queryResult = []
-            , queryError = Nothing
             , databaseTables = []
             , tableViewerRows = []
             , tableViewerCount = 0
@@ -127,7 +121,7 @@ init _ =
             , appLauncher =
                 LanternUi.FuzzySelect.new
                     { options =
-                        [ ( "Run query", ReaderQueryApp )
+                        [ ( "Run query", ReaderQueryApp ReaderQueryApp.init )
                         , ( "Run mutator", WriterQueryApp )
                         , ( "Run migration", MigrationApp )
                         , ( "Show tables", TableViewerApp )
@@ -184,12 +178,36 @@ subscriptions model =
 
 
 type App
-    = ReaderQueryApp
+    = ReaderQueryApp ReaderQueryApp.Model
     | WriterQueryApp
     | MigrationApp
     | TableViewerApp
     | EchoApp
     | LogViewerApp
+
+
+type AppMessage
+    = ReaderQueryMsg ReaderQueryApp.Message
+
+
+wrapAppMessage : ProcessTable.Pid -> Lantern.App.Message AppMessage -> Msg
+wrapAppMessage pid msg =
+    case msg of
+        Lantern.App.LanternMessage lanternMsg ->
+            LanternMessage (Lantern.map (AppMessage pid) lanternMsg)
+
+        Lantern.App.AppMessage appMsg ->
+            AppMessage pid appMsg
+
+
+processAppMessage : ProcessTable.Pid -> AppMessage -> App -> ( App, Cmd Msg )
+processAppMessage pid msg app =
+    case ( app, msg ) of
+        ( ReaderQueryApp model, ReaderQueryMsg appMsg ) ->
+            ReaderQueryApp.update appMsg model |> Tuple.mapFirst ReaderQueryApp |> Tuple.mapSecond (Cmd.map (Lantern.App.mapMessage ReaderQueryMsg >> wrapAppMessage pid))
+
+        _ ->
+            ( app, Cmd.none )
 
 
 
@@ -198,23 +216,20 @@ type App
 
 type Msg
     = Nop
+    | AppMessage ProcessTable.Pid AppMessage
     | NextWindow
     | PrevWindow
     | CloseApp
     | FocusAppLauncher
-    | UpdateReaderQuery String
-    | UpdateReaderQueryArgument String String
     | UpdateWriterQuery String
     | UpdateWriterQueryArgument String String
     | UpdatePing String
     | UpdateDdl String
-    | RunReaderQuery
     | RunWriterQuery
     | RunPing
     | RunDdl
     | DdlResult Bool
     | ReceivePong String
-    | ReaderQueryResult (Result Lantern.Error (List FlexiQuery.Result))
     | WriterQueryResult Bool
     | LanternMessage (Lantern.Message Msg)
     | AppLauncherMessage (LanternUi.FuzzySelect.Message App)
@@ -254,21 +269,6 @@ update msg model =
         FocusAppLauncher ->
             ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
 
-        UpdateReaderQuery query ->
-            let
-                argumentNames =
-                    ArgumentParser.parse query
-
-                arguments =
-                    argumentNames
-                        |> List.map (\n -> ( n, Dict.get n model.readerQueryArguments |> Maybe.withDefault "" ))
-                        |> Dict.fromList
-            in
-            ( { model | readerQuery = query, readerQueryArguments = arguments }, Cmd.none )
-
-        UpdateReaderQueryArgument name value ->
-            ( { model | readerQueryArguments = Dict.insert name value model.readerQueryArguments }, Cmd.none )
-
         UpdateWriterQuery query ->
             let
                 argumentNames =
@@ -296,21 +296,6 @@ update msg model =
         ReceivePong pong ->
             ( { model | pong = pong }, Cmd.none )
 
-        RunReaderQuery ->
-            let
-                query =
-                    { source = model.readerQuery
-                    , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.readerQueryArguments
-                    }
-            in
-            ( model
-            , Lantern.readerQuery
-                query
-                FlexiQuery.resultDecoder
-                ReaderQueryResult
-                |> Cmd.map LanternMessage
-            )
-
         RunWriterQuery ->
             let
                 query =
@@ -334,14 +319,6 @@ update msg model =
 
         DdlResult r ->
             ( { model | ddlResult = r }, Cmd.none )
-
-        ReaderQueryResult result ->
-            case result of
-                Err error ->
-                    ( { model | queryError = Just error }, Cmd.none )
-
-                Ok queryResult ->
-                    ( { model | queryResult = queryResult }, Cmd.none )
 
         WriterQueryResult _ ->
             ( model, Cmd.none )
@@ -418,6 +395,23 @@ update msg model =
                     LanternUi.WindowManager.update proxiedMsg model.windowManager
             in
             ( { model | windowManager = newWindowManager }, Cmd.none )
+
+        AppMessage pid proxiedMsg ->
+            let
+                result =
+                    pid
+                        |> ProcessTable.lookup model.processTable
+                        |> Maybe.map (ProcessTable.processApp >> processAppMessage pid proxiedMsg)
+
+                newProcessTable =
+                    case result of
+                        Just ( app, _ ) ->
+                            ProcessTable.mapProcess (always app) pid model.processTable
+
+                        Nothing ->
+                            model.processTable
+            in
+            ( { model | processTable = newProcessTable }, result |> Maybe.map Tuple.second |> Maybe.withDefault Cmd.none )
 
 
 handleShortcuts : Json.Decode.Decoder Msg
@@ -496,40 +490,6 @@ resultsTable results =
         { data = results
         , columns = columns
         }
-
-
-renderReaderQueryApp : Model -> List (Element Msg)
-renderReaderQueryApp model =
-    [ LanternUi.Input.multiline model.theme
-        []
-        { onChange = UpdateReaderQuery
-        , text = model.readerQuery
-        , placeholder = Nothing
-        , spellcheck = False
-        , label = Element.Input.labelHidden "Reader query"
-        }
-    , Element.column []
-        (model.readerQueryArguments
-            |> Dict.toList
-            |> List.map
-                (\( name, value ) ->
-                    LanternUi.Input.text model.theme
-                        []
-                        { onChange = UpdateReaderQueryArgument name
-                        , text = value
-                        , placeholder = Nothing
-                        , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
-                        }
-                )
-        )
-    , LanternUi.Input.button model.theme
-        []
-        { onPress = Just RunReaderQuery
-        , label = Element.text "Run reader query"
-        }
-    , resultsTable model.queryResult
-    , Element.text ("Server error: " ++ (model.queryError |> Maybe.map Lantern.errorToString |> Maybe.withDefault ""))
-    ]
 
 
 renderWriterQueryApp : Model -> List (Element Msg)
@@ -620,8 +580,9 @@ renderApp model focused process =
     let
         content =
             case ProcessTable.processApp process of
-                ReaderQueryApp ->
-                    renderReaderQueryApp model
+                ReaderQueryApp appModel ->
+                    ReaderQueryApp.view model.theme appModel
+                        |> List.map (\e -> Element.map (Lantern.App.mapMessage ReaderQueryMsg >> wrapAppMessage process.pid) e)
 
                 WriterQueryApp ->
                     renderWriterQueryApp model
