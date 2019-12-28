@@ -5,6 +5,7 @@ import Browser.Dom
 import Browser.Events
 import Debug
 import DevTools.Apps.ReaderQuery as ReaderQueryApp
+import DevTools.Apps.WriterQuery as WriterQueryApp
 import DevTools.ArgumentParser as ArgumentParser
 import DevTools.FlexiQuery as FlexiQuery
 import DevTools.TableViewer as TableViewer
@@ -64,9 +65,7 @@ tableDecoder =
 
 
 type alias Model =
-    { writerQuery : String
-    , writerQueryArguments : Dict String String
-    , databaseTables : List Table
+    { databaseTables : List Table
     , tableViewerRows : List FlexiQuery.Result
     , tableViewerCount : Int
     , tableViewer : TableViewer.TableViewer
@@ -98,12 +97,10 @@ init _ =
             ProcessTable.empty
                 |> ProcessTable.launch TableViewerApp
                 |> ProcessTable.launch (ReaderQueryApp ReaderQueryApp.init)
-                |> ProcessTable.launch WriterQueryApp
+                |> ProcessTable.launch (WriterQueryApp WriterQueryApp.init)
 
         model =
-            { writerQuery = ""
-            , writerQueryArguments = Dict.empty
-            , databaseTables = []
+            { databaseTables = []
             , tableViewerRows = []
             , tableViewerCount = 0
             , tableViewer = tableViewer
@@ -121,7 +118,7 @@ init _ =
                 LanternUi.FuzzySelect.new
                     { options =
                         [ ( "Run query", ReaderQueryApp ReaderQueryApp.init )
-                        , ( "Run mutator", WriterQueryApp )
+                        , ( "Run mutator", WriterQueryApp WriterQueryApp.init )
                         , ( "Run migration", MigrationApp )
                         , ( "Show tables", TableViewerApp )
                         , ( "Run echo", EchoApp )
@@ -177,7 +174,7 @@ subscriptions model =
 
 type App
     = ReaderQueryApp ReaderQueryApp.Model
-    | WriterQueryApp
+    | WriterQueryApp WriterQueryApp.Model
     | MigrationApp
     | TableViewerApp
     | EchoApp
@@ -186,6 +183,7 @@ type App
 
 type AppMessage
     = ReaderQueryMsg ReaderQueryApp.Message
+    | WriterQueryMsg WriterQueryApp.Message
 
 
 wrapAppMessage : ProcessTable.Pid -> Lantern.Message AppMessage -> Msg
@@ -216,6 +214,12 @@ processAppMessage model pid msg =
                             |> Tuple.mapSecond (Cmd.map (Lantern.map ReaderQueryMsg >> wrapAppMessage pid))
                             |> Ok
 
+                    ( WriterQueryApp appModel, WriterQueryMsg appMsg ) ->
+                        WriterQueryApp.update { theme = model.theme } appMsg appModel
+                            |> Tuple.mapFirst WriterQueryApp
+                            |> Tuple.mapSecond (Cmd.map (Lantern.map WriterQueryMsg >> wrapAppMessage pid))
+                            |> Ok
+
                     _ ->
                         Err "Process cannot handle message"
             )
@@ -232,16 +236,12 @@ type Msg
     | PrevWindow
     | CloseApp
     | FocusAppLauncher
-    | UpdateWriterQuery String
-    | UpdateWriterQueryArgument String String
     | UpdatePing String
     | UpdateDdl String
-    | RunWriterQuery
     | RunPing
     | RunDdl
     | DdlResult Bool
     | ReceivePong String
-    | WriterQueryResult Bool
     | LanternMessage (Lantern.Message Msg)
     | AppLauncherMessage (LanternUi.FuzzySelect.Message App)
     | LoadTable String
@@ -280,21 +280,6 @@ update msg model =
         FocusAppLauncher ->
             ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
 
-        UpdateWriterQuery query ->
-            let
-                argumentNames =
-                    ArgumentParser.parse query
-
-                arguments =
-                    argumentNames
-                        |> List.map (\n -> ( n, Dict.get n model.writerQueryArguments |> Maybe.withDefault "" ))
-                        |> Dict.fromList
-            in
-            ( { model | writerQuery = query, writerQueryArguments = arguments }, Cmd.none )
-
-        UpdateWriterQueryArgument name value ->
-            ( { model | writerQueryArguments = Dict.insert name value model.writerQueryArguments }, Cmd.none )
-
         UpdatePing ping ->
             ( { model | ping = ping }, Cmd.none )
 
@@ -307,20 +292,6 @@ update msg model =
         ReceivePong pong ->
             ( { model | pong = pong }, Cmd.none )
 
-        RunWriterQuery ->
-            let
-                query =
-                    { source = model.writerQuery
-                    , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.writerQueryArguments
-                    }
-            in
-            ( model
-            , Lantern.writerQuery
-                query
-                WriterQueryResult
-                |> Cmd.map LanternMessage
-            )
-
         RunDdl ->
             let
                 ddlQuery =
@@ -330,9 +301,6 @@ update msg model =
 
         DdlResult r ->
             ( { model | ddlResult = r }, Cmd.none )
-
-        WriterQueryResult _ ->
-            ( model, Cmd.none )
 
         LanternMessage message ->
             case message of
@@ -506,38 +474,6 @@ resultsTable results =
         }
 
 
-renderWriterQueryApp : Model -> List (Element Msg)
-renderWriterQueryApp model =
-    [ LanternUi.Input.multiline model.theme
-        []
-        { onChange = UpdateWriterQuery
-        , text = model.writerQuery
-        , placeholder = Nothing
-        , spellcheck = False
-        , label = Element.Input.labelHidden "Writer query"
-        }
-    , Element.column []
-        (model.writerQueryArguments
-            |> Dict.toList
-            |> List.map
-                (\( name, value ) ->
-                    LanternUi.Input.text model.theme
-                        []
-                        { onChange = UpdateWriterQueryArgument name
-                        , text = value
-                        , placeholder = Nothing
-                        , label = Element.Input.labelLeft [] (Element.text (name ++ ": "))
-                        }
-                )
-        )
-    , LanternUi.Input.button model.theme
-        []
-        { onPress = Just RunWriterQuery
-        , label = Element.text "Run writer query"
-        }
-    ]
-
-
 renderMigrationApp : Model -> List (Element Msg)
 renderMigrationApp model =
     [ LanternUi.Input.multiline model.theme
@@ -598,8 +534,9 @@ renderApp model focused process =
                     ReaderQueryApp.view { theme = model.theme } appModel
                         |> Element.map (Lantern.map ReaderQueryMsg >> wrapAppMessage process.pid)
 
-                WriterQueryApp ->
-                    renderWriterQueryApp model |> LanternUi.columnLayout model.theme []
+                WriterQueryApp appModel ->
+                    WriterQueryApp.view { theme = model.theme } appModel
+                        |> Element.map (Lantern.map WriterQueryMsg >> wrapAppMessage process.pid)
 
                 MigrationApp ->
                     renderMigrationApp model |> LanternUi.columnLayout model.theme []
