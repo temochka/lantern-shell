@@ -308,7 +308,7 @@ update msg model =
                 query
                 FlexiQuery.resultDecoder
                 ReaderQueryResult
-                model.lanternConnection
+                |> Cmd.map LanternMessage
             )
 
         RunWriterQuery ->

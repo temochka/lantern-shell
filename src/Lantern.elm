@@ -121,9 +121,8 @@ readerQuery :
     Lantern.Query.Query
     -> Json.Decode.Decoder a
     -> (Result Error (List a) -> msg)
-    -> Connection msg
-    -> Cmd msg
-readerQuery query decoder msg (Connection ({ toMsg } as state)) =
+    -> Cmd (Message msg)
+readerQuery query decoder msg =
     let
         request =
             Lantern.Request.ReaderQuery query
@@ -140,7 +139,7 @@ readerQuery query decoder msg (Connection ({ toMsg } as state)) =
                 _ ->
                     [ msg (Err (Error "Unexpected response")) ]
     in
-    Task.perform toMsg (Task.succeed (Request request handler))
+    Task.perform identity (Task.succeed (Request request handler))
 
 
 writerQuery :
