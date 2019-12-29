@@ -4,6 +4,7 @@ import Browser
 import Browser.Dom
 import Browser.Events
 import Debug
+import DevTools.Apps.DatabaseExplorer as DatabaseExplorerApp
 import DevTools.Apps.ReaderQuery as ReaderQueryApp
 import DevTools.Apps.WriterQuery as WriterQueryApp
 import DevTools.ArgumentParser as ArgumentParser
@@ -53,23 +54,8 @@ main =
 -- MODEL
 
 
-type alias Table =
-    { name : String }
-
-
-tableDecoder : Json.Decode.Decoder Table
-tableDecoder =
-    Json.Decode.map
-        Table
-        (Json.Decode.field "name" Json.Decode.string)
-
-
 type alias Model =
-    { databaseTables : List Table
-    , tableViewerRows : List FlexiQuery.Result
-    , tableViewerCount : Int
-    , tableViewer : TableViewer.TableViewer
-    , ddl : String
+    { ddl : String
     , ddlResult : Bool
     , ddlError : Maybe Lantern.Error
     , ping : String
@@ -87,24 +73,17 @@ type alias Model =
 init : () -> ( Model, Cmd Msg )
 init _ =
     let
-        tableViewer =
-            TableViewer.init
-
         lanternConnection =
             Lantern.newConnection lanternRequestPort lanternResponsePort
 
         processTable =
             ProcessTable.empty
-                |> ProcessTable.launch TableViewerApp
+                |> ProcessTable.launch (DatabaseExplorerApp DatabaseExplorerApp.init)
                 |> ProcessTable.launch (ReaderQueryApp ReaderQueryApp.init)
                 |> ProcessTable.launch (WriterQueryApp WriterQueryApp.init)
 
         model =
-            { databaseTables = []
-            , tableViewerRows = []
-            , tableViewerCount = 0
-            , tableViewer = tableViewer
-            , ddl = ""
+            { ddl = ""
             , ddlResult = False
             , ddlError = Nothing
             , ping = ""
@@ -120,7 +99,7 @@ init _ =
                         [ ( "Run query", ReaderQueryApp ReaderQueryApp.init )
                         , ( "Run mutator", WriterQueryApp WriterQueryApp.init )
                         , ( "Run migration", MigrationApp )
-                        , ( "Show tables", TableViewerApp )
+                        , ( "Show tables", DatabaseExplorerApp DatabaseExplorerApp.init )
                         , ( "Run echo", EchoApp )
                         , ( "Show logs", LogViewerApp )
                         ]
@@ -129,31 +108,10 @@ init _ =
                     |> LanternUi.FuzzySelect.setId "lanternAppLauncher"
             , theme = LanternUi.Theme.lightTheme
             }
-
-        lanternCmd =
-            liveQueries model |> Cmd.map LanternMessage
     in
     ( model
-    , lanternCmd
+    , Cmd.none
     )
-
-
-
--- LIVE QUERIES
-
-
-liveQueries : Model -> Cmd (Lantern.Message Msg)
-liveQueries model =
-    let
-        tablesQuery =
-            Lantern.prepareLiveQuery ( Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty, tableDecoder ) UpdateTables
-                |> Just
-
-        tableViewerQuery =
-            TableViewer.liveQuery model.tableViewer UpdateTableRows
-    in
-    Lantern.liveQueries
-        ([ tablesQuery, tableViewerQuery ] |> List.filterMap identity)
 
 
 
@@ -176,7 +134,7 @@ type App
     = ReaderQueryApp ReaderQueryApp.Model
     | WriterQueryApp WriterQueryApp.Model
     | MigrationApp
-    | TableViewerApp
+    | DatabaseExplorerApp DatabaseExplorerApp.Model
     | EchoApp
     | LogViewerApp
 
@@ -184,6 +142,7 @@ type App
 type AppMessage
     = ReaderQueryMsg ReaderQueryApp.Message
     | WriterQueryMsg WriterQueryApp.Message
+    | DatabaseExplorerMsg DatabaseExplorerApp.Message
 
 
 wrapAppMessage : ProcessTable.Pid -> Lantern.Message AppMessage -> Msg
@@ -244,9 +203,6 @@ type Msg
     | ReceivePong String
     | LanternMessage (Lantern.Message Msg)
     | AppLauncherMessage (LanternUi.FuzzySelect.Message App)
-    | LoadTable String
-    | UpdateTableRows (Result Lantern.Error ( List FlexiQuery.Result, List Int ))
-    | UpdateTables (Result Lantern.Error (List Table))
     | UpdateStatusBar StatusBar.Message
     | LaunchApp App
     | WindowManagerMessage LanternUi.WindowManager.Message
@@ -333,41 +289,6 @@ update msg model =
                         , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
                     }
                 )
-
-        LoadTable table ->
-            let
-                newTableViewerState =
-                    TableViewer.loadTable model.tableViewer table
-
-                newState =
-                    { model | tableViewer = newTableViewerState }
-            in
-            ( newState
-            , liveQueries newState |> Cmd.map LanternMessage
-            )
-
-        UpdateTables result ->
-            case result of
-                Err err ->
-                    Debug.todo "implement error handling"
-
-                Ok tables ->
-                    ( { model | databaseTables = tables }, Cmd.none )
-
-        UpdateTableRows result ->
-            case result of
-                Err err ->
-                    Debug.todo "implement error handling"
-
-                Ok ( rows, count ) ->
-                    let
-                        newTableViewer =
-                            TableViewer.loadRows
-                                model.tableViewer
-                                rows
-                                (count |> List.head |> Maybe.withDefault 0)
-                    in
-                    ( { model | tableViewer = newTableViewer }, Cmd.none )
 
         UpdateStatusBar statusBarMsg ->
             StatusBar.update statusBarMsg model.statusBar
@@ -492,20 +413,6 @@ renderMigrationApp model =
     ]
 
 
-renderTableViewerApp : Model -> List (Element Msg)
-renderTableViewerApp model =
-    let
-        tableList =
-            model.databaseTables
-                |> List.map (\{ name } -> Element.Input.button [] { label = Element.text name, onPress = Just (LoadTable name) })
-    in
-    [ Element.row [ Element.width Element.fill ]
-        [ Element.column [ Element.width (Element.fillPortion 2) ] tableList
-        , Element.el [ Element.width (Element.fillPortion 5) ] (TableViewer.render model.tableViewer)
-        ]
-    ]
-
-
 renderEchoApp : Model -> List (Element Msg)
 renderEchoApp model =
     [ LanternUi.Input.multiline model.theme
@@ -541,8 +448,9 @@ renderApp model focused process =
                 MigrationApp ->
                     renderMigrationApp model |> LanternUi.columnLayout model.theme []
 
-                TableViewerApp ->
-                    renderTableViewerApp model |> LanternUi.columnLayout model.theme []
+                DatabaseExplorerApp appModel ->
+                    DatabaseExplorerApp.view { theme = model.theme } appModel
+                        |> Element.map (Lantern.map DatabaseExplorerMsg >> wrapAppMessage process.pid)
 
                 EchoApp ->
                     renderEchoApp model |> LanternUi.columnLayout model.theme []

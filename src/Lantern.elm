@@ -9,6 +9,7 @@ module Lantern exposing
     , ResponsePort
     , echo
     , errorToString
+    , liveApp
     , liveQueries
     , log
     , map
@@ -94,6 +95,7 @@ type alias App ctx model msg =
     { model : model
     , view : ctx -> model -> Element (Message msg)
     , update : ctx -> msg -> model -> ( model, Cmd (Message msg) )
+    , liveQueries : ctx -> model -> List (LiveQuery msg)
     }
 
 
@@ -110,6 +112,25 @@ simpleApp def =
     { model = def.model
     , view = def.view
     , update = def.update
+    , liveQueries = always [] |> always
+    }
+
+
+liveApp :
+    { model : model
+    , view :
+        ctx
+        -> model
+        -> Element (Message msg)
+    , update : ctx -> msg -> model -> ( model, Cmd (Message msg) )
+    , liveQueries : ctx -> model -> List (LiveQuery msg)
+    }
+    -> App ctx model msg
+liveApp def =
+    { model = def.model
+    , view = def.view
+    , update = def.update
+    , liveQueries = def.liveQueries
     }
 
 

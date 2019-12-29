@@ -1,4 +1,4 @@
-module DevTools.TableViewer exposing (State(..), TableViewer, init, liveQuery, loadRows, loadTable, render, rowDecoder)
+module DevTools.TableViewer exposing (State(..), TableViewer, init, liveQueries, loadRows, loadTable, render, rowDecoder)
 
 import DevTools.FlexiQuery as FlexiQuery
 import Dict
@@ -33,8 +33,8 @@ rowDecoder =
     FlexiQuery.resultDecoder
 
 
-liveQuery : TableViewer -> (Result Lantern.Error ( List FlexiQuery.Result, List Int ) -> msg) -> Maybe (Lantern.LiveQuery msg)
-liveQuery { rowsPerPage, page, state } toMsg =
+liveQueries : TableViewer -> (Result Lantern.Error ( List FlexiQuery.Result, List Int ) -> msg) -> List (Lantern.LiveQuery msg)
+liveQueries { rowsPerPage, page, state } toMsg =
     let
         offset =
             (page - 1) * rowsPerPage
@@ -61,13 +61,13 @@ liveQuery { rowsPerPage, page, state } toMsg =
     in
     case state of
         Inactive ->
-            Nothing
+            []
 
         Loading table ->
-            Just (query table)
+            [ query table ]
 
         Loaded table _ _ ->
-            Just (query table)
+            [ query table ]
 
 
 loadRows : TableViewer -> List FlexiQuery.Result -> Int -> TableViewer
