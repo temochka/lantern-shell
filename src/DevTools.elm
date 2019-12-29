@@ -5,6 +5,9 @@ import Browser.Dom
 import Browser.Events
 import Debug
 import DevTools.Apps.DatabaseExplorer as DatabaseExplorerApp
+import DevTools.Apps.Echo as EchoApp
+import DevTools.Apps.LogViewer as LogViewerApp
+import DevTools.Apps.Migrations as MigrationsApp
 import DevTools.Apps.ReaderQuery as ReaderQueryApp
 import DevTools.Apps.WriterQuery as WriterQueryApp
 import DevTools.ArgumentParser as ArgumentParser
@@ -55,13 +58,7 @@ main =
 
 
 type alias Model =
-    { ddl : String
-    , ddlResult : Bool
-    , ddlError : Maybe Lantern.Error
-    , ping : String
-    , pong : String
-    , serverResponse : Maybe String
-    , lanternConnection : Lantern.Connection Msg
+    { lanternConnection : Lantern.Connection Msg
     , statusBar : StatusBar
     , processTable : ProcessTable App
     , windowManager : LanternUi.WindowManager.WindowManager
@@ -83,13 +80,7 @@ init _ =
                 |> ProcessTable.launch (WriterQueryApp WriterQueryApp.init)
 
         model =
-            { ddl = ""
-            , ddlResult = False
-            , ddlError = Nothing
-            , ping = ""
-            , pong = ""
-            , serverResponse = Nothing
-            , lanternConnection = lanternConnection
+            { lanternConnection = lanternConnection
             , statusBar = StatusBar.new
             , processTable = processTable
             , windowManager = LanternUi.WindowManager.new (ProcessTable.pids processTable)
@@ -98,10 +89,10 @@ init _ =
                     { options =
                         [ ( "Run query", ReaderQueryApp ReaderQueryApp.init )
                         , ( "Run mutator", WriterQueryApp WriterQueryApp.init )
-                        , ( "Run migration", MigrationApp )
+                        , ( "Run migration", MigrationApp MigrationsApp.init )
                         , ( "Show tables", DatabaseExplorerApp DatabaseExplorerApp.init )
-                        , ( "Run echo", EchoApp )
-                        , ( "Show logs", LogViewerApp )
+                        , ( "Run echo", EchoApp EchoApp.init )
+                        , ( "Show logs", LogViewerApp LogViewerApp.init )
                         ]
                     , placeholder = Nothing
                     }
@@ -133,16 +124,19 @@ subscriptions model =
 type App
     = ReaderQueryApp ReaderQueryApp.Model
     | WriterQueryApp WriterQueryApp.Model
-    | MigrationApp
+    | MigrationApp MigrationsApp.Model
     | DatabaseExplorerApp DatabaseExplorerApp.Model
-    | EchoApp
-    | LogViewerApp
+    | EchoApp EchoApp.Model
+    | LogViewerApp LogViewerApp.Model
 
 
 type AppMessage
     = ReaderQueryMsg ReaderQueryApp.Message
     | WriterQueryMsg WriterQueryApp.Message
     | DatabaseExplorerMsg DatabaseExplorerApp.Message
+    | MigrationsMsg MigrationsApp.Message
+    | EchoMsg EchoApp.Message
+    | LogViewerMsg LogViewerApp.Message
 
 
 wrapAppMessage : ProcessTable.Pid -> Lantern.Message AppMessage -> Msg
@@ -179,6 +173,30 @@ processAppMessage model pid msg =
                             |> Tuple.mapSecond (Cmd.map (Lantern.map WriterQueryMsg >> wrapAppMessage pid))
                             |> Ok
 
+                    ( MigrationApp appModel, MigrationsMsg appMsg ) ->
+                        MigrationsApp.update { theme = model.theme } appMsg appModel
+                            |> Tuple.mapFirst MigrationApp
+                            |> Tuple.mapSecond (Cmd.map (Lantern.map MigrationsMsg >> wrapAppMessage pid))
+                            |> Ok
+
+                    ( DatabaseExplorerApp appModel, DatabaseExplorerMsg appMsg ) ->
+                        DatabaseExplorerApp.update { theme = model.theme } appMsg appModel
+                            |> Tuple.mapFirst DatabaseExplorerApp
+                            |> Tuple.mapSecond (Cmd.map (Lantern.map DatabaseExplorerMsg >> wrapAppMessage pid))
+                            |> Ok
+
+                    ( EchoApp appModel, EchoMsg appMsg ) ->
+                        EchoApp.update { theme = model.theme } appMsg appModel
+                            |> Tuple.mapFirst EchoApp
+                            |> Tuple.mapSecond (Cmd.map (Lantern.map EchoMsg >> wrapAppMessage pid))
+                            |> Ok
+
+                    ( LogViewerApp appModel, LogViewerMsg appMsg ) ->
+                        LogViewerApp.update { theme = model.theme, log = Lantern.log model.lanternConnection } appMsg appModel
+                            |> Tuple.mapFirst LogViewerApp
+                            |> Tuple.mapSecond (Cmd.map (Lantern.map LogViewerMsg >> wrapAppMessage pid))
+                            |> Ok
+
                     _ ->
                         Err "Process cannot handle message"
             )
@@ -195,12 +213,6 @@ type Msg
     | PrevWindow
     | CloseApp
     | FocusAppLauncher
-    | UpdatePing String
-    | UpdateDdl String
-    | RunPing
-    | RunDdl
-    | DdlResult Bool
-    | ReceivePong String
     | LanternMessage (Lantern.Message Msg)
     | AppLauncherMessage (LanternUi.FuzzySelect.Message App)
     | UpdateStatusBar StatusBar.Message
@@ -235,28 +247,6 @@ update msg model =
 
         FocusAppLauncher ->
             ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
-
-        UpdatePing ping ->
-            ( { model | ping = ping }, Cmd.none )
-
-        UpdateDdl ddl ->
-            ( { model | ddl = ddl }, Cmd.none )
-
-        RunPing ->
-            ( model, Lantern.echo model.ping ReceivePong |> Cmd.map LanternMessage )
-
-        ReceivePong pong ->
-            ( { model | pong = pong }, Cmd.none )
-
-        RunDdl ->
-            let
-                ddlQuery =
-                    Lantern.Query.withNoArguments model.ddl
-            in
-            ( model, Lantern.migrate ddlQuery DdlResult |> Cmd.map LanternMessage )
-
-        DdlResult r ->
-            ( { model | ddlResult = r }, Cmd.none )
 
         LanternMessage message ->
             case message of
@@ -345,93 +335,6 @@ handleShortcuts =
 -- VIEW
 
 
-renderLogViewerApp : Model -> List (Element Msg)
-renderLogViewerApp model =
-    [ model.lanternConnection
-        |> Lantern.log
-        |> .lines
-        |> List.map (\( _, line ) -> Element.text line)
-        |> Element.column
-            [ Element.width Element.fill
-            , LanternUi.listSpacing
-            , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
-            ]
-    ]
-
-
-resultsTable : List FlexiQuery.Result -> Element Msg
-resultsTable results =
-    let
-        valueToString val =
-            case val of
-                Lantern.Query.Null ->
-                    ""
-
-                Lantern.Query.Integer i ->
-                    String.fromInt i
-
-                Lantern.Query.Real r ->
-                    String.fromFloat r
-
-                Lantern.Query.Text t ->
-                    t
-
-        columns =
-            results
-                |> List.head
-                |> Maybe.map (Dict.keys >> List.sort)
-                |> Maybe.withDefault []
-                |> List.map
-                    (\title ->
-                        { header = Element.text title
-                        , width = Element.fill
-                        , view = \row -> Dict.get title row |> Maybe.map valueToString |> Maybe.withDefault "" |> Element.text
-                        }
-                    )
-    in
-    Element.table []
-        { data = results
-        , columns = columns
-        }
-
-
-renderMigrationApp : Model -> List (Element Msg)
-renderMigrationApp model =
-    [ LanternUi.Input.multiline model.theme
-        []
-        { onChange = UpdateDdl
-        , text = model.ddl
-        , placeholder = Nothing
-        , spellcheck = False
-        , label = Element.Input.labelHidden "Migration"
-        }
-    , LanternUi.Input.button model.theme
-        []
-        { onPress = Just RunDdl
-        , label = Element.text "Run DDL"
-        }
-    ]
-
-
-renderEchoApp : Model -> List (Element Msg)
-renderEchoApp model =
-    [ LanternUi.Input.multiline model.theme
-        []
-        { onChange = UpdatePing
-        , text = model.ping
-        , placeholder = Nothing
-        , spellcheck = False
-        , label = Element.Input.labelHidden "Echo"
-        }
-    , LanternUi.Input.button model.theme
-        []
-        { onPress = Just RunPing
-        , label = Element.text "Run echo"
-        }
-    , Element.text ("Results: " ++ Debug.toString model.pong)
-    ]
-
-
 renderApp : Model -> Bool -> ProcessTable.Process App -> Element Msg
 renderApp model focused process =
     let
@@ -445,18 +348,21 @@ renderApp model focused process =
                     WriterQueryApp.view { theme = model.theme } appModel
                         |> Element.map (Lantern.map WriterQueryMsg >> wrapAppMessage process.pid)
 
-                MigrationApp ->
-                    renderMigrationApp model |> LanternUi.columnLayout model.theme []
+                MigrationApp appModel ->
+                    MigrationsApp.view { theme = model.theme } appModel
+                        |> Element.map (Lantern.map MigrationsMsg >> wrapAppMessage process.pid)
 
                 DatabaseExplorerApp appModel ->
                     DatabaseExplorerApp.view { theme = model.theme } appModel
                         |> Element.map (Lantern.map DatabaseExplorerMsg >> wrapAppMessage process.pid)
 
-                EchoApp ->
-                    renderEchoApp model |> LanternUi.columnLayout model.theme []
+                EchoApp appModel ->
+                    EchoApp.view { theme = model.theme } appModel
+                        |> Element.map (Lantern.map EchoMsg >> wrapAppMessage process.pid)
 
-                LogViewerApp ->
-                    renderLogViewerApp model |> LanternUi.columnLayout model.theme []
+                LogViewerApp appModel ->
+                    LogViewerApp.view { theme = model.theme, log = Lantern.log model.lanternConnection } appModel
+                        |> Element.map (Lantern.map LogViewerMsg >> wrapAppMessage process.pid)
 
         border =
             if focused then
