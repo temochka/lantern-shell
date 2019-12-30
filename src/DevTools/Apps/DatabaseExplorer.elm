@@ -1,4 +1,4 @@
-module DevTools.Apps.DatabaseExplorer exposing (Message, Model, init, lanternApp, update, view)
+module DevTools.Apps.DatabaseExplorer exposing (App, Message, lanternApp)
 
 import DevTools.FlexiQuery as FlexiQuery
 import DevTools.TableViewer as TableViewer
@@ -118,7 +118,11 @@ liveQueries _ { tableViewer } =
     [ tablesQuery ] ++ tableViewerQueries
 
 
-lanternApp : Lantern.App Context Model Message
+type alias App =
+    Lantern.App Context Model Message
+
+
+lanternApp : App
 lanternApp =
     Lantern.liveApp
         { model = init

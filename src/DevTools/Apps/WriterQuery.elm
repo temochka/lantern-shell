@@ -1,4 +1,4 @@
-module DevTools.Apps.WriterQuery exposing (Message, Model, init, lanternApp, update, view)
+module DevTools.Apps.WriterQuery exposing (App, Message, lanternApp)
 
 import DevTools.ArgumentParser as ArgumentParser
 import Dict exposing (Dict)
@@ -22,7 +22,11 @@ type alias Model =
     }
 
 
-lanternApp : Lantern.App Context Model Message
+type alias App =
+    Lantern.App Context Model Message
+
+
+lanternApp : App
 lanternApp =
     Lantern.simpleApp
         { model = init

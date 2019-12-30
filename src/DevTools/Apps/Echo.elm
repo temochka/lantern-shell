@@ -1,4 +1,4 @@
-module DevTools.Apps.Echo exposing (Message, Model, init, lanternApp, update, view)
+module DevTools.Apps.Echo exposing (App, Message, lanternApp)
 
 import Element exposing (Element)
 import Element.Input
@@ -24,6 +24,11 @@ type Message
     | Run
 
 
+type alias App =
+    Lantern.App Context Model Message
+
+
+lanternApp : App
 lanternApp =
     Lantern.simpleApp
         { model = init

@@ -1,4 +1,4 @@
-module DevTools.Apps.Migrations exposing (Message, Model, init, lanternApp, update, view)
+module DevTools.Apps.Migrations exposing (App, Message, lanternApp)
 
 import Element exposing (Element)
 import Element.Input
@@ -19,7 +19,11 @@ type alias Model =
     }
 
 
-lanternApp : Lantern.App Context Model Message
+type alias App =
+    Lantern.App Context Model Message
+
+
+lanternApp : App
 lanternApp =
     Lantern.simpleApp
         { model = init

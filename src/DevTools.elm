@@ -75,9 +75,9 @@ init _ =
 
         processTable =
             ProcessTable.empty
-                |> ProcessTable.launch (DatabaseExplorerApp DatabaseExplorerApp.init)
-                |> ProcessTable.launch (ReaderQueryApp ReaderQueryApp.init)
-                |> ProcessTable.launch (WriterQueryApp WriterQueryApp.init)
+                |> ProcessTable.launch (DatabaseExplorerApp DatabaseExplorerApp.lanternApp)
+                |> ProcessTable.launch (ReaderQueryApp ReaderQueryApp.lanternApp)
+                |> ProcessTable.launch (WriterQueryApp WriterQueryApp.lanternApp)
 
         model =
             { lanternConnection = lanternConnection
@@ -87,12 +87,12 @@ init _ =
             , appLauncher =
                 LanternUi.FuzzySelect.new
                     { options =
-                        [ ( "Run query", ReaderQueryApp ReaderQueryApp.init )
-                        , ( "Run mutator", WriterQueryApp WriterQueryApp.init )
-                        , ( "Run migration", MigrationApp MigrationsApp.init )
-                        , ( "Show tables", DatabaseExplorerApp DatabaseExplorerApp.init )
-                        , ( "Run echo", EchoApp EchoApp.init )
-                        , ( "Show logs", LogViewerApp LogViewerApp.init )
+                        [ ( "Run query", ReaderQueryApp ReaderQueryApp.lanternApp )
+                        , ( "Run mutator", WriterQueryApp WriterQueryApp.lanternApp )
+                        , ( "Run migration", MigrationApp MigrationsApp.lanternApp )
+                        , ( "Show tables", DatabaseExplorerApp DatabaseExplorerApp.lanternApp )
+                        , ( "Run echo", EchoApp EchoApp.lanternApp )
+                        , ( "Show logs", LogViewerApp LogViewerApp.lanternApp )
                         ]
                     , placeholder = Nothing
                     }
@@ -122,12 +122,12 @@ subscriptions model =
 
 
 type App
-    = ReaderQueryApp ReaderQueryApp.Model
-    | WriterQueryApp WriterQueryApp.Model
-    | MigrationApp MigrationsApp.Model
-    | DatabaseExplorerApp DatabaseExplorerApp.Model
-    | EchoApp EchoApp.Model
-    | LogViewerApp LogViewerApp.Model
+    = ReaderQueryApp ReaderQueryApp.App
+    | WriterQueryApp WriterQueryApp.App
+    | MigrationApp MigrationsApp.App
+    | DatabaseExplorerApp DatabaseExplorerApp.App
+    | EchoApp EchoApp.App
+    | LogViewerApp LogViewerApp.App
 
 
 type AppMessage
@@ -137,6 +137,15 @@ type AppMessage
     | MigrationsMsg MigrationsApp.Message
     | EchoMsg EchoApp.Message
     | LogViewerMsg LogViewerApp.Message
+
+
+
+-- type AppContext
+--     = ReaderQueryContext ReaderQueryApp.Context
+--     | WriterQueryContext WriterQueryApp.Context
+--     | DatabaseExporerContext DatabaseExplorerApp.Context
+--     | MigrationsContext MigrationsApp.Context
+--     | Echo
 
 
 wrapAppMessage : ProcessTable.Pid -> Lantern.Message AppMessage -> Msg
@@ -151,6 +160,13 @@ wrapAppMessage pid msg =
 
 processAppMessage : Model -> ProcessTable.Pid -> AppMessage -> Result String ( App, Cmd Msg )
 processAppMessage model pid msg =
+    let
+        updateApp appMsg appState context wrapApp wrapMsg =
+            appState.update context appMsg appState.model
+                |> Tuple.mapFirst (\m -> wrapApp { appState | model = m })
+                |> Tuple.mapSecond (Cmd.map (Lantern.map wrapMsg >> wrapAppMessage pid))
+                |> Ok
+    in
     pid
         |> ProcessTable.lookup model.processTable
         |> Result.fromMaybe "Unknown process"
@@ -161,41 +177,23 @@ processAppMessage model pid msg =
                         ProcessTable.processApp process
                 in
                 case ( app, msg ) of
-                    ( ReaderQueryApp appModel, ReaderQueryMsg appMsg ) ->
-                        ReaderQueryApp.update { theme = model.theme } appMsg appModel
-                            |> Tuple.mapFirst ReaderQueryApp
-                            |> Tuple.mapSecond (Cmd.map (Lantern.map ReaderQueryMsg >> wrapAppMessage pid))
-                            |> Ok
+                    ( ReaderQueryApp appState, ReaderQueryMsg appMsg ) ->
+                        updateApp appMsg appState { theme = model.theme } ReaderQueryApp ReaderQueryMsg
 
-                    ( WriterQueryApp appModel, WriterQueryMsg appMsg ) ->
-                        WriterQueryApp.update { theme = model.theme } appMsg appModel
-                            |> Tuple.mapFirst WriterQueryApp
-                            |> Tuple.mapSecond (Cmd.map (Lantern.map WriterQueryMsg >> wrapAppMessage pid))
-                            |> Ok
+                    ( WriterQueryApp appState, WriterQueryMsg appMsg ) ->
+                        updateApp appMsg appState { theme = model.theme } WriterQueryApp WriterQueryMsg
 
-                    ( MigrationApp appModel, MigrationsMsg appMsg ) ->
-                        MigrationsApp.update { theme = model.theme } appMsg appModel
-                            |> Tuple.mapFirst MigrationApp
-                            |> Tuple.mapSecond (Cmd.map (Lantern.map MigrationsMsg >> wrapAppMessage pid))
-                            |> Ok
+                    ( MigrationApp appState, MigrationsMsg appMsg ) ->
+                        updateApp appMsg appState { theme = model.theme } MigrationApp MigrationsMsg
 
-                    ( DatabaseExplorerApp appModel, DatabaseExplorerMsg appMsg ) ->
-                        DatabaseExplorerApp.update { theme = model.theme } appMsg appModel
-                            |> Tuple.mapFirst DatabaseExplorerApp
-                            |> Tuple.mapSecond (Cmd.map (Lantern.map DatabaseExplorerMsg >> wrapAppMessage pid))
-                            |> Ok
+                    ( DatabaseExplorerApp appState, DatabaseExplorerMsg appMsg ) ->
+                        updateApp appMsg appState { theme = model.theme } DatabaseExplorerApp DatabaseExplorerMsg
 
-                    ( EchoApp appModel, EchoMsg appMsg ) ->
-                        EchoApp.update { theme = model.theme } appMsg appModel
-                            |> Tuple.mapFirst EchoApp
-                            |> Tuple.mapSecond (Cmd.map (Lantern.map EchoMsg >> wrapAppMessage pid))
-                            |> Ok
+                    ( EchoApp appState, EchoMsg appMsg ) ->
+                        updateApp appMsg appState { theme = model.theme } EchoApp EchoMsg
 
-                    ( LogViewerApp appModel, LogViewerMsg appMsg ) ->
-                        LogViewerApp.update { theme = model.theme, log = Lantern.log model.lanternConnection } appMsg appModel
-                            |> Tuple.mapFirst LogViewerApp
-                            |> Tuple.mapSecond (Cmd.map (Lantern.map LogViewerMsg >> wrapAppMessage pid))
-                            |> Ok
+                    ( LogViewerApp appState, LogViewerMsg appMsg ) ->
+                        updateApp appMsg appState { theme = model.theme, log = Lantern.log model.lanternConnection } LogViewerApp LogViewerMsg
 
                     _ ->
                         Err "Process cannot handle message"
@@ -338,31 +336,32 @@ handleShortcuts =
 renderApp : Model -> Bool -> ProcessTable.Process App -> Element Msg
 renderApp model focused process =
     let
+        render app context wrapMsg =
+            app.view context app.model
+                |> Element.map (Lantern.map wrapMsg >> wrapAppMessage process.pid)
+
+        themeContext =
+            { theme = model.theme }
+
         content =
             case ProcessTable.processApp process of
-                ReaderQueryApp appModel ->
-                    ReaderQueryApp.view { theme = model.theme } appModel
-                        |> Element.map (Lantern.map ReaderQueryMsg >> wrapAppMessage process.pid)
+                ReaderQueryApp app ->
+                    render app themeContext ReaderQueryMsg
 
-                WriterQueryApp appModel ->
-                    WriterQueryApp.view { theme = model.theme } appModel
-                        |> Element.map (Lantern.map WriterQueryMsg >> wrapAppMessage process.pid)
+                WriterQueryApp app ->
+                    render app themeContext WriterQueryMsg
 
-                MigrationApp appModel ->
-                    MigrationsApp.view { theme = model.theme } appModel
-                        |> Element.map (Lantern.map MigrationsMsg >> wrapAppMessage process.pid)
+                MigrationApp app ->
+                    render app themeContext MigrationsMsg
 
-                DatabaseExplorerApp appModel ->
-                    DatabaseExplorerApp.view { theme = model.theme } appModel
-                        |> Element.map (Lantern.map DatabaseExplorerMsg >> wrapAppMessage process.pid)
+                DatabaseExplorerApp app ->
+                    render app themeContext DatabaseExplorerMsg
 
-                EchoApp appModel ->
-                    EchoApp.view { theme = model.theme } appModel
-                        |> Element.map (Lantern.map EchoMsg >> wrapAppMessage process.pid)
+                EchoApp app ->
+                    render app themeContext EchoMsg
 
-                LogViewerApp appModel ->
-                    LogViewerApp.view { theme = model.theme, log = Lantern.log model.lanternConnection } appModel
-                        |> Element.map (Lantern.map LogViewerMsg >> wrapAppMessage process.pid)
+                LogViewerApp app ->
+                    render app { theme = model.theme, log = Lantern.log model.lanternConnection } LogViewerMsg
 
         border =
             if focused then

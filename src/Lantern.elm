@@ -151,12 +151,6 @@ wrapResponse response =
     Message (ResponseMsg response)
 
 
-
--- subscriptions : Connection msg -> Sub msg
--- subscriptions (Connection state) =
---     state.responsePort (ResponseMsg >> Message)
-
-
 echo : String -> (String -> msg) -> Cmd (Message msg)
 echo payload msg =
     let

@@ -1,4 +1,4 @@
-module DevTools.Apps.ReaderQuery exposing (Message, Model, init, lanternApp, update, view)
+module DevTools.Apps.ReaderQuery exposing (App, Message, lanternApp)
 
 import DevTools.ArgumentParser as ArgumentParser
 import DevTools.FlexiQuery as FlexiQuery
@@ -116,7 +116,11 @@ view { theme } model =
         ]
 
 
-lanternApp : Lantern.App Context Model Message
+type alias App =
+    Lantern.App Context Model Message
+
+
+lanternApp : App
 lanternApp =
     Lantern.simpleApp
         { model = init

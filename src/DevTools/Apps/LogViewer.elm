@@ -1,4 +1,4 @@
-module DevTools.Apps.LogViewer exposing (Message, Model, init, lanternApp, update, view)
+module DevTools.Apps.LogViewer exposing (App, Message, lanternApp)
 
 import Element exposing (Element)
 import Element.Font
@@ -20,7 +20,11 @@ type alias Message =
     ()
 
 
-lanternApp : Lantern.App Context Message Model
+type alias App =
+    Lantern.App Context Model Message
+
+
+lanternApp : App
 lanternApp =
     Lantern.simpleApp
         { model = init
