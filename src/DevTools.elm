@@ -13,7 +13,6 @@ import DevTools.Apps.WriterQuery as WriterQueryApp
 import DevTools.ArgumentParser as ArgumentParser
 import DevTools.FlexiQuery as FlexiQuery
 import DevTools.TableViewer as TableViewer
-import DevTools.Ui.StatusBar as StatusBar exposing (StatusBar)
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
@@ -59,7 +58,6 @@ main =
 
 type alias Model =
     { lanternConnection : Lantern.Connection Msg
-    , statusBar : StatusBar
     , processTable : ProcessTable App
     , windowManager : LanternUi.WindowManager.WindowManager
     , appLauncher : LanternUi.FuzzySelect.FuzzySelect App
@@ -81,7 +79,6 @@ init _ =
 
         model =
             { lanternConnection = lanternConnection
-            , statusBar = StatusBar.new
             , processTable = processTable
             , windowManager = LanternUi.WindowManager.new (ProcessTable.pids processTable)
             , appLauncher =
@@ -213,7 +210,6 @@ type Msg
     | FocusAppLauncher
     | LanternMessage (Lantern.Message Msg)
     | AppLauncherMessage (LanternUi.FuzzySelect.Message App)
-    | UpdateStatusBar StatusBar.Message
     | LaunchApp App
     | WindowManagerMessage LanternUi.WindowManager.Message
 
@@ -277,10 +273,6 @@ update msg model =
                         , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
                     }
                 )
-
-        UpdateStatusBar statusBarMsg ->
-            StatusBar.update statusBarMsg model.statusBar
-                |> Tuple.mapFirst (\statusBar -> { model | statusBar = statusBar })
 
         WindowManagerMessage proxiedMsg ->
             let
@@ -403,14 +395,8 @@ renderAppLauncher model =
 
 view : Model -> Html Msg
 view model =
-    StatusBar.render model.statusBar
-        UpdateStatusBar
-        (Element.column
-            [ Element.width Element.fill
-            , Element.height Element.fill
-            , Element.padding 15
-            , Element.spacing 15
-            , Element.clipX
-            ]
-            [ renderAppLauncher model, tools model ]
-        )
+    LanternUi.columnLayout
+        model.theme
+        []
+        [ renderAppLauncher model, tools model ]
+        |> Element.layout [ Element.width Element.fill, Element.padding 20 ]
