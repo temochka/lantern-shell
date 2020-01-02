@@ -8,11 +8,13 @@ module Lantern exposing
     , Response
     , ResponsePort
     , echo
+    , equalLiveQueries
     , errorToString
     , liveApp
     , liveQueries
     , log
     , map
+    , mapLiveQuery
     , migrate
     , newConnection
     , prepareLiveQuery
@@ -94,8 +96,9 @@ type LiveQuery msg
 type alias App ctx model msg =
     { model : model
     , view : ctx -> model -> Element (Message msg)
-    , update : ctx -> msg -> model -> ( model, Cmd (Message msg) )
-    , liveQueries : ctx -> model -> List (LiveQuery msg)
+    , update : msg -> model -> ( model, Cmd (Message msg) )
+    , liveQueries : model -> List (LiveQuery msg)
+    , liveQueriesCache : List (LiveQuery msg)
     }
 
 
@@ -105,14 +108,15 @@ simpleApp :
         ctx
         -> model
         -> Element (Message msg)
-    , update : ctx -> msg -> model -> ( model, Cmd (Message msg) )
+    , update : msg -> model -> ( model, Cmd (Message msg) )
     }
     -> App ctx model msg
 simpleApp def =
     { model = def.model
     , view = def.view
     , update = def.update
-    , liveQueries = always [] |> always
+    , liveQueries = always []
+    , liveQueriesCache = []
     }
 
 
@@ -122,8 +126,8 @@ liveApp :
         ctx
         -> model
         -> Element (Message msg)
-    , update : ctx -> msg -> model -> ( model, Cmd (Message msg) )
-    , liveQueries : ctx -> model -> List (LiveQuery msg)
+    , update : msg -> model -> ( model, Cmd (Message msg) )
+    , liveQueries : model -> List (LiveQuery msg)
     }
     -> App ctx model msg
 liveApp def =
@@ -131,6 +135,7 @@ liveApp def =
     , view = def.view
     , update = def.update
     , liveQueries = def.liveQueries
+    , liveQueriesCache = def.liveQueries def.model
     }
 
 
@@ -213,6 +218,12 @@ writerQuery query msg =
     Task.perform Message (Task.succeed (Request request handler))
 
 
+equalLiveQueries : List (LiveQuery msg) -> List (LiveQuery msg) -> Bool
+equalLiveQueries liveQueriesA liveQueriesB =
+    List.map2 Tuple.pair liveQueriesA liveQueriesB
+        |> List.all (\( LiveQuery queriesA _, LiveQuery queriesB _ ) -> queriesA == queriesB)
+
+
 liveQueries : List (LiveQuery msg) -> Cmd (Message msg)
 liveQueries orderedQueries =
     let
@@ -241,6 +252,11 @@ liveQueries orderedQueries =
                     []
     in
     Task.perform Message (Task.succeed (Request request handler))
+
+
+mapLiveQuery : (a -> b) -> LiveQuery a -> LiveQuery b
+mapLiveQuery mapf (LiveQuery queries handler) =
+    LiveQuery queries (handler >> mapf)
 
 
 prepareLiveQuery :

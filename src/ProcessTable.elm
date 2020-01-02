@@ -1,4 +1,4 @@
-module ProcessTable exposing (Pid, Process, ProcessTable, empty, kill, launch, lookup, mapProcess, pids, processApp, processes)
+module ProcessTable exposing (Pid, Process, ProcessTable, empty, kill, launch, lookup, mapProcess, pids, processApp, processes, processesWithPids)
 
 import Dict exposing (Dict)
 
@@ -43,6 +43,11 @@ empty =
 processes : ProcessTable app -> List (Process app)
 processes table =
     Dict.values table.processes
+
+
+processesWithPids : ProcessTable app -> List ( Pid, Process app )
+processesWithPids table =
+    Dict.toList table.processes
 
 
 pids : ProcessTable app -> List Pid

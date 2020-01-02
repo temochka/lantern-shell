@@ -45,8 +45,8 @@ init =
     }
 
 
-update : Context -> Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
-update _ msg model =
+update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
+update msg model =
     case msg of
         Update query ->
             ( { model | query = query }, Cmd.none )

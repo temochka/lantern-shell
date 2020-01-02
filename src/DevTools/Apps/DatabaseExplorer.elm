@@ -50,8 +50,8 @@ init =
     }
 
 
-update : Context -> Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
-update _ msg model =
+update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
+update msg model =
     case msg of
         LoadTable table ->
             let
@@ -106,8 +106,8 @@ view { theme } { tables, tableViewer } =
         ]
 
 
-liveQueries : Context -> Model -> List (Lantern.LiveQuery Message)
-liveQueries _ { tableViewer } =
+liveQueries : Model -> List (Lantern.LiveQuery Message)
+liveQueries { tableViewer } =
     let
         tablesQuery =
             Lantern.prepareLiveQuery ( Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty, tableDecoder ) UpdateTables

@@ -38,8 +38,8 @@ init =
     ()
 
 
-update : Context -> Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
-update _ _ model =
+update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
+update _ model =
     ( model, Cmd.none )
 
 
