@@ -1,23 +1,16 @@
 module Lantern exposing
     ( Connection
     , Error
-    , LiveQuery
     , Message(..)
     , RequestPort
     , Response
     , ResponsePort
     , echo
-    , equalLiveQueries
-    , errorToString
     , liveQueries
     , log
     , map
-    , mapLiveQuery
     , migrate
     , newConnection
-    , prepareLiveQuery
-    , prepareLiveQuery2
-    , prepareLiveQuery3
     , readerQuery
     , update
     , wrapResponse
@@ -30,7 +23,9 @@ import Json.Decode
 import Json.Encode
 import Lantern.Decoders as Decoders
 import Lantern.Encoders as Encoders
+import Lantern.Errors
 import Lantern.Extra.Result
+import Lantern.LiveQuery exposing (LiveQuery(..))
 import Lantern.Log as Log exposing (Log)
 import Lantern.Query
 import Lantern.Request
@@ -38,8 +33,8 @@ import Lantern.Response
 import Task
 
 
-type Error
-    = Error String
+type alias Error =
+    Lantern.Errors.Error
 
 
 type alias RequestPort msg =
@@ -84,10 +79,6 @@ type alias ResponseHandler msg =
 
 type alias RequestsInFlight msg =
     Dict String (ResponseHandler msg)
-
-
-type LiveQuery msg
-    = LiveQuery (List Lantern.Query.Query) (List Lantern.Query.ReaderResult -> msg)
 
 
 newConnection : RequestPort msg -> ResponsePort msg -> Connection msg
@@ -139,12 +130,12 @@ readerQuery query decoder msg =
                 Lantern.Response.ReaderQuery result ->
                     result
                         |> Json.Decode.decodeValue (Json.Decode.list decoder)
-                        |> Result.mapError (Json.Decode.errorToString >> Error)
+                        |> Result.mapError (Json.Decode.errorToString >> Lantern.Errors.Error)
                         |> msg
                         |> List.singleton
 
                 _ ->
-                    [ msg (Err (Error "Unexpected response")) ]
+                    [ msg (Err (Lantern.Errors.Error "Unexpected response")) ]
     in
     Task.perform Message (Task.succeed (Request request handler))
 
@@ -167,23 +158,6 @@ writerQuery query msg =
                     [ msg False ]
     in
     Task.perform Message (Task.succeed (Request request handler))
-
-
-equalLiveQueries : List (LiveQuery msg) -> List (LiveQuery msg) -> Bool
-equalLiveQueries liveQueriesA liveQueriesB =
-    case ( liveQueriesA, liveQueriesB ) of
-        ( (LiveQuery a _) :: restA, (LiveQuery b _) :: restB ) ->
-            if a == b then
-                equalLiveQueries restA restB
-
-            else
-                False
-
-        ( [], [] ) ->
-            True
-
-        _ ->
-            False
 
 
 liveQueries : List (LiveQuery msg) -> Cmd (Message msg)
@@ -214,77 +188,6 @@ liveQueries orderedQueries =
                     []
     in
     Task.perform Message (Task.succeed (Request request handler))
-
-
-mapLiveQuery : (a -> b) -> LiveQuery a -> LiveQuery b
-mapLiveQuery mapf (LiveQuery queries handler) =
-    LiveQuery queries (handler >> mapf)
-
-
-prepareLiveQuery :
-    ( Lantern.Query.Query, Json.Decode.Decoder a )
-    -> (Result Error (List a) -> msg)
-    -> LiveQuery msg
-prepareLiveQuery ( queryA, decoderA ) msg =
-    let
-        handler results =
-            case results of
-                [ result ] ->
-                    result
-                        |> Json.Decode.decodeValue (Json.Decode.list decoderA)
-                        |> Result.mapError (Json.Decode.errorToString >> Error)
-                        |> msg
-
-                unexpectedResults ->
-                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length unexpectedResults))))
-    in
-    LiveQuery [ queryA ] handler
-
-
-prepareLiveQuery2 :
-    ( Lantern.Query.Query, Json.Decode.Decoder a )
-    -> ( Lantern.Query.Query, Json.Decode.Decoder b )
-    -> (Result Error ( List a, List b ) -> msg)
-    -> LiveQuery msg
-prepareLiveQuery2 ( queryA, decoderA ) ( queryB, decoderB ) msg =
-    let
-        handler results =
-            case results of
-                [ resultA, resultB ] ->
-                    Result.map2 Tuple.pair
-                        (resultA |> Json.Decode.decodeValue (Json.Decode.list decoderA))
-                        (resultB |> Json.Decode.decodeValue (Json.Decode.list decoderB))
-                        |> Result.mapError (Json.Decode.errorToString >> Error)
-                        |> msg
-
-                unexpectedResults ->
-                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length unexpectedResults))))
-    in
-    LiveQuery [ queryA, queryB ] handler
-
-
-prepareLiveQuery3 :
-    ( Lantern.Query.Query, Json.Decode.Decoder a )
-    -> ( Lantern.Query.Query, Json.Decode.Decoder b )
-    -> ( Lantern.Query.Query, Json.Decode.Decoder c )
-    -> (Result Error ( List a, List b, List c ) -> msg)
-    -> LiveQuery msg
-prepareLiveQuery3 ( queryA, decoderA ) ( queryB, decoderB ) ( queryC, decoderC ) msg =
-    let
-        handler results =
-            case results of
-                [ resultA, resultB, resultC ] ->
-                    Result.map3 (\a b c -> ( a, b, c ))
-                        (resultA |> Json.Decode.decodeValue (Json.Decode.list decoderA))
-                        (resultB |> Json.Decode.decodeValue (Json.Decode.list decoderB))
-                        (resultC |> Json.Decode.decodeValue (Json.Decode.list decoderC))
-                        |> Result.mapError (Json.Decode.errorToString >> Error)
-                        |> msg
-
-                unexpectedResults ->
-                    msg (Err (Error ("unexpected number of liveQuery results: " ++ String.fromInt (List.length unexpectedResults))))
-    in
-    LiveQuery [ queryA, queryB, queryC ] handler
 
 
 migrate : Lantern.Query.Query -> (Bool -> msg) -> Cmd (Message msg)
@@ -385,11 +288,6 @@ update msg (Connection state) =
 
                 Err err ->
                     ( Connection { state | log = Log.log state.log Log.Error (Json.Decode.errorToString err) }, Cmd.none )
-
-
-errorToString : Error -> String
-errorToString (Error e) =
-    e
 
 
 log : Connection msg -> Log

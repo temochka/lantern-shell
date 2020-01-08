@@ -8,6 +8,7 @@ import Element.Input
 import Json.Decode
 import Lantern
 import Lantern.App
+import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
 import LanternUi
 import LanternUi.Theme
@@ -106,11 +107,11 @@ view { theme } { tables, tableViewer } =
         ]
 
 
-liveQueries : Model -> List (Lantern.LiveQuery Message)
+liveQueries : Model -> List (LiveQuery Message)
 liveQueries { tableViewer } =
     let
         tablesQuery =
-            Lantern.prepareLiveQuery ( Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty, tableDecoder ) UpdateTables
+            Lantern.LiveQuery.prepare ( Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty, tableDecoder ) UpdateTables
 
         tableViewerQueries =
             TableViewer.liveQueries tableViewer UpdateTableRows

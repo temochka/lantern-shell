@@ -3,7 +3,6 @@ port module DevTools exposing (..)
 import Browser
 import Browser.Dom
 import Browser.Events
-import Debug
 import DevTools.Apps.DatabaseExplorer as DatabaseExplorerApp
 import DevTools.Apps.Echo as EchoApp
 import DevTools.Apps.LogViewer as LogViewerApp
@@ -26,6 +25,7 @@ import Keyboard.Event
 import Lantern
 import Lantern.App
 import Lantern.Encoders
+import Lantern.LiveQuery exposing (LiveQuery(..))
 import Lantern.Log
 import Lantern.Query
 import Lantern.Request
@@ -63,7 +63,7 @@ type alias Model =
     , windowManager : LanternUi.WindowManager.WindowManager
     , appLauncher : LanternUi.FuzzySelect.FuzzySelect App
     , theme : LanternUi.Theme.Theme
-    , liveQueriesCache : Dict ProcessTable.Pid (List (Lantern.LiveQuery Msg))
+    , liveQueriesCache : Dict ProcessTable.Pid (List (LiveQuery Msg))
     }
 
 
@@ -107,7 +107,7 @@ init _ =
                     (\process ->
                         ( process.pid
                         , (lanternAppFor process.application model).liveQueries process.application
-                            |> List.map (Lantern.mapLiveQuery (AppMessage process.pid))
+                            |> List.map (Lantern.LiveQuery.map (AppMessage process.pid))
                         )
                     )
                 |> Dict.fromList
@@ -437,24 +437,15 @@ update msg model =
                                 lanternApp.update proxiedMsg appModel
 
                             newLiveQueries =
-                                lanternApp.liveQueries newAppModel |> List.map (Lantern.mapLiveQuery (AppMessage pid))
+                                lanternApp.liveQueries newAppModel |> List.map (Lantern.LiveQuery.map (AppMessage pid))
 
                             newLiveQueriesCache =
                                 Dict.insert pid newLiveQueries model.liveQueriesCache
 
-                            _ =
-                                Debug.log "newLiveQueries: " newLiveQueries
-
-                            _ =
-                                Debug.log "oldLiveQueries: " (Dict.get pid model.liveQueriesCache)
-
                             liveQueriesChanged =
                                 Dict.get pid model.liveQueriesCache
-                                    |> Maybe.map (Lantern.equalLiveQueries newLiveQueries >> not)
+                                    |> Maybe.map (Lantern.LiveQuery.areEqualLists newLiveQueries >> not)
                                     |> Maybe.withDefault True
-
-                            _ =
-                                Debug.log "liveQueriesChanged:" liveQueriesChanged
 
                             liveQueriesCmd =
                                 if liveQueriesChanged then

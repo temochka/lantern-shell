@@ -5,6 +5,7 @@ import Dict
 import Element exposing (Element)
 import Json.Decode
 import Lantern
+import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
 
 
@@ -33,7 +34,7 @@ rowDecoder =
     FlexiQuery.resultDecoder
 
 
-liveQueries : TableViewer -> (Result Lantern.Error ( List FlexiQuery.Result, List Int ) -> msg) -> List (Lantern.LiveQuery msg)
+liveQueries : TableViewer -> (Result Lantern.Error ( List FlexiQuery.Result, List Int ) -> msg) -> List (LiveQuery msg)
 liveQueries { rowsPerPage, page, state } toMsg =
     let
         offset =
@@ -54,7 +55,7 @@ liveQueries { rowsPerPage, page, state } toMsg =
                 ("SELECT COUNT(*) AS 'count' FROM " ++ table)
 
         query table =
-            Lantern.prepareLiveQuery2
+            Lantern.LiveQuery.prepare2
                 ( rowsQuery table, rowDecoder )
                 ( countQuery table, Json.Decode.field "count" Json.Decode.int )
                 toMsg
