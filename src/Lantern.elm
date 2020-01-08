@@ -58,7 +58,6 @@ type alias State msg =
     , currentLiveQueryId : String
     , requestsInFlight : RequestsInFlight msg
     , requestPort : RequestPort msg
-    , responsePort : ResponsePort msg
     , log : Log
     }
 
@@ -81,14 +80,13 @@ subscriptions wrapMsg responsePort =
     responsePort (ResponseMsg >> wrapMsg)
 
 
-newConnection : RequestPort msg -> ResponsePort msg -> Connection msg
-newConnection requestPort responsePort =
+newConnection : RequestPort msg -> Connection msg
+newConnection requestPort =
     Connection
         { requestId = 0
         , currentLiveQueryId = ""
         , requestsInFlight = Dict.empty
         , requestPort = requestPort
-        , responsePort = responsePort
         , log = Log.new
         }
 

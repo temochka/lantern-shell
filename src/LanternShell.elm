@@ -75,7 +75,7 @@ init : () -> ( Model, Cmd Msg )
 init _ =
     let
         lanternConnection =
-            Lantern.newConnection lanternRequestPort lanternResponsePort
+            Lantern.newConnection lanternRequestPort
 
         initialTheme =
             LanternUi.Theme.lightTheme
