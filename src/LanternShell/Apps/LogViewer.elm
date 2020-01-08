@@ -26,12 +26,12 @@ init =
     ()
 
 
-update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
+update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update _ model =
     ( model, Cmd.none )
 
 
-view : Context -> Model -> Element (Lantern.Message Message)
+view : Context -> Model -> Element (Lantern.App.Message Message)
 view { log, theme } _ =
     LanternUi.columnLayout
         theme

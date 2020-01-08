@@ -58,7 +58,7 @@ appContext { theme, lanternConnection } =
 
 
 type alias LauncherEntry =
-    LanternShell.Apps.Context Msg -> ( LanternShell.Apps.App, Cmd (Lantern.Message LanternShell.Apps.Message) )
+    LanternShell.Apps.Context Msg -> ( LanternShell.Apps.App, Cmd (Lantern.App.Message LanternShell.Apps.Message) )
 
 
 type alias Model =
@@ -141,7 +141,7 @@ init _ =
 subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
-        [ lanternResponsePort (Lantern.wrapResponse >> LanternMessage)
+        [ Lantern.subscriptions LanternMessage lanternResponsePort
         , Browser.Events.onKeyDown handleShortcuts
         ]
 
@@ -163,13 +163,13 @@ type Msg
     | WindowManagerMessage LanternUi.WindowManager.Message
 
 
-wrapAppMessage : ProcessTable.Pid -> Lantern.Message LanternShell.Apps.Message -> Msg
+wrapAppMessage : ProcessTable.Pid -> Lantern.App.Message LanternShell.Apps.Message -> Msg
 wrapAppMessage pid msg =
     case msg of
-        Lantern.AppMessage appMsg ->
+        Lantern.App.Message appMsg ->
             AppMessage pid appMsg
 
-        lanternMessage ->
+        Lantern.App.LanternMessage lanternMessage ->
             LanternMessage (Lantern.map (AppMessage pid) lanternMessage)
 
 
@@ -201,17 +201,12 @@ update msg model =
         FocusAppLauncher ->
             ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
 
-        LanternMessage message ->
-            case message of
-                Lantern.Message lanternMessage ->
-                    let
-                        ( lanternConnection, lanternCmd ) =
-                            Lantern.update lanternMessage model.lanternConnection
-                    in
-                    ( { model | lanternConnection = lanternConnection }, lanternCmd )
-
-                Lantern.AppMessage appMessage ->
-                    update appMessage model
+        LanternMessage lanternMessage ->
+            let
+                ( lanternConnection, lanternCmd ) =
+                    Lantern.update lanternMessage model.lanternConnection
+            in
+            ( { model | lanternConnection = lanternConnection }, lanternCmd )
 
         AppLauncherMessage proxiedMsg ->
             ( { model | appLauncher = LanternUi.FuzzySelect.update proxiedMsg model.appLauncher }, Cmd.none )
@@ -338,7 +333,7 @@ renderApp model focused process =
     LanternUi.panel model.theme
         [ border ]
         content
-        |> Element.map (Lantern.map (AppMessage process.pid) >> LanternMessage)
+        |> Element.map (wrapAppMessage process.pid)
 
 
 tools : Model -> Element Msg

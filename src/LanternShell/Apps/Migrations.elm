@@ -33,7 +33,7 @@ init =
     }
 
 
-update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
+update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg model =
     case msg of
         Update query ->
@@ -44,20 +44,20 @@ update msg model =
                 migration =
                     Lantern.Query.withNoArguments model.query
             in
-            ( model, Lantern.migrate migration HandleResult )
+            ( model, Lantern.migrate migration HandleResult |> Lantern.App.call )
 
         HandleResult result ->
             ( { model | result = Just result }, Cmd.none )
 
 
-view : Context -> Model -> Element (Lantern.Message Message)
+view : Context -> Model -> Element (Lantern.App.Message Message)
 view { theme } { query } =
     LanternUi.columnLayout
         theme
         []
         [ LanternUi.Input.multiline theme
             []
-            { onChange = Update >> Lantern.AppMessage
+            { onChange = Update >> Lantern.App.Message
             , text = query
             , placeholder = Nothing
             , spellcheck = False
@@ -65,7 +65,7 @@ view { theme } { query } =
             }
         , LanternUi.Input.button theme
             []
-            { onPress = Just (Lantern.AppMessage Run)
+            { onPress = Just (Lantern.App.Message Run)
             , label = Element.text "Run migration"
             }
         ]

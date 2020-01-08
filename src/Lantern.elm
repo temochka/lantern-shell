@@ -1,7 +1,7 @@
 module Lantern exposing
     ( Connection
     , Error
-    , Message(..)
+    , Message
     , RequestPort
     , Response
     , ResponsePort
@@ -12,8 +12,8 @@ module Lantern exposing
     , migrate
     , newConnection
     , readerQuery
+    , subscriptions
     , update
-    , wrapResponse
     , writerQuery
     )
 
@@ -64,11 +64,6 @@ type alias State msg =
 
 
 type Message msg
-    = Message (InternalMessage msg)
-    | AppMessage msg
-
-
-type InternalMessage msg
     = ResponseMsg Response
     | Request Lantern.Request.Request (ResponseHandler msg)
 
@@ -81,6 +76,11 @@ type alias RequestsInFlight msg =
     Dict String (ResponseHandler msg)
 
 
+subscriptions : (Message msg -> msg) -> ResponsePort msg -> Sub msg
+subscriptions wrapMsg responsePort =
+    responsePort (ResponseMsg >> wrapMsg)
+
+
 newConnection : RequestPort msg -> ResponsePort msg -> Connection msg
 newConnection requestPort responsePort =
     Connection
@@ -91,11 +91,6 @@ newConnection requestPort responsePort =
         , responsePort = responsePort
         , log = Log.new
         }
-
-
-wrapResponse : String -> Message msg
-wrapResponse response =
-    Message (ResponseMsg response)
 
 
 echo : String -> (String -> msg) -> Cmd (Message msg)
@@ -112,7 +107,7 @@ echo payload msg =
         request =
             Lantern.Request.Echo payload
     in
-    Task.perform Message (Task.succeed (Request request handler))
+    Task.perform identity (Task.succeed (Request request handler))
 
 
 readerQuery :
@@ -137,7 +132,7 @@ readerQuery query decoder msg =
                 _ ->
                     [ msg (Err (Lantern.Errors.Error "Unexpected response")) ]
     in
-    Task.perform Message (Task.succeed (Request request handler))
+    Task.perform identity (Task.succeed (Request request handler))
 
 
 writerQuery :
@@ -157,7 +152,7 @@ writerQuery query msg =
                 _ ->
                     [ msg False ]
     in
-    Task.perform Message (Task.succeed (Request request handler))
+    Task.perform identity (Task.succeed (Request request handler))
 
 
 liveQueries : List (LiveQuery msg) -> Cmd (Message msg)
@@ -187,7 +182,7 @@ liveQueries orderedQueries =
                 _ ->
                     []
     in
-    Task.perform Message (Task.succeed (Request request handler))
+    Task.perform identity (Task.succeed (Request request handler))
 
 
 migrate : Lantern.Query.Query -> (Bool -> msg) -> Cmd (Message msg)
@@ -204,10 +199,10 @@ migrate query_ msg =
                 _ ->
                     [ msg False ]
     in
-    Task.perform Message (Task.succeed (Request request handler))
+    Task.perform identity (Task.succeed (Request request handler))
 
 
-update : InternalMessage msg -> Connection msg -> ( Connection msg, Cmd msg )
+update : Message msg -> Connection msg -> ( Connection msg, Cmd msg )
 update msg (Connection state) =
     case msg of
         Request request handler ->
@@ -298,13 +293,8 @@ log (Connection state) =
 map : (a -> b) -> Message a -> Message b
 map f msg =
     case msg of
-        AppMessage appMsg ->
-            AppMessage (f appMsg)
+        Request request handler ->
+            Request request (\response -> List.map f (handler response))
 
-        Message lanternMsg ->
-            case lanternMsg of
-                Request request handler ->
-                    Message (Request request (\response -> List.map f (handler response)))
-
-                ResponseMsg response ->
-                    Message (ResponseMsg response)
+        ResponseMsg response ->
+            ResponseMsg response

@@ -1,8 +1,28 @@
-module Lantern.App exposing (App, liveApp, mount, simpleApp)
+module Lantern.App exposing (App, Message(..), call, liveApp, mount, simpleApp)
 
 import Element exposing (Element)
-import Lantern exposing (Message)
+import Lantern
 import Lantern.LiveQuery exposing (LiveQuery)
+
+
+type Message msg
+    = Message msg
+    | LanternMessage (Lantern.Message msg)
+
+
+mapMessage : (msgA -> msgB) -> Message msgA -> Message msgB
+mapMessage f msg =
+    case msg of
+        Message appMessage ->
+            Message (f appMessage)
+
+        LanternMessage lanternMessage ->
+            LanternMessage (Lantern.map f lanternMessage)
+
+
+call : Cmd (Lantern.Message msg) -> Cmd (Message msg)
+call cmd =
+    Cmd.map LanternMessage cmd
 
 
 type alias App ctx model msg =
@@ -60,7 +80,7 @@ mount :
 mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } app =
     let
         wrapResult ( appModel, appCmd ) =
-            ( wrapModel appModel, Cmd.map (Lantern.map wrapMsg) appCmd )
+            ( wrapModel appModel, Cmd.map (mapMessage wrapMsg) appCmd )
 
         wrappedUpdate rootMsg rootModel =
             Maybe.map2
@@ -74,7 +94,7 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } app =
         wrappedView _ rootModel =
             rootModel
                 |> unwrapModel
-                |> Maybe.map (app.view (context rootModel) >> Element.map (Lantern.map wrapMsg))
+                |> Maybe.map (app.view (context rootModel) >> Element.map (mapMessage wrapMsg))
                 |> Maybe.withDefault Element.none
 
         wrappedLiveQueries rootModel =

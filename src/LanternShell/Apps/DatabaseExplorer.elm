@@ -48,7 +48,7 @@ init =
     }
 
 
-update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
+update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg model =
     case msg of
         LoadTable table ->
@@ -90,12 +90,12 @@ update msg model =
                     ( { model | tableViewer = newTableViewer }, Cmd.none )
 
 
-view : Context -> Model -> Element (Lantern.Message Message)
+view : Context -> Model -> Element (Lantern.App.Message Message)
 view { theme } { tables, tableViewer } =
     let
         tableList =
             tables
-                |> List.map (\{ name } -> Element.Input.button [] { label = Element.text name, onPress = Just (Lantern.AppMessage (LoadTable name)) })
+                |> List.map (\{ name } -> Element.Input.button [] { label = Element.text name, onPress = Just (Lantern.App.Message (LoadTable name)) })
     in
     LanternUi.columnLayout
         theme
