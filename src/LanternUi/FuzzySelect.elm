@@ -160,4 +160,8 @@ render theme select toMsg onSelected =
         , Element.htmlAttribute (Html.Events.on "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
         , select.id |> Maybe.map (Html.Attributes.id >> Element.htmlAttribute) |> Maybe.withDefault LanternUi.noneAttribute
         ]
-        { onChange = UpdateQuery >> toMsg, text = select.query, placeholder = select.placeholder |> Maybe.map (Element.text >> Element.Input.placeholder []), label = Element.Input.labelHidden "Query" }
+        { onChange = UpdateQuery >> toMsg
+        , text = select.query
+        , placeholder = select.placeholder |> Maybe.map (Element.text >> Element.Input.placeholder [])
+        , label = Element.Input.labelHidden "Query"
+        }
