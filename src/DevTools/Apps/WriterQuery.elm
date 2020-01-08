@@ -1,10 +1,11 @@
-module DevTools.Apps.WriterQuery exposing (App, Message, lanternApp)
+module DevTools.Apps.WriterQuery exposing (Message, Model, init, lanternApp)
 
 import DevTools.ArgumentParser as ArgumentParser
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Input
 import Lantern
+import Lantern.App
 import Lantern.Query
 import LanternUi
 import LanternUi.Input
@@ -20,19 +21,6 @@ type alias Model =
     , arguments : Dict String String
     , result : Maybe Bool
     }
-
-
-type alias App =
-    Lantern.App Context Model Message
-
-
-lanternApp : App
-lanternApp =
-    Lantern.simpleApp
-        { model = init
-        , view = view
-        , update = update
-        }
 
 
 type Message
@@ -118,3 +106,12 @@ view { theme } { query, arguments } =
             , label = Element.text "Run writer query"
             }
         ]
+
+
+lanternApp : Lantern.App.App Context Model Message
+lanternApp =
+    Lantern.App.simpleApp
+        { init = init
+        , view = view
+        , update = update
+        }

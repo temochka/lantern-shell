@@ -1,4 +1,4 @@
-module DevTools.Apps.DatabaseExplorer exposing (App, Message, lanternApp)
+module DevTools.Apps.DatabaseExplorer exposing (Message, Model, init, lanternApp, liveQueries, update, view)
 
 import DevTools.FlexiQuery as FlexiQuery
 import DevTools.TableViewer as TableViewer
@@ -7,6 +7,7 @@ import Element exposing (Element)
 import Element.Input
 import Json.Decode
 import Lantern
+import Lantern.App
 import Lantern.Query
 import LanternUi
 import LanternUi.Theme
@@ -24,8 +25,6 @@ type Message
 
 type alias Model =
     { tables : List Table
-    , rows : List FlexiQuery.Result
-    , rowsCount : Int
     , tableViewer : TableViewer.TableViewer
     }
 
@@ -44,8 +43,6 @@ tableDecoder =
 init : Model
 init =
     { tables = []
-    , rows = []
-    , rowsCount = 0
     , tableViewer = TableViewer.init
     }
 
@@ -60,6 +57,9 @@ update msg model =
 
                 newState =
                     { model | tableViewer = newTableViewerState }
+
+                _ =
+                    Debug.log "newState" newState
             in
             ( newState
             , Cmd.none
@@ -118,14 +118,10 @@ liveQueries { tableViewer } =
     [ tablesQuery ] ++ tableViewerQueries
 
 
-type alias App =
-    Lantern.App Context Model Message
-
-
-lanternApp : App
+lanternApp : Lantern.App.App Context Model Message
 lanternApp =
-    Lantern.liveApp
-        { model = init
+    Lantern.App.liveApp
+        { init = init
         , view = view
         , update = update
         , liveQueries = liveQueries

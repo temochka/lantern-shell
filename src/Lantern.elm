@@ -1,6 +1,5 @@
 module Lantern exposing
-    ( App
-    , Connection
+    ( Connection
     , Error
     , LiveQuery
     , Message(..)
@@ -10,7 +9,6 @@ module Lantern exposing
     , echo
     , equalLiveQueries
     , errorToString
-    , liveApp
     , liveQueries
     , log
     , map
@@ -21,7 +19,6 @@ module Lantern exposing
     , prepareLiveQuery2
     , prepareLiveQuery3
     , readerQuery
-    , simpleApp
     , update
     , wrapResponse
     , writerQuery
@@ -91,52 +88,6 @@ type alias RequestsInFlight msg =
 
 type LiveQuery msg
     = LiveQuery (List Lantern.Query.Query) (List Lantern.Query.ReaderResult -> msg)
-
-
-type alias App ctx model msg =
-    { model : model
-    , view : ctx -> model -> Element (Message msg)
-    , update : msg -> model -> ( model, Cmd (Message msg) )
-    , liveQueries : model -> List (LiveQuery msg)
-    , liveQueriesCache : List (LiveQuery msg)
-    }
-
-
-simpleApp :
-    { model : model
-    , view :
-        ctx
-        -> model
-        -> Element (Message msg)
-    , update : msg -> model -> ( model, Cmd (Message msg) )
-    }
-    -> App ctx model msg
-simpleApp def =
-    { model = def.model
-    , view = def.view
-    , update = def.update
-    , liveQueries = always []
-    , liveQueriesCache = []
-    }
-
-
-liveApp :
-    { model : model
-    , view :
-        ctx
-        -> model
-        -> Element (Message msg)
-    , update : msg -> model -> ( model, Cmd (Message msg) )
-    , liveQueries : model -> List (LiveQuery msg)
-    }
-    -> App ctx model msg
-liveApp def =
-    { model = def.model
-    , view = def.view
-    , update = def.update
-    , liveQueries = def.liveQueries
-    , liveQueriesCache = def.liveQueries def.model
-    }
 
 
 newConnection : RequestPort msg -> ResponsePort msg -> Connection msg
@@ -220,8 +171,19 @@ writerQuery query msg =
 
 equalLiveQueries : List (LiveQuery msg) -> List (LiveQuery msg) -> Bool
 equalLiveQueries liveQueriesA liveQueriesB =
-    List.map2 Tuple.pair liveQueriesA liveQueriesB
-        |> List.all (\( LiveQuery queriesA _, LiveQuery queriesB _ ) -> queriesA == queriesB)
+    case ( liveQueriesA, liveQueriesB ) of
+        ( (LiveQuery a _) :: restA, (LiveQuery b _) :: restB ) ->
+            if a == b then
+                equalLiveQueries restA restB
+
+            else
+                False
+
+        ( [], [] ) ->
+            True
+
+        _ ->
+            False
 
 
 liveQueries : List (LiveQuery msg) -> Cmd (Message msg)

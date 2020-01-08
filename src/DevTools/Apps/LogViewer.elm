@@ -1,8 +1,9 @@
-module DevTools.Apps.LogViewer exposing (App, Message, lanternApp)
+module DevTools.Apps.LogViewer exposing (Message, Model, init, lanternApp)
 
 import Element exposing (Element)
 import Element.Font
 import Lantern
+import Lantern.App
 import Lantern.Log exposing (Log)
 import LanternUi
 import LanternUi.Theme
@@ -18,19 +19,6 @@ type alias Model =
 
 type alias Message =
     ()
-
-
-type alias App =
-    Lantern.App Context Model Message
-
-
-lanternApp : App
-lanternApp =
-    Lantern.simpleApp
-        { model = init
-        , update = update
-        , view = view
-        }
 
 
 init : Model
@@ -57,3 +45,12 @@ view { log, theme } _ =
                 , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
                 ]
         ]
+
+
+lanternApp : Lantern.App.App Context Model Message
+lanternApp =
+    Lantern.App.simpleApp
+        { init = init
+        , view = view
+        , update = update
+        }

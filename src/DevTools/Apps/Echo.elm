@@ -1,8 +1,9 @@
-module DevTools.Apps.Echo exposing (App, Message, lanternApp)
+module DevTools.Apps.Echo exposing (Message, Model, init, lanternApp)
 
 import Element exposing (Element)
 import Element.Input
 import Lantern
+import Lantern.App
 import LanternUi
 import LanternUi.Input
 import LanternUi.Theme
@@ -22,19 +23,6 @@ type Message
     = UpdatePing String
     | ReceivePong String
     | Run
-
-
-type alias App =
-    Lantern.App Context Model Message
-
-
-lanternApp : App
-lanternApp =
-    Lantern.simpleApp
-        { model = init
-        , update = update
-        , view = view
-        }
 
 
 init : Model
@@ -77,3 +65,12 @@ view { theme } model =
             }
         , Element.text ("Results: " ++ Debug.toString model.pong)
         ]
+
+
+lanternApp : Lantern.App.App Context Model Message
+lanternApp =
+    Lantern.App.simpleApp
+        { init = init
+        , view = view
+        , update = update
+        }

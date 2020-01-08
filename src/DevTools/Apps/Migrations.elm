@@ -1,8 +1,9 @@
-module DevTools.Apps.Migrations exposing (App, Message, lanternApp)
+module DevTools.Apps.Migrations exposing (Message, Model, init, lanternApp)
 
 import Element exposing (Element)
 import Element.Input
 import Lantern
+import Lantern.App
 import Lantern.Query
 import LanternUi
 import LanternUi.Input
@@ -17,19 +18,6 @@ type alias Model =
     { query : String
     , result : Maybe Bool
     }
-
-
-type alias App =
-    Lantern.App Context Model Message
-
-
-lanternApp : App
-lanternApp =
-    Lantern.simpleApp
-        { model = init
-        , view = view
-        , update = update
-        }
 
 
 type Message
@@ -81,3 +69,12 @@ view { theme } { query } =
             , label = Element.text "Run migration"
             }
         ]
+
+
+lanternApp : Lantern.App.App Context Model Message
+lanternApp =
+    Lantern.App.simpleApp
+        { init = init
+        , view = view
+        , update = update
+        }

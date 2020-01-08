@@ -24,6 +24,7 @@ import Json.Decode
 import Json.Encode
 import Keyboard.Event
 import Lantern
+import Lantern.App
 import Lantern.Encoders
 import Lantern.Log
 import Lantern.Query
@@ -62,31 +63,8 @@ type alias Model =
     , windowManager : LanternUi.WindowManager.WindowManager
     , appLauncher : LanternUi.FuzzySelect.FuzzySelect App
     , theme : LanternUi.Theme.Theme
+    , liveQueriesCache : Dict ProcessTable.Pid (List (Lantern.LiveQuery Msg))
     }
-
-
-appLiveQueries : ProcessTable.Pid -> App -> List (Lantern.LiveQuery Msg)
-appLiveQueries pid wrappedApp =
-    (case wrappedApp of
-        ReaderQueryApp app ->
-            List.map (Lantern.mapLiveQuery ReaderQueryMsg) app.liveQueriesCache
-
-        WriterQueryApp app ->
-            List.map (Lantern.mapLiveQuery WriterQueryMsg) app.liveQueriesCache
-
-        MigrationApp app ->
-            List.map (Lantern.mapLiveQuery MigrationsMsg) app.liveQueriesCache
-
-        DatabaseExplorerApp app ->
-            List.map (Lantern.mapLiveQuery DatabaseExplorerMsg) app.liveQueriesCache
-
-        EchoApp app ->
-            List.map (Lantern.mapLiveQuery EchoMsg) app.liveQueriesCache
-
-        LogViewerApp app ->
-            List.map (Lantern.mapLiveQuery LogViewerMsg) app.liveQueriesCache
-    )
-        |> List.map (Lantern.mapLiveQuery (AppMessage pid))
 
 
 init : () -> ( Model, Cmd Msg )
@@ -97,9 +75,9 @@ init _ =
 
         processTable =
             ProcessTable.empty
-                |> ProcessTable.launch (DatabaseExplorerApp DatabaseExplorerApp.lanternApp)
-                |> ProcessTable.launch (ReaderQueryApp ReaderQueryApp.lanternApp)
-                |> ProcessTable.launch (WriterQueryApp WriterQueryApp.lanternApp)
+                |> ProcessTable.launch (DatabaseExplorerApp DatabaseExplorerApp.init)
+                |> ProcessTable.launch (ReaderQueryApp ReaderQueryApp.init)
+                |> ProcessTable.launch (WriterQueryApp WriterQueryApp.init)
 
         model =
             { lanternConnection = lanternConnection
@@ -108,32 +86,35 @@ init _ =
             , appLauncher =
                 LanternUi.FuzzySelect.new
                     { options =
-                        [ ( "Run query", ReaderQueryApp ReaderQueryApp.lanternApp )
-                        , ( "Run mutator", WriterQueryApp WriterQueryApp.lanternApp )
-                        , ( "Run migration", MigrationApp MigrationsApp.lanternApp )
-                        , ( "Show tables", DatabaseExplorerApp DatabaseExplorerApp.lanternApp )
-                        , ( "Run echo", EchoApp EchoApp.lanternApp )
-                        , ( "Show logs", LogViewerApp LogViewerApp.lanternApp )
+                        [ ( "Run query", ReaderQueryApp ReaderQueryApp.init )
+                        , ( "Run mutator", WriterQueryApp WriterQueryApp.init )
+                        , ( "Run migration", MigrationsApp MigrationsApp.init )
+                        , ( "Show tables", DatabaseExplorerApp DatabaseExplorerApp.init )
+                        , ( "Run echo", EchoApp EchoApp.init )
+                        , ( "Show logs", LogViewerApp LogViewerApp.init )
                         ]
                     , placeholder = Nothing
                     }
                     |> LanternUi.FuzzySelect.setId "lanternAppLauncher"
             , theme = LanternUi.Theme.lightTheme
+            , liveQueriesCache = Dict.empty
             }
+
+        liveQueriesCache =
+            processTable
+                |> ProcessTable.processes
+                |> List.map
+                    (\process ->
+                        ( process.pid
+                        , (lanternAppFor process.application model).liveQueries process.application
+                            |> List.map (Lantern.mapLiveQuery (AppMessage process.pid))
+                        )
+                    )
+                |> Dict.fromList
     in
-    ( model
-    , Lantern.liveQueries (liveQueries processTable) |> Cmd.map LanternMessage
+    ( { model | liveQueriesCache = liveQueriesCache }
+    , Lantern.liveQueries (liveQueriesCache |> Dict.values |> List.concatMap identity) |> Cmd.map LanternMessage
     )
-
-
-liveQueries : ProcessTable.ProcessTable App -> List (Lantern.LiveQuery Msg)
-liveQueries pt =
-    pt
-        |> ProcessTable.processesWithPids
-        |> List.concatMap
-            (\( pid, process ) ->
-                appLiveQueries pid (ProcessTable.processApp process)
-            )
 
 
 
@@ -153,21 +134,199 @@ subscriptions model =
 
 
 type App
-    = ReaderQueryApp ReaderQueryApp.App
-    | WriterQueryApp WriterQueryApp.App
-    | MigrationApp MigrationsApp.App
-    | DatabaseExplorerApp DatabaseExplorerApp.App
-    | EchoApp EchoApp.App
-    | LogViewerApp LogViewerApp.App
+    = EchoApp EchoApp.Model
+    | DatabaseExplorerApp DatabaseExplorerApp.Model
+    | LogViewerApp LogViewerApp.Model
+    | MigrationsApp MigrationsApp.Model
+    | ReaderQueryApp ReaderQueryApp.Model
+    | WriterQueryApp WriterQueryApp.Model
 
 
 type AppMessage
-    = ReaderQueryMsg ReaderQueryApp.Message
-    | WriterQueryMsg WriterQueryApp.Message
+    = EchoMsg EchoApp.Message
     | DatabaseExplorerMsg DatabaseExplorerApp.Message
-    | MigrationsMsg MigrationsApp.Message
-    | EchoMsg EchoApp.Message
     | LogViewerMsg LogViewerApp.Message
+    | MigrationsMsg MigrationsApp.Message
+    | ReaderQueryMsg ReaderQueryApp.Message
+    | WriterQueryMsg WriterQueryApp.Message
+
+
+lanternAppFor : App -> (Model -> Lantern.App.App () App AppMessage)
+lanternAppFor app =
+    case app of
+        EchoApp _ ->
+            echoApp
+
+        DatabaseExplorerApp _ ->
+            databaseExplorerApp
+
+        LogViewerApp _ ->
+            logViewerApp
+
+        MigrationsApp _ ->
+            migrationsApp
+
+        ReaderQueryApp _ ->
+            readerQueryApp
+
+        WriterQueryApp _ ->
+            writerQueryApp
+
+
+databaseExplorerApp : Model -> Lantern.App.App () App AppMessage
+databaseExplorerApp rootModel =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    DatabaseExplorerMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    DatabaseExplorerApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = DatabaseExplorerApp
+        , wrapMsg = DatabaseExplorerMsg
+        , context = \_ -> { theme = rootModel.theme }
+        }
+        DatabaseExplorerApp.lanternApp
+
+
+echoApp : Model -> Lantern.App.App () App AppMessage
+echoApp rootModel =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    EchoMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    EchoApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = EchoApp
+        , wrapMsg = EchoMsg
+        , context = \_ -> { theme = rootModel.theme }
+        }
+        EchoApp.lanternApp
+
+
+logViewerApp : Model -> Lantern.App.App () App AppMessage
+logViewerApp rootModel =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    LogViewerMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    LogViewerApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = LogViewerApp
+        , wrapMsg = LogViewerMsg
+        , context = \_ -> { theme = rootModel.theme, log = Lantern.log rootModel.lanternConnection }
+        }
+        LogViewerApp.lanternApp
+
+
+migrationsApp : Model -> Lantern.App.App () App AppMessage
+migrationsApp rootModel =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    MigrationsMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    MigrationsApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = MigrationsApp
+        , wrapMsg = MigrationsMsg
+        , context = \_ -> { theme = rootModel.theme }
+        }
+        MigrationsApp.lanternApp
+
+
+readerQueryApp : Model -> Lantern.App.App () App AppMessage
+readerQueryApp rootModel =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    ReaderQueryMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    ReaderQueryApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = ReaderQueryApp
+        , wrapMsg = ReaderQueryMsg
+        , context = \_ -> { theme = rootModel.theme }
+        }
+        ReaderQueryApp.lanternApp
+
+
+writerQueryApp : Model -> Lantern.App.App () App AppMessage
+writerQueryApp rootModel =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    WriterQueryMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    WriterQueryApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = WriterQueryApp
+        , wrapMsg = WriterQueryMsg
+        , context = \_ -> { theme = rootModel.theme }
+        }
+        WriterQueryApp.lanternApp
 
 
 wrapAppMessage : ProcessTable.Pid -> Lantern.Message AppMessage -> Msg
@@ -178,66 +337,6 @@ wrapAppMessage pid msg =
 
         lanternMessage ->
             LanternMessage (Lantern.map (AppMessage pid) lanternMessage)
-
-
-processAppMessage : Model -> ProcessTable.Pid -> AppMessage -> Result String ( App, Cmd Msg )
-processAppMessage model pid msg =
-    let
-        updateApp appMsg appState wrapApp wrapMsg =
-            appState.update appMsg appState.model
-                |> (\( changedModel, cmd ) ->
-                        let
-                            wrappedCmd =
-                                Cmd.map (Lantern.map wrapMsg >> wrapAppMessage pid) cmd
-
-                            newLiveQueries =
-                                if appState.model /= changedModel then
-                                    appState.liveQueries changedModel
-
-                                else
-                                    appState.liveQueriesCache
-                        in
-                        if Lantern.equalLiveQueries newLiveQueries appState.liveQueriesCache then
-                            ( wrapApp { appState | model = changedModel }, wrappedCmd )
-
-                        else
-                            ( wrapApp { appState | model = changedModel, liveQueriesCache = newLiveQueries }
-                            , Cmd.batch [ wrappedCmd, Task.perform identity (Task.succeed RefreshLiveQueries) ]
-                            )
-                   )
-                |> Ok
-    in
-    pid
-        |> ProcessTable.lookup model.processTable
-        |> Result.fromMaybe "Unknown process"
-        |> Result.andThen
-            (\process ->
-                let
-                    app =
-                        ProcessTable.processApp process
-                in
-                case ( app, msg ) of
-                    ( ReaderQueryApp appState, ReaderQueryMsg appMsg ) ->
-                        updateApp appMsg appState ReaderQueryApp ReaderQueryMsg
-
-                    ( WriterQueryApp appState, WriterQueryMsg appMsg ) ->
-                        updateApp appMsg appState WriterQueryApp WriterQueryMsg
-
-                    ( MigrationApp appState, MigrationsMsg appMsg ) ->
-                        updateApp appMsg appState MigrationApp MigrationsMsg
-
-                    ( DatabaseExplorerApp appState, DatabaseExplorerMsg appMsg ) ->
-                        updateApp appMsg appState DatabaseExplorerApp DatabaseExplorerMsg
-
-                    ( EchoApp appState, EchoMsg appMsg ) ->
-                        updateApp appMsg appState EchoApp EchoMsg
-
-                    ( LogViewerApp appState, LogViewerMsg appMsg ) ->
-                        updateApp appMsg appState LogViewerApp LogViewerMsg
-
-                    _ ->
-                        Err "Process cannot handle message"
-            )
 
 
 
@@ -255,7 +354,6 @@ type Msg
     | AppLauncherMessage (LanternUi.FuzzySelect.Message App)
     | LaunchApp App
     | WindowManagerMessage LanternUi.WindowManager.Message
-    | RefreshLiveQueries
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -326,30 +424,54 @@ update msg model =
             ( { model | windowManager = newWindowManager }, Cmd.none )
 
         AppMessage pid proxiedMsg ->
-            let
-                result =
-                    processAppMessage model pid proxiedMsg
+            pid
+                |> ProcessTable.lookup model.processTable
+                |> Maybe.map ProcessTable.processApp
+                |> Maybe.map
+                    (\appModel ->
+                        let
+                            lanternApp =
+                                lanternAppFor appModel model
 
-                newProcessTable =
-                    case result of
-                        Ok ( app, _ ) ->
-                            ProcessTable.mapProcess (always app) pid model.processTable
+                            ( newAppModel, cmd ) =
+                                lanternApp.update proxiedMsg appModel
 
-                        Err _ ->
-                            model.processTable
-            in
-            ( { model | processTable = newProcessTable }
-            , result
-                |> Result.map Tuple.second
-                |> Result.map
-                    (\cmd ->
-                        Cmd.batch [ cmd, Lantern.liveQueries (liveQueries newProcessTable) |> Cmd.map LanternMessage ]
+                            newLiveQueries =
+                                lanternApp.liveQueries newAppModel |> List.map (Lantern.mapLiveQuery (AppMessage pid))
+
+                            newLiveQueriesCache =
+                                Dict.insert pid newLiveQueries model.liveQueriesCache
+
+                            _ =
+                                Debug.log "newLiveQueries: " newLiveQueries
+
+                            _ =
+                                Debug.log "oldLiveQueries: " (Dict.get pid model.liveQueriesCache)
+
+                            liveQueriesChanged =
+                                Dict.get pid model.liveQueriesCache
+                                    |> Maybe.map (Lantern.equalLiveQueries newLiveQueries >> not)
+                                    |> Maybe.withDefault True
+
+                            _ =
+                                Debug.log "liveQueriesChanged:" liveQueriesChanged
+
+                            liveQueriesCmd =
+                                if liveQueriesChanged then
+                                    Lantern.liveQueries (newLiveQueriesCache |> Dict.values |> List.concatMap identity)
+                                        |> Cmd.map LanternMessage
+
+                                else
+                                    Cmd.none
+                        in
+                        ( { model
+                            | processTable = ProcessTable.mapProcess (always newAppModel) pid model.processTable
+                            , liveQueriesCache = newLiveQueriesCache
+                          }
+                        , Cmd.batch [ Cmd.map (wrapAppMessage pid) cmd, liveQueriesCmd ]
+                        )
                     )
-                |> Result.withDefault Cmd.none
-            )
-
-        RefreshLiveQueries ->
-            ( model, Lantern.liveQueries (liveQueries model.processTable) |> Cmd.map LanternMessage )
+                |> Maybe.withDefault ( model, Cmd.none )
 
 
 handleShortcuts : Json.Decode.Decoder Msg
@@ -383,32 +505,11 @@ handleShortcuts =
 renderApp : Model -> Bool -> ProcessTable.Process App -> Element Msg
 renderApp model focused process =
     let
-        render app context wrapMsg =
-            app.view context app.model
-                |> Element.map (Lantern.map wrapMsg >> wrapAppMessage process.pid)
-
-        themeContext =
-            { theme = model.theme }
+        app =
+            ProcessTable.processApp process
 
         content =
-            case ProcessTable.processApp process of
-                ReaderQueryApp app ->
-                    render app themeContext ReaderQueryMsg
-
-                WriterQueryApp app ->
-                    render app themeContext WriterQueryMsg
-
-                MigrationApp app ->
-                    render app themeContext MigrationsMsg
-
-                DatabaseExplorerApp app ->
-                    render app themeContext DatabaseExplorerMsg
-
-                EchoApp app ->
-                    render app themeContext EchoMsg
-
-                LogViewerApp app ->
-                    render app { theme = model.theme, log = Lantern.log model.lanternConnection } LogViewerMsg
+            (lanternAppFor app model).view () app
 
         border =
             if focused then
@@ -425,6 +526,7 @@ renderApp model focused process =
     LanternUi.panel model.theme
         [ border ]
         content
+        |> Element.map (Lantern.map (AppMessage process.pid) >> LanternMessage)
 
 
 tools : Model -> Element Msg
