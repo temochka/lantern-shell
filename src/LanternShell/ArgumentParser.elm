@@ -1,4 +1,4 @@
-module DevTools.ArgumentParser exposing (parse)
+module LanternShell.ArgumentParser exposing (parse)
 
 import Dict
 import Parser exposing ((|.), (|=), Parser)

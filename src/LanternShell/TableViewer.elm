@@ -1,12 +1,12 @@
-module DevTools.TableViewer exposing (State(..), TableViewer, init, liveQueries, loadRows, loadTable, render, rowDecoder)
+module LanternShell.TableViewer exposing (State(..), TableViewer, init, liveQueries, loadRows, loadTable, render, rowDecoder)
 
-import DevTools.FlexiQuery as FlexiQuery
 import Dict
 import Element exposing (Element)
 import Json.Decode
 import Lantern
 import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
+import LanternShell.FlexiQuery as FlexiQuery
 
 
 type State

@@ -1,9 +1,10 @@
-module DevTools.Apps.Echo exposing (Message, Model, init, lanternApp)
+module LanternShell.Apps.Migrations exposing (Message, Model, init, lanternApp)
 
 import Element exposing (Element)
 import Element.Input
 import Lantern
 import Lantern.App
+import Lantern.Query
 import LanternUi
 import LanternUi.Input
 import LanternUi.Theme
@@ -14,56 +15,59 @@ type alias Context =
 
 
 type alias Model =
-    { ping : String
-    , pong : String
+    { query : String
+    , result : Maybe Bool
     }
 
 
 type Message
-    = UpdatePing String
-    | ReceivePong String
+    = Update String
+    | HandleResult Bool
     | Run
 
 
 init : Model
 init =
-    { ping = ""
-    , pong = ""
+    { query = ""
+    , result = Nothing
     }
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
 update msg model =
     case msg of
-        UpdatePing ping ->
-            ( { model | ping = ping }, Cmd.none )
+        Update query ->
+            ( { model | query = query }, Cmd.none )
 
         Run ->
-            ( model, Lantern.echo model.ping ReceivePong )
+            let
+                migration =
+                    Lantern.Query.withNoArguments model.query
+            in
+            ( model, Lantern.migrate migration HandleResult )
 
-        ReceivePong pong ->
-            ( { model | pong = pong }, Cmd.none )
+        HandleResult result ->
+            ( { model | result = Just result }, Cmd.none )
 
 
 view : Context -> Model -> Element (Lantern.Message Message)
-view { theme } model =
+view { theme } { query } =
     LanternUi.columnLayout
         theme
         []
         [ LanternUi.Input.multiline theme
             []
-            { onChange = UpdatePing >> Lantern.AppMessage
-            , text = model.ping
+            { onChange = Update >> Lantern.AppMessage
+            , text = query
             , placeholder = Nothing
             , spellcheck = False
-            , label = Element.Input.labelHidden "Echo"
+            , label = Element.Input.labelHidden "Migration"
             }
         , LanternUi.Input.button theme
             []
             { onPress = Just (Lantern.AppMessage Run)
-            , label = Element.text "Run echo"
+            , label = Element.text "Run migration"
             }
-        , Element.text ("Results: " ++ Debug.toString model.pong)
         ]
 
 

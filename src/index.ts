@@ -1,4 +1,4 @@
-import { Elm } from "DevTools";
+import { Elm } from "LanternShell";
 
 const mountTarget = document.getElementById("main");
 
@@ -6,7 +6,7 @@ if (mountTarget) {
   const connection = new WebSocket("ws://localhost:9000/_api/async");
 
   connection.onopen = () => {
-    const app = Elm.DevTools.init({ node: mountTarget });
+    const app = Elm.LanternShell.init({ node: mountTarget });
 
     app.ports.lanternRequestPort.subscribe(data => connection.send(data));
     connection.onmessage = event => {

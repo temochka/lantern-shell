@@ -1,14 +1,12 @@
-module DevTools.Apps.ReaderQuery exposing (Message, Model, init, lanternApp)
+module LanternShell.Apps.WriterQuery exposing (Message, Model, init, lanternApp)
 
-import DevTools.ArgumentParser as ArgumentParser
-import DevTools.FlexiQuery as FlexiQuery
-import DevTools.Ui.ResultsTable as ResultsTable
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Input
 import Lantern
 import Lantern.App
 import Lantern.Query
+import LanternShell.ArgumentParser as ArgumentParser
 import LanternUi
 import LanternUi.Input
 import LanternUi.Theme
@@ -21,8 +19,15 @@ type alias Context =
 type alias Model =
     { query : String
     , arguments : Dict String String
-    , result : Maybe (Result Lantern.Error (List FlexiQuery.Result))
+    , result : Maybe Bool
     }
+
+
+type Message
+    = Update String
+    | UpdateArgument String String
+    | HandleResult Bool
+    | Run
 
 
 init : Model
@@ -31,13 +36,6 @@ init =
     , arguments = Dict.empty
     , result = Nothing
     }
-
-
-type Message
-    = Update String
-    | UpdateArgument String String
-    | HandleResult (Result Lantern.Error (List FlexiQuery.Result))
-    | Run
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.Message Message) )
@@ -66,36 +64,30 @@ update msg model =
                     }
             in
             ( model
-            , Lantern.readerQuery
+            , Lantern.writerQuery
                 query
-                FlexiQuery.resultDecoder
                 HandleResult
             )
 
         HandleResult result ->
-            case result of
-                Err error ->
-                    ( { model | result = Just (Err error) }, Cmd.none )
-
-                Ok queryResult ->
-                    ( { model | result = Just (Ok queryResult) }, Cmd.none )
+            ( { model | result = Just result }, Cmd.none )
 
 
 view : Context -> Model -> Element (Lantern.Message Message)
-view { theme } model =
+view { theme } { query, arguments } =
     LanternUi.columnLayout
         theme
         []
         [ LanternUi.Input.multiline theme
             []
             { onChange = Update >> Lantern.AppMessage
-            , text = model.query
+            , text = query
             , placeholder = Nothing
             , spellcheck = False
-            , label = Element.Input.labelHidden "Reader query"
+            , label = Element.Input.labelHidden "Writer query"
             }
         , Element.column []
-            (model.arguments
+            (arguments
                 |> Dict.toList
                 |> List.map
                     (\( name, value ) ->
@@ -111,9 +103,8 @@ view { theme } model =
         , LanternUi.Input.button theme
             []
             { onPress = Just (Lantern.AppMessage Run)
-            , label = Element.text "Run reader query"
+            , label = Element.text "Run writer query"
             }
-        , ResultsTable.render (model.result |> Maybe.withDefault (Ok []) |> Result.withDefault [])
         ]
 
 

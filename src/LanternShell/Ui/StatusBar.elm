@@ -1,4 +1,4 @@
-module DevTools.Ui.StatusBar exposing (Message, StatusBar, new, render, update)
+module LanternShell.Ui.StatusBar exposing (Message, StatusBar, new, render, update)
 
 import Element exposing (Element)
 import Element.Background as Background

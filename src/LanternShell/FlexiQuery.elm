@@ -1,4 +1,4 @@
-module DevTools.FlexiQuery exposing (Result, resultDecoder)
+module LanternShell.FlexiQuery exposing (Result, resultDecoder)
 
 import Dict exposing (Dict)
 import Json.Decode

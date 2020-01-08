@@ -1,17 +1,8 @@
-port module DevTools exposing (..)
+port module LanternShell exposing (..)
 
 import Browser
 import Browser.Dom
 import Browser.Events
-import DevTools.Apps.DatabaseExplorer as DatabaseExplorerApp
-import DevTools.Apps.Echo as EchoApp
-import DevTools.Apps.LogViewer as LogViewerApp
-import DevTools.Apps.Migrations as MigrationsApp
-import DevTools.Apps.ReaderQuery as ReaderQueryApp
-import DevTools.Apps.WriterQuery as WriterQueryApp
-import DevTools.ArgumentParser as ArgumentParser
-import DevTools.FlexiQuery as FlexiQuery
-import DevTools.TableViewer as TableViewer
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
@@ -29,6 +20,15 @@ import Lantern.LiveQuery exposing (LiveQuery(..))
 import Lantern.Log
 import Lantern.Query
 import Lantern.Request
+import LanternShell.Apps.DatabaseExplorer as DatabaseExplorerApp
+import LanternShell.Apps.Echo as EchoApp
+import LanternShell.Apps.LogViewer as LogViewerApp
+import LanternShell.Apps.Migrations as MigrationsApp
+import LanternShell.Apps.ReaderQuery as ReaderQueryApp
+import LanternShell.Apps.WriterQuery as WriterQueryApp
+import LanternShell.ArgumentParser as ArgumentParser
+import LanternShell.FlexiQuery as FlexiQuery
+import LanternShell.TableViewer as TableViewer
 import LanternUi
 import LanternUi.FuzzySelect
 import LanternUi.Input

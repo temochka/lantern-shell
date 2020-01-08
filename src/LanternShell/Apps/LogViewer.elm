@@ -1,4 +1,4 @@
-module DevTools.Apps.LogViewer exposing (Message, Model, init, lanternApp)
+module LanternShell.Apps.LogViewer exposing (Message, Model, init, lanternApp)
 
 import Element exposing (Element)
 import Element.Font

@@ -1,5 +1,5 @@
 {
-  "name": "lantern-devtools",
+  "name": "lantern-shell",
   "version": "1.0.0",
   "description": "Development tools for the Lantern web server",
   "private": true,
@@ -12,14 +12,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/temochka/lantern-devtools.git"
+    "url": "git+https://github.com/temochka/lantern-shell.git"
   },
   "author": "Artem Chistyakov",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/temochka/lantern-devtools/issues"
+    "url": "https://github.com/temochka/lantern-shell/issues"
   },
-  "homepage": "https://github.com/temochka/lantern-devtools#readme",
+  "homepage": "https://github.com/temochka/lantern-shell#readme",
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^2.5.0",
     "@typescript-eslint/parser": "^2.5.0",

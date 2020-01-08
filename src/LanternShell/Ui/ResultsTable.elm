@@ -1,9 +1,9 @@
-module DevTools.Ui.ResultsTable exposing (render)
+module LanternShell.Ui.ResultsTable exposing (render)
 
-import DevTools.FlexiQuery as FlexiQuery
 import Dict
 import Element exposing (Element)
 import Lantern.Query
+import LanternShell.FlexiQuery as FlexiQuery
 
 
 render : List FlexiQuery.Result -> Element msg

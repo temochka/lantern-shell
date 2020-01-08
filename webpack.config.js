@@ -26,7 +26,7 @@ module.exports = {
   },
   resolve: {
     alias: {
-      DevTools: path.resolve(__dirname, "src/DevTools.elm")
+      LanternShell: path.resolve(__dirname, "src/LanternShell.elm")
     }
   }
 };

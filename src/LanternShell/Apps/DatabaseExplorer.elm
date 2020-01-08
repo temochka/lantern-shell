@@ -1,7 +1,5 @@
-module DevTools.Apps.DatabaseExplorer exposing (Message, Model, init, lanternApp, liveQueries, update, view)
+module LanternShell.Apps.DatabaseExplorer exposing (Message, Model, init, lanternApp, liveQueries, update, view)
 
-import DevTools.FlexiQuery as FlexiQuery
-import DevTools.TableViewer as TableViewer
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Input
@@ -10,6 +8,8 @@ import Lantern
 import Lantern.App
 import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
+import LanternShell.FlexiQuery as FlexiQuery
+import LanternShell.TableViewer as TableViewer
 import LanternUi
 import LanternUi.Theme
 

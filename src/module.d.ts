@@ -10,10 +10,10 @@ interface OutPort {
   send(data: string): void;
 }
 
-interface DevToolsApp {
+interface LanternShellApp {
   ports: { lanternRequestPort: InPort; lanternResponsePort: OutPort };
 }
 
-declare module "DevTools" {
-  export const Elm: { DevTools: ElmAppFactory<DevToolsApp> };
+declare module "LanternShell" {
+  export const Elm: { LanternShell: ElmAppFactory<LanternShellApp> };
 }
