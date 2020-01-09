@@ -3,7 +3,6 @@ module Lantern exposing
     , Error
     , Message
     , RequestPort
-    , Response
     , ResponsePort
     , echo
     , liveQueries
@@ -38,14 +37,18 @@ type alias Error =
 
 
 type alias RequestPort msg =
-    String -> Cmd msg
+    RawRequest -> Cmd msg
 
 
 type alias ResponsePort msg =
-    (String -> msg) -> Sub msg
+    (RawResponse -> msg) -> Sub msg
 
 
-type alias Response =
+type alias RawRequest =
+    String
+
+
+type alias RawResponse =
     String
 
 
@@ -63,7 +66,7 @@ type alias State msg =
 
 
 type Message msg
-    = ResponseMsg Response
+    = RawResponse RawResponse
     | Request Lantern.Request.Request (ResponseHandler msg)
 
 
@@ -77,7 +80,7 @@ type alias RequestsInFlight msg =
 
 subscriptions : (Message msg -> msg) -> ResponsePort msg -> Sub msg
 subscriptions wrapMsg responsePort =
-    responsePort (ResponseMsg >> wrapMsg)
+    responsePort (RawResponse >> wrapMsg)
 
 
 newConnection : RequestPort msg -> Connection msg
@@ -247,7 +250,7 @@ update msg (Connection state) =
             , state.requestPort (Json.Encode.encode 0 (Encoders.request requestId request))
             )
 
-        ResponseMsg payload ->
+        RawResponse payload ->
             let
                 parsedResponse =
                     Json.Decode.decodeString Decoders.response payload
@@ -294,5 +297,5 @@ map f msg =
         Request request handler ->
             Request request (\response -> List.map f (handler response))
 
-        ResponseMsg response ->
-            ResponseMsg response
+        RawResponse response ->
+            RawResponse response
