@@ -72,23 +72,35 @@ syncProcesses runningPids ({ layout, focus } as windowManager) =
                         |> refreshPids rest (Set.remove pid pmPids)
 
                 [] ->
-                    List.sortBy negate (Set.toList pmPids) ++ accPids
+                    List.sortBy negate (Set.toList pmPids) ++ List.reverse accPids
+
+        currentWmPids =
+            layoutToPids layout
 
         newWmPids =
-            refreshPids (layoutToPids layout) (Set.fromList runningPids) []
+            refreshPids currentWmPids (Set.fromList runningPids) []
 
         newFocus =
-            focus
-                |> Maybe.andThen
-                    (\f ->
-                        if List.member f newWmPids then
-                            Just f
+            if List.head newWmPids == List.head currentWmPids then
+                focus
+                    |> Maybe.andThen
+                        (\f ->
+                            if List.member f newWmPids then
+                                Just f
 
-                        else
-                            Nothing
-                    )
-                |> Maybe.map Just
-                |> Maybe.withDefault (List.head newWmPids)
+                            else
+                                Nothing
+                        )
+                    |> (\f ->
+                            if f == Nothing then
+                                List.head newWmPids
+
+                            else
+                                f
+                       )
+
+            else
+                List.head newWmPids
     in
     ( { windowManager | layout = pidsToLayout newWmPids layout, focus = newFocus }
     , if newFocus /= focus then

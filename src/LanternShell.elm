@@ -211,7 +211,13 @@ update msg model =
                 newProcessTable =
                     ProcessTable.launch app model.processTable
             in
-            [ \_ -> ( { model | processTable = newProcessTable }, Cmd.map (wrapAppMessage newProcessTable.pid) appCmd )
+            [ \_ ->
+                ( { model
+                    | processTable = newProcessTable
+                    , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
+                  }
+                , Cmd.map (wrapAppMessage newProcessTable.pid) appCmd
+                )
             , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.pids newProcessTable)))
             ]
                 |> threadModel model
