@@ -152,13 +152,11 @@ subscriptions model =
 
 type Msg
     = Nop
+    | AppLauncherMessage (LanternUi.FuzzySelect.Message LauncherEntry)
     | AppMessage ProcessTable.Pid LanternShell.Apps.Message
-    | NextWindow
-    | PrevWindow
     | CloseApp
     | FocusAppLauncher
     | LanternMessage (Lantern.Message Msg)
-    | AppLauncherMessage (LanternUi.FuzzySelect.Message LauncherEntry)
     | LaunchApp LauncherEntry
     | WindowManagerMessage LanternUi.WindowManager.Message
 
@@ -178,12 +176,6 @@ update msg model =
     case msg of
         Nop ->
             ( model, Cmd.none )
-
-        NextWindow ->
-            LanternUi.WindowManager.nextWindow model.windowManager Nop (\wm -> { model | windowManager = wm })
-
-        PrevWindow ->
-            LanternUi.WindowManager.prevWindow model.windowManager Nop (\wm -> { model | windowManager = wm })
 
         CloseApp ->
             let
@@ -234,10 +226,10 @@ update msg model =
 
         WindowManagerMessage proxiedMsg ->
             let
-                newWindowManager =
+                ( newWindowManager, cmd ) =
                     LanternUi.WindowManager.update proxiedMsg model.windowManager
             in
-            ( { model | windowManager = newWindowManager }, Cmd.none )
+            ( { model | windowManager = newWindowManager }, Cmd.map WindowManagerMessage cmd )
 
         AppMessage pid proxiedMsg ->
             pid
@@ -290,10 +282,10 @@ handleShortcuts =
                     FocusAppLauncher
 
                 ( True, Just "j" ) ->
-                    NextWindow
+                    WindowManagerMessage LanternUi.WindowManager.NextWindow
 
                 ( True, Just "k" ) ->
-                    PrevWindow
+                    WindowManagerMessage LanternUi.WindowManager.PrevWindow
 
                 ( True, Just "w" ) ->
                     CloseApp

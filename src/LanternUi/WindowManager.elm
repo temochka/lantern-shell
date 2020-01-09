@@ -1,4 +1,4 @@
-module LanternUi.WindowManager exposing (Message, WindowManager, new, nextWindow, prevWindow, render, syncProcesses, update)
+module LanternUi.WindowManager exposing (Message(..), WindowManager, new, nextWindow, prevWindow, render, syncProcesses, update)
 
 import Browser.Dom
 import Element exposing (Element)
@@ -23,6 +23,8 @@ type alias WindowManager =
 type Message
     = Nop
     | Focus ProcessTable.Pid
+    | NextWindow
+    | PrevWindow
 
 
 new : List ProcessTable.Pid -> WindowManager
@@ -96,14 +98,20 @@ syncProcesses runningPids ({ layout, focus } as windowManager) onFocus updateMod
     )
 
 
-update : Message -> WindowManager -> WindowManager
+update : Message -> WindowManager -> ( WindowManager, Cmd Message )
 update msg windowManager =
     case msg of
         Nop ->
-            windowManager
+            ( windowManager, Cmd.none )
 
         Focus pid ->
-            { windowManager | focus = Just pid }
+            ( { windowManager | focus = Just pid }, Cmd.none )
+
+        NextWindow ->
+            nextWindow windowManager
+
+        PrevWindow ->
+            prevWindow windowManager
 
 
 windowId : WindowManager -> ProcessTable.Pid -> String
@@ -176,8 +184,8 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                 ]
 
 
-nextWindow : WindowManager -> msg -> (WindowManager -> a) -> ( a, Cmd msg )
-nextWindow ({ focus, layout } as windowManager) onFocus updateModel =
+nextWindow : WindowManager -> ( WindowManager, Cmd Message )
+nextWindow ({ focus, layout } as windowManager) =
     let
         pids =
             layoutToPids layout
@@ -206,13 +214,13 @@ nextWindow ({ focus, layout } as windowManager) onFocus updateModel =
                                 List.head pids
                    )
     in
-    ( { windowManager | focus = newFocus } |> updateModel
-    , newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> onFocus)) |> Maybe.withDefault Cmd.none
+    ( { windowManager | focus = newFocus }
+    , newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
     )
 
 
-prevWindow : WindowManager -> msg -> (WindowManager -> a) -> ( a, Cmd msg )
-prevWindow ({ focus, layout } as windowManager) onFocus updateModel =
+prevWindow : WindowManager -> ( WindowManager, Cmd Message )
+prevWindow ({ focus, layout } as windowManager) =
     let
         pids =
             layoutToPids layout
@@ -238,6 +246,6 @@ prevWindow ({ focus, layout } as windowManager) onFocus updateModel =
                 |> Maybe.map Just
                 |> Maybe.withDefault (List.head pids)
     in
-    ( { windowManager | focus = newFocus } |> updateModel
-    , newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> onFocus)) |> Maybe.withDefault Cmd.none
+    ( { windowManager | focus = newFocus }
+    , newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
     )
