@@ -142,7 +142,7 @@ subscriptions : Model -> Sub Msg
 subscriptions model =
     Sub.batch
         [ Lantern.subscriptions LanternMessage lanternResponsePort
-        , Browser.Events.onKeyDown handleShortcuts
+        , Browser.Events.onKeyDown (handleShortcuts model)
         ]
 
 
@@ -154,11 +154,16 @@ type Msg
     = Nop
     | AppLauncherMessage (LanternUi.FuzzySelect.Message LauncherEntry)
     | AppMessage ProcessTable.Pid LanternShell.Apps.Message
-    | CloseApp
+    | CloseApp ProcessTable.Pid
     | FocusAppLauncher
     | LanternMessage (Lantern.Message Msg)
     | LaunchApp LauncherEntry
     | WindowManagerMessage LanternUi.WindowManager.Message
+
+
+threadModel : model -> List (model -> ( model, Cmd msg )) -> ( model, Cmd msg )
+threadModel model ops =
+    List.foldl (\updateFn ( oldModel, oldCmd ) -> updateFn oldModel |> Tuple.mapSecond (\newCmd -> Cmd.batch [ oldCmd, newCmd ])) ( model, Cmd.none ) ops
 
 
 wrapAppMessage : ProcessTable.Pid -> Lantern.App.Message LanternShell.Apps.Message -> Msg
@@ -177,18 +182,13 @@ update msg model =
         Nop ->
             ( model, Cmd.none )
 
-        CloseApp ->
+        CloseApp pid ->
             let
                 newProcessTable =
-                    model.windowManager.focus
-                        |> Maybe.map (\pid -> ProcessTable.kill pid model.processTable)
-                        |> Maybe.withDefault model.processTable
+                    ProcessTable.kill pid model.processTable
             in
-            LanternUi.WindowManager.syncProcesses
-                (ProcessTable.pids newProcessTable)
-                model.windowManager
-                Nop
-                (\wm -> { model | processTable = newProcessTable, windowManager = wm })
+            [ update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.pids newProcessTable))) ]
+                |> threadModel { model | processTable = newProcessTable }
 
         FocusAppLauncher ->
             ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
@@ -211,18 +211,10 @@ update msg model =
                 newProcessTable =
                     ProcessTable.launch app model.processTable
             in
-            LanternUi.WindowManager.syncProcesses
-                (ProcessTable.pids newProcessTable)
-                model.windowManager
-                Nop
-                (\wm ->
-                    { model
-                        | processTable = newProcessTable
-                        , windowManager = wm
-                        , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
-                    }
-                )
-                |> Tuple.mapSecond (\cmd -> Cmd.batch [ Cmd.map (wrapAppMessage newProcessTable.pid) appCmd, cmd ])
+            [ \_ -> ( { model | processTable = newProcessTable }, Cmd.map (wrapAppMessage newProcessTable.pid) appCmd )
+            , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.pids newProcessTable)))
+            ]
+                |> threadModel model
 
         WindowManagerMessage proxiedMsg ->
             let
@@ -241,7 +233,7 @@ update msg model =
                             lanternApp =
                                 LanternShell.Apps.lanternAppFor appModel (appContext model)
 
-                            ( newAppModel, cmd ) =
+                            ( newAppModel, appCmd ) =
                                 lanternApp.update proxiedMsg appModel
 
                             newLiveQueries =
@@ -267,14 +259,14 @@ update msg model =
                             | processTable = ProcessTable.mapProcess (always newAppModel) pid model.processTable
                             , liveQueriesCache = newLiveQueriesCache
                           }
-                        , Cmd.batch [ Cmd.map (wrapAppMessage pid) cmd, liveQueriesCmd ]
+                        , Cmd.batch [ Cmd.map (wrapAppMessage pid) appCmd, liveQueriesCmd ]
                         )
                     )
                 |> Maybe.withDefault ( model, Cmd.none )
 
 
-handleShortcuts : Json.Decode.Decoder Msg
-handleShortcuts =
+handleShortcuts : Model -> Json.Decode.Decoder Msg
+handleShortcuts model =
     let
         dispatchKeyPress keyPress =
             case ( keyPress.ctrlKey, keyPress.key ) of
@@ -288,7 +280,7 @@ handleShortcuts =
                     WindowManagerMessage LanternUi.WindowManager.PrevWindow
 
                 ( True, Just "w" ) ->
-                    CloseApp
+                    model.windowManager.focus |> Maybe.map CloseApp |> Maybe.withDefault Nop
 
                 _ ->
                     Nop

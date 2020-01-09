@@ -23,6 +23,7 @@ type alias WindowManager =
 type Message
     = Nop
     | Focus ProcessTable.Pid
+    | SyncProcesses (List ProcessTable.Pid)
     | NextWindow
     | PrevWindow
 
@@ -56,8 +57,8 @@ pidsToLayout pids layout =
             MasterStack (List.head pids) (List.drop 1 pids)
 
 
-syncProcesses : List ProcessTable.Pid -> WindowManager -> msg -> (WindowManager -> a) -> ( a, Cmd msg )
-syncProcesses runningPids ({ layout, focus } as windowManager) onFocus updateModel =
+syncProcesses : List ProcessTable.Pid -> WindowManager -> ( WindowManager, Cmd Message )
+syncProcesses runningPids ({ layout, focus } as windowManager) =
     let
         refreshPids wmPids pmPids accPids =
             case wmPids of
@@ -89,9 +90,9 @@ syncProcesses runningPids ({ layout, focus } as windowManager) onFocus updateMod
                 |> Maybe.map Just
                 |> Maybe.withDefault (List.head newWmPids)
     in
-    ( { windowManager | layout = pidsToLayout newWmPids layout, focus = newFocus } |> updateModel
+    ( { windowManager | layout = pidsToLayout newWmPids layout, focus = newFocus }
     , if newFocus /= focus then
-        newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> onFocus)) |> Maybe.withDefault Cmd.none
+        newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
 
       else
         Cmd.none
@@ -112,6 +113,9 @@ update msg windowManager =
 
         PrevWindow ->
             prevWindow windowManager
+
+        SyncProcesses pids ->
+            syncProcesses pids windowManager
 
 
 windowId : WindowManager -> ProcessTable.Pid -> String
