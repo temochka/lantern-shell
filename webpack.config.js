@@ -22,9 +22,17 @@ module.exports = {
   devServer: {
     contentBase: path.join(__dirname, "dist"),
     compress: true,
-    port: 8080
+    port: 8080,
+    proxy: {
+      "/_api/ws": {
+        target: "ws://localhost:4666",
+        ws: true
+      },
+      "/_api": "http://localhost:4666"
+    }
   },
   resolve: {
+    extensions: [".ts", ".js"],
     alias: {
       LanternShell: path.resolve(__dirname, "src/LanternShell.elm")
     }

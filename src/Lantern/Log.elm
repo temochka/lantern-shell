@@ -31,6 +31,9 @@ new =
 logRequest : Log -> Lantern.Request.Id -> Lantern.Request.Request -> Log
 logRequest currentLog requestId request =
     case request of
+        Lantern.Request.Nop ->
+            log currentLog Info ("[#" ++ requestId ++ "] Nop request")
+
         Lantern.Request.Echo text ->
             log currentLog Info ("[#" ++ requestId ++ "] Echo request: " ++ text)
 
@@ -50,6 +53,12 @@ logRequest currentLog requestId request =
 logResponse : Log -> Lantern.Request.Id -> Lantern.Response.Response -> Log
 logResponse currentLog requestId response =
     case response of
+        Lantern.Response.Nop ->
+            log currentLog Info ("[#" ++ requestId ++ "] Server acked the nop")
+
+        Lantern.Response.Hello ->
+            log currentLog Info ("[#" ++ requestId ++ "] Server says hello")
+
         Lantern.Response.Echo text ->
             log currentLog Info ("[#" ++ requestId ++ "] Echo response: " ++ text)
 
@@ -66,7 +75,10 @@ logResponse currentLog requestId response =
             log currentLog Info ("[#" ++ requestId ++ "] Migration response: ack")
 
         Lantern.Response.Unknown payload ->
-            log currentLog Error ("[#" ++ requestId ++ "] Unknown resposne: " ++ Json.Encode.encode 0 payload)
+            log currentLog Error ("[#" ++ requestId ++ "] Unknown response: " ++ Json.Encode.encode 0 payload)
+
+        Lantern.Response.FatalError error ->
+            log currentLog Error ("[#" ++ requestId ++ "] Fatal server error:" ++ error)
 
 
 log : Log -> Level -> String -> Log

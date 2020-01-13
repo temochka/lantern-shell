@@ -22,6 +22,12 @@ response =
             |> Json.Decode.andThen
                 (\requestType ->
                     case requestType of
+                        "Nop" ->
+                            Json.Decode.succeed Response.Nop
+
+                        "Hello" ->
+                            Json.Decode.succeed Response.Hello
+
                         "ReaderQuery" ->
                             Json.Decode.field "results" Json.Decode.value
                                 |> Json.Decode.map Response.ReaderQuery
@@ -40,6 +46,10 @@ response =
 
                         "Migration" ->
                             Json.Decode.succeed Response.Migration
+
+                        "FatalError" ->
+                            Json.Decode.map Response.FatalError
+                                (Json.Decode.field "error" Json.Decode.string)
 
                         _ ->
                             Json.Decode.map Response.Unknown Json.Decode.value

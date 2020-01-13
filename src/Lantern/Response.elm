@@ -6,9 +6,12 @@ import Lantern.Request
 
 
 type Response
-    = Echo String
+    = Hello
+    | Nop
+    | Echo String
     | ReaderQuery Lantern.Query.ReaderResult
     | WriterQuery Lantern.Query.WriterResult
     | LiveQuery (List (List Lantern.Query.ReaderResult))
     | Migration
+    | FatalError String
     | Unknown Json.Decode.Value

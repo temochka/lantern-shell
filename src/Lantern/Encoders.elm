@@ -35,6 +35,12 @@ queryArguments arguments =
 request : String -> Request.Request -> Json.Encode.Value
 request id encodedRequest =
     case encodedRequest of
+        Request.Nop ->
+            Json.Encode.object
+                [ ( "id", Json.Encode.string id )
+                , ( "type", Json.Encode.string "Nop" )
+                ]
+
         Request.Echo text ->
             Json.Encode.object
                 [ ( "id", Json.Encode.string id )

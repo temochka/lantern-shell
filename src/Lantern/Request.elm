@@ -9,7 +9,8 @@ type alias Id =
 
 
 type Request
-    = Echo String
+    = Nop
+    | Echo String
     | ReaderQuery Query.Query
     | WriterQuery Query.Query
     | LiveQuery (List (List Query.Query))

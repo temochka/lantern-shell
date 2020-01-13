@@ -68,6 +68,7 @@ type alias Model =
     , appLauncher : LanternUi.FuzzySelect.FuzzySelect LauncherEntry
     , theme : LanternUi.Theme.Theme
     , liveQueriesCache : Dict ProcessTable.Pid (List (LiveQuery Msg))
+    , lanternPassword : String
     }
 
 
@@ -98,6 +99,7 @@ init _ =
 
         model =
             { lanternConnection = lanternConnection
+            , lanternPassword = ""
             , processTable = processTable
             , windowManager = LanternUi.WindowManager.new (ProcessTable.pids processTable)
             , appLauncher =
@@ -155,6 +157,8 @@ type Msg
     | AppLauncherMessage (LanternUi.FuzzySelect.Message LauncherEntry)
     | AppMessage ProcessTable.Pid LanternShell.Apps.Message
     | CloseApp ProcessTable.Pid
+    | UpdatePassword String
+    | Authenticate
     | FocusAppLauncher
     | LanternMessage (Lantern.Message Msg)
     | LaunchApp LauncherEntry
@@ -181,6 +185,11 @@ update msg model =
     case msg of
         Nop ->
             ( model, Cmd.none )
+
+        Authenticate ->
+            ( { model | lanternPassword = "" }
+            , Lantern.authenticate model.lanternPassword |> Cmd.map LanternMessage
+            )
 
         CloseApp pid ->
             let
@@ -270,6 +279,9 @@ update msg model =
                     )
                 |> Maybe.withDefault ( model, Cmd.none )
 
+        UpdatePassword lanternPassword ->
+            ( { model | lanternPassword = lanternPassword }, Cmd.none )
+
 
 handleShortcuts : Model -> Json.Decode.Decoder Msg
 handleShortcuts model =
@@ -347,10 +359,36 @@ renderAppLauncher model =
         ]
 
 
-view : Model -> Html Msg
-view model =
+authenticatedView : Model -> Element Msg
+authenticatedView model =
     LanternUi.columnLayout
         model.theme
         []
         [ renderAppLauncher model, tools model ]
+
+
+unauthenticatedView : Model -> Element Msg
+unauthenticatedView model =
+    LanternUi.columnLayout
+        model.theme
+        []
+        [ Element.Input.currentPassword []
+            { onChange = UpdatePassword
+            , text = model.lanternPassword
+            , placeholder = Just (Element.Input.placeholder [] (Element.text "Please enter the master password"))
+            , label = Element.Input.labelHidden "Reader query"
+            , show = False
+            }
+        , Element.Input.button [] { onPress = Just Authenticate, label = Element.text "Sign in" }
+        ]
+
+
+view : Model -> Html Msg
+view model =
+    (if Lantern.isAuthenticated model.lanternConnection then
+        authenticatedView model
+
+     else
+        unauthenticatedView model
+    )
         |> Element.layout [ Element.width Element.fill, Element.padding 20 ]
