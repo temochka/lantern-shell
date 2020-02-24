@@ -28,6 +28,9 @@ module.exports = {
         target: "ws://localhost:4666",
         ws: true
       },
+      "/": "http://localhost:4666",
+      "index.html": "http://localhost:4666",
+      "index.htm": "http://localhost:4666",
       "/_api": "http://localhost:4666"
     }
   },

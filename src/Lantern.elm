@@ -4,9 +4,7 @@ module Lantern exposing
     , Message
     , RequestPort
     , ResponsePort
-    , authenticate
     , echo
-    , isAuthenticated
     , liveQueries
     , log
     , map
@@ -18,9 +16,8 @@ module Lantern exposing
     , writerQuery
     )
 
+import Browser.Navigation
 import Dict exposing (Dict)
-import Element exposing (Element)
-import Http
 import Json.Decode
 import Json.Encode
 import Lantern.Decoders as Decoders
@@ -66,14 +63,12 @@ type alias State msg =
     , requestsInFlight : RequestsInFlight msg
     , requestPort : RequestPort msg
     , log : Log
-    , authenticated : Bool
     }
 
 
 type Message msg
     = RawResponse RawResponse
     | Request Lantern.Request.Request (ResponseHandler msg)
-    | Authenticated (Result Http.Error Bool)
 
 
 type alias ResponseHandler msg =
@@ -98,13 +93,7 @@ newConnection requestPort =
         , requestsInFlight = Dict.empty
         , requestPort = requestPort
         , log = Log.new
-        , authenticated = False
         }
-
-
-isAuthenticated : Connection msg -> Bool
-isAuthenticated (Connection { authenticated }) =
-    authenticated
 
 
 echo : String -> (String -> msg) -> Cmd (Message msg)
@@ -199,15 +188,6 @@ liveQueries orderedQueries =
     Task.perform identity (Task.succeed (Request request handler))
 
 
-authenticate : String -> Cmd (Message msg)
-authenticate password =
-    Http.post
-        { url = "/_api/auth"
-        , body = Http.jsonBody (Json.Encode.object [ ( "password", Json.Encode.string password ) ])
-        , expect = Http.expectJson Authenticated (Json.Decode.succeed True)
-        }
-
-
 migrate : Lantern.Query.Query -> (Bool -> msg) -> Cmd (Message msg)
 migrate query_ msg =
     let
@@ -225,22 +205,9 @@ migrate query_ msg =
     Task.perform identity (Task.succeed (Request request handler))
 
 
-nopMessage : Message msg
-nopMessage =
-    Request Lantern.Request.Nop (always [])
-
-
 update : Message msg -> Connection msg -> ( Connection msg, Cmd msg )
 update msg (Connection state) =
     case msg of
-        Authenticated result ->
-            case result of
-                Ok _ ->
-                    update nopMessage (Connection { state | authenticated = True })
-
-                _ ->
-                    Debug.todo "handle failures"
-
         Request request handler ->
             let
                 ( requestsCounter, requestId ) =
@@ -300,16 +267,16 @@ update msg (Connection state) =
             in
             case parsedResponse of
                 Ok ( id, (Lantern.Response.FatalError error) as response ) ->
-                    let
-                        authenticated =
-                            error /= "authentication_required"
-                    in
-                    ( Connection { state | log = Log.logResponse state.log id response, authenticated = authenticated }, Cmd.none )
+                    if error == "authentication_required" then
+                        ( Connection state, Browser.Navigation.reload )
+
+                    else
+                        ( Connection { state | log = Log.logResponse state.log id response }, Cmd.none )
 
                 Ok ( id, Lantern.Response.Hello as response ) ->
                     let
                         updatedConnection =
-                            Connection { state | log = Log.logResponse state.log id response, authenticated = True }
+                            Connection { state | log = Log.logResponse state.log id response }
                     in
                     state.stickyRequest
                         |> Maybe.map (\( request, handler ) -> update (Request request handler) updatedConnection)
@@ -353,9 +320,6 @@ log (Connection state) =
 map : (a -> b) -> Message a -> Message b
 map f msg =
     case msg of
-        Authenticated result ->
-            Authenticated result
-
         Request request handler ->
             Request request (\response -> List.map f (handler response))
 
