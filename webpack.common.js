@@ -1,4 +1,5 @@
 const path = require("path");
+const CopyPlugin = require("copy-webpack-plugin");
 
 module.exports = {
   entry: "./src/index.ts",
@@ -19,21 +20,14 @@ module.exports = {
     filename: "main.js",
     path: path.resolve(__dirname, "dist")
   },
-  devServer: {
-    contentBase: path.join(__dirname, "dist"),
-    compress: true,
-    port: 8080,
-    proxy: {
-      "/_api/ws": {
-        target: "ws://localhost:4666",
-        ws: true
-      },
-      "/": "http://localhost:4666",
-      "index.html": "http://localhost:4666",
-      "index.htm": "http://localhost:4666",
-      "/_api": "http://localhost:4666"
-    }
-  },
+  plugins: [
+    new CopyPlugin([
+      {
+        from: path.resolve(__dirname, "index.html"),
+        to: path.resolve(__dirname, "dist")
+      }
+    ])
+  ],
   resolve: {
     extensions: [".ts", ".js"],
     alias: {

@@ -1,5 +1,6 @@
-/dist/main.js
-/dist/.lantern
+/dist
 /elm-stuff
 /node_modules
+/.env
+/log
 
