@@ -24,7 +24,7 @@ namespace :deploy do
     on roles(:web) do
       schema_file = File.join(release_path, '.schema', 'schema.sql')
       execute :touch, schema_file
-      execute :chmod, '777', schema_file
+      execute :chmod, '666', schema_file
     end
   end
 
