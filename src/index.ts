@@ -5,8 +5,9 @@ const mountTarget = document.getElementById("main");
 
 if (mountTarget) {
   const app = Elm.LanternShell.init({ node: mountTarget });
+  const wsScheme = location.protocol.match(/^https/) ? "wss" : "ws";
   const connection = new WebSocketClient(
-    `ws://${window.location.host}/_api/ws`,
+    `${wsScheme}://${window.location.host}/_api/ws`,
     message => {
       app.ports.lanternResponsePort.send(message);
     }
