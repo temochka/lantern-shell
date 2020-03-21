@@ -4,6 +4,7 @@
   "description": "Development tools for the Lantern web server",
   "private": true,
   "scripts": {
+    "clean": "rm -rf dist/public",
     "build": "webpack --config webpack.dev.js",
     "build:prod": "webpack --config webpack.prod.js",
     "start": "webpack-dev-server --inline --hot --config webpack.dev.js",

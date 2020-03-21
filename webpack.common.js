@@ -18,13 +18,13 @@ module.exports = {
   },
   output: {
     filename: "main.js",
-    path: path.resolve(__dirname, "dist")
+    path: path.resolve(__dirname, "dist", "public")
   },
   plugins: [
     new CopyPlugin([
       {
         from: path.resolve(__dirname, "index.html"),
-        to: path.resolve(__dirname, "dist")
+        to: path.resolve(__dirname, "dist", "public")
       }
     ])
   ],

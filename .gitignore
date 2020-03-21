@@ -1,4 +1,5 @@
-/dist
+/dist/public
+/dist/.lantern
 /elm-stuff
 /node_modules
 /.env
