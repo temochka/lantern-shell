@@ -29,7 +29,14 @@ namespace :deploy do
     end
   end
 
+  task :restart_lantern do
+    on roles(:web) do
+      execute :sudo, 'systemctl', 'restart', 'lantern'
+    end
+  end
+
   before :starting, :build
   after :build, :compress
   after :updated, :set_schema_permissions
+  before :finished, :restart_lantern
 end
