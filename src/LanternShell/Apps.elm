@@ -4,6 +4,7 @@ module LanternShell.Apps exposing
     , Message
     , databaseExplorer
     , echo
+    , flashcardGenerator
     , lanternAppFor
     , logViewer
     , migrations
@@ -15,6 +16,7 @@ import Lantern
 import Lantern.App
 import LanternShell.Apps.DatabaseExplorer as DatabaseExplorerApp
 import LanternShell.Apps.Echo as EchoApp
+import LanternShell.Apps.FlashcardGenerator as FlashcardGeneratorApp
 import LanternShell.Apps.LogViewer as LogViewerApp
 import LanternShell.Apps.Migrations as MigrationsApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
@@ -31,6 +33,7 @@ type alias Context msg =
 type App
     = EchoApp EchoApp.Model
     | DatabaseExplorerApp DatabaseExplorerApp.Model
+    | FlashcardGeneratorApp FlashcardGeneratorApp.Model
     | LogViewerApp LogViewerApp.Model
     | MigrationsApp MigrationsApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
@@ -40,6 +43,7 @@ type App
 type Message
     = EchoMsg EchoApp.Message
     | DatabaseExplorerMsg DatabaseExplorerApp.Message
+    | FlashcardGeneratorMsg FlashcardGeneratorApp.Message
     | LogViewerMsg LogViewerApp.Message
     | MigrationsMsg MigrationsApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
@@ -49,11 +53,14 @@ type Message
 lanternAppFor : App -> (Context msg -> Lantern.App.App () App Message)
 lanternAppFor app =
     case app of
+        DatabaseExplorerApp _ ->
+            databaseExplorer
+
         EchoApp _ ->
             echo
 
-        DatabaseExplorerApp _ ->
-            databaseExplorer
+        FlashcardGeneratorApp _ ->
+            flashcardGenerator
 
         LogViewerApp _ ->
             logViewer
@@ -118,6 +125,32 @@ echo context =
         , context = \_ -> { theme = context.theme }
         }
         EchoApp.lanternApp
+
+
+flashcardGenerator : Context msg -> Lantern.App.App () App Message
+flashcardGenerator context =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    FlashcardGeneratorMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    FlashcardGeneratorApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = FlashcardGeneratorApp
+        , wrapMsg = FlashcardGeneratorMsg
+        , context = \_ -> { theme = context.theme }
+        }
+        FlashcardGeneratorApp.lanternApp
 
 
 logViewer : Context msg -> Lantern.App.App () App Message

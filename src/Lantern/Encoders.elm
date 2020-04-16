@@ -79,6 +79,29 @@ request id encodedRequest =
                 , ( "queries", Json.Encode.dict identity query queryDict )
                 ]
 
+        Request.HttpRequest { body, headers, url, method } ->
+            let
+                payload =
+                    Json.Encode.object
+                        [ ( "headers", Json.Encode.list (\( name, value ) -> Json.Encode.list Json.Encode.string [ name, value ]) headers )
+                        , ( "body"
+                          , case body of
+                                Just string ->
+                                    Json.Encode.string string
+
+                                Nothing ->
+                                    Json.Encode.null
+                          )
+                        , ( "url", Json.Encode.string url )
+                        , ( "method", Json.Encode.string method )
+                        ]
+            in
+            Json.Encode.object
+                [ ( "id", Json.Encode.string id )
+                , ( "type", Json.Encode.string "HttpRequest" )
+                , ( "request", payload )
+                ]
+
         Request.Migration ddl ->
             Json.Encode.object
                 [ ( "id", Json.Encode.string id )

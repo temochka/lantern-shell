@@ -109,6 +109,7 @@ init _ =
                         , ( "Show tables", \context -> (LanternShell.Apps.databaseExplorer context).init )
                         , ( "Run echo", \context -> (LanternShell.Apps.echo context).init )
                         , ( "Show logs", \context -> (LanternShell.Apps.logViewer context).init )
+                        , ( "Flashcard generator", \context -> (LanternShell.Apps.flashcardGenerator context).init )
                         ]
                     , placeholder = Nothing
                     }

@@ -1,8 +1,8 @@
 module Lantern.Response exposing (..)
 
 import Json.Decode
+import Lantern.Http as Http
 import Lantern.Query
-import Lantern.Request
 
 
 type Response
@@ -12,6 +12,7 @@ type Response
     | ReaderQuery Lantern.Query.ReaderResult
     | WriterQuery Lantern.Query.WriterResult
     | LiveQuery (List (List Lantern.Query.ReaderResult))
+    | HttpRequest Http.Response
     | Migration
     | FatalError String
     | Unknown Json.Decode.Value

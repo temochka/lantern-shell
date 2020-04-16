@@ -1,6 +1,6 @@
 module Lantern.Request exposing (..)
 
-import Json.Encode
+import Lantern.Http as Http
 import Lantern.Query as Query
 
 
@@ -15,3 +15,4 @@ type Request
     | WriterQuery Query.Query
     | LiveQuery (List (List Query.Query))
     | Migration Query.Query
+    | HttpRequest Http.RequestPayload
