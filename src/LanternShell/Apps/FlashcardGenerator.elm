@@ -12,6 +12,7 @@ import Lantern
 import Lantern.App
 import Lantern.Http
 import Lantern.Query
+import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
 import LanternUi.Theme
 import Url.Builder
@@ -33,9 +34,12 @@ type alias Context =
 
 type Message
     = UpdateApiCredentials ApiCredentials
+    | FuzzySelectMessage String LanternUi.FuzzySelect.Message
     | ConfigUpdated Bool
     | UpdateUserInput String
-    | UpdateDefinition String (Result Lantern.Http.Error Definition)
+    | LoadDefinition String (Result Lantern.Http.Error Definition)
+    | LoadTranslation String (Result Lantern.Http.Error Translation)
+    | UpdateUserTranslation String String
     | LoadedCredentials (Result Lantern.Error (List ( String, String )))
     | NextStep
     | DownloadCards
@@ -53,6 +57,7 @@ type Sense
         { definitions : List String
         , examples : List String
         , subsenses : List Sense
+        , id : String
         }
 
 
@@ -69,15 +74,28 @@ type alias Definition =
     }
 
 
-type RemoteDefinition
+type alias TranslationEntry =
+    { pos : String
+    , translations : List String
+    }
+
+
+type alias Translation =
+    { word : String
+    , translationEntries : List TranslationEntry
+    }
+
+
+type Remote a
     = Loading
-    | Loaded Definition
     | Errored String
+    | Loaded a
 
 
 type alias Word =
     { id : String
-    , definition : RemoteDefinition
+    , definition : Remote Definition
+    , translation : Remote Translation
     }
 
 
@@ -87,11 +105,17 @@ type alias ApiCredentials =
     }
 
 
+type alias UserTranslations =
+    Dict String String
+
+
 type alias Model =
     { userInput : String
     , words : List String
     , cache : Dict String Word
+    , userTranslations : UserTranslations
     , uiState : UiState
+    , fuzzySelect : ( String, FuzzySelect )
     }
 
 
@@ -141,8 +165,8 @@ obscureDefinition word =
     String.replace word "[…]"
 
 
-renderFlashCardForExport : Definition -> FlashCardForExport
-renderFlashCardForExport { word, lexicalEntries } =
+renderFlashCardForExport : UserTranslations -> Definition -> FlashCardForExport
+renderFlashCardForExport userTranslations { word, lexicalEntries } =
     let
         formatSenseFront (Sense { examples }) =
             examples
@@ -151,9 +175,15 @@ renderFlashCardForExport { word, lexicalEntries } =
                 |> List.intersperse (Html.String.text " | ")
                 |> Html.String.li []
 
-        formatSenseBack (Sense { definitions, subsenses }) =
+        formatSenseBack (Sense { id, definitions, subsenses }) =
             Html.String.li []
                 [ Html.String.text (definitions |> String.join ";" |> obscureDefinition word)
+                , case Dict.get id userTranslations |> Maybe.withDefault "" of
+                    "" ->
+                        Html.String.text ""
+
+                    translation ->
+                        Html.String.text (" (" ++ translation ++ ")")
                 , if List.isEmpty subsenses then
                     Html.String.text ""
 
@@ -170,7 +200,7 @@ renderFlashCardForExport { word, lexicalEntries } =
                             , Html.String.text " "
                             , Html.String.text ("[" ++ (pronunciation |> Maybe.withDefault "?") ++ "]")
                             , Html.String.text " "
-                            , Html.String.text ("(" ++ String.toLower pos ++ "),\n")
+                            , Html.String.text ("(" ++ pos ++ "),\n")
                             , senses |> List.map formatSenseFront |> Html.String.ol []
                             ]
                     )
@@ -192,9 +222,23 @@ renderFlashCardForExport { word, lexicalEntries } =
     }
 
 
-renderFlashCard : Definition -> FlashCard
-renderFlashCard { word, lexicalEntries } =
+renderFlashCard :
+    LanternUi.Theme.Theme
+    ->
+        { fuzzySelectState : ( String, FuzzySelect )
+        , userTranslations : UserTranslations
+        , definition : Definition
+        , translation : Translation
+        }
+    -> FlashCard
+renderFlashCard theme ({ userTranslations, definition, translation } as options) =
     let
+        { word, lexicalEntries } =
+            definition
+
+        ( fuzzySelectSenseId, fuzzySelectState ) =
+            options.fuzzySelectState
+
         formatSenseFront (Sense { examples }) =
             examples
                 |> listWithDefault "–"
@@ -202,16 +246,44 @@ renderFlashCard { word, lexicalEntries } =
                 |> List.intersperse (Element.text " | ")
                 |> Element.paragraph [ Element.width Element.fill ]
 
-        formatSenseBack marker (Sense { definitions, subsenses }) =
+        formatSenseBack marker entryPos (Sense { id, definitions, subsenses }) =
             Element.row [ Element.width Element.fill, Element.spacing 5 ]
                 [ Element.el [ Element.alignTop ] (Element.text marker)
                 , Element.paragraph [ Element.width Element.fill ]
                     [ Element.text (definitions |> String.join ";" |> obscureDefinition word)
+                    , LanternUi.FuzzySelect.fuzzySelect
+                        theme
+                        { onQueryChange = UpdateUserTranslation id >> Lantern.App.Message
+                        , query = Dict.get id userTranslations |> Maybe.withDefault ""
+                        , placeholder = Just (Element.Input.placeholder [] (Element.text "Translation"))
+                        , label = Element.Input.labelHidden "Translation"
+                        , id = Nothing
+                        , onInternalMessage = FuzzySelectMessage id >> Lantern.App.Message
+                        , onOptionSelect = UpdateUserTranslation id >> Lantern.App.Message
+                        , options =
+                            translation.translationEntries
+                                |> List.filterMap
+                                    (\{ pos, translations } ->
+                                        if pos == entryPos then
+                                            Just translations
+
+                                        else
+                                            Nothing
+                                    )
+                                |> List.concat
+                                |> List.map (\t -> ( t, t ))
+                        , state =
+                            if id == fuzzySelectSenseId then
+                                fuzzySelectState
+
+                            else
+                                Nothing
+                        }
                     , if List.isEmpty subsenses then
                         Element.none
 
                       else
-                        subsenses |> List.map (formatSenseBack "◦") |> Element.column [ Element.width Element.fill, Element.spacing 5 ]
+                        subsenses |> List.map (formatSenseBack "◦" entryPos) |> Element.column [ Element.width Element.fill, Element.spacing 5 ]
                     ]
                 ]
 
@@ -226,7 +298,7 @@ renderFlashCard { word, lexicalEntries } =
                                 , Element.text " "
                                 , Element.text ("[" ++ (pronunciation |> Maybe.withDefault "?") ++ "]")
                                 , Element.text " "
-                                , Element.text ("(" ++ String.toLower pos ++ "),\n")
+                                , Element.text ("(" ++ pos ++ "),\n")
                                 ]
                             , senses
                                 |> List.indexedMap
@@ -244,13 +316,13 @@ renderFlashCard { word, lexicalEntries } =
         back =
             lexicalEntries
                 |> List.map
-                    (\{ senses } ->
+                    (\{ pos, senses } ->
                         Element.column [ Element.width Element.fill, Element.spacing 5 ]
                             [ Element.paragraph [] [ Element.text ("[" ++ obscureWord word ++ "]") ]
                             , senses
                                 |> List.indexedMap
                                     (\i el ->
-                                        formatSenseBack (String.fromInt (i + 1) ++ ".") el
+                                        formatSenseBack (String.fromInt (i + 1) ++ ".") pos el
                                     )
                                 |> Element.column [ Element.width Element.fill, Element.spacing 5 ]
                             ]
@@ -264,8 +336,9 @@ renderFlashCard { word, lexicalEntries } =
 
 sense : Json.Decode.Decoder Sense
 sense =
-    Json.Decode.map3
-        (\definitions examples subsenses -> Sense { definitions = definitions, examples = examples, subsenses = subsenses })
+    Json.Decode.map4
+        (\id definitions examples subsenses -> Sense { definitions = definitions, examples = examples, subsenses = subsenses, id = id })
+        (Json.Decode.field "id" Json.Decode.string)
         (Json.Decode.oneOf [ Json.Decode.field "definitions" (Json.Decode.list Json.Decode.string), Json.Decode.succeed [] ])
         (Json.Decode.oneOf [ Json.Decode.field "examples" (Json.Decode.list (Json.Decode.field "text" Json.Decode.string)), Json.Decode.succeed [] ])
         (Json.Decode.oneOf [ Json.Decode.field "subsenses" (Json.Decode.list (Json.Decode.lazy (\_ -> sense))), Json.Decode.succeed [] ])
@@ -291,7 +364,7 @@ definitionDecoder =
 
         lexicalEntry =
             Json.Decode.map3 LexicalEntry
-                (Json.Decode.at [ "lexicalCategory", "text" ] Json.Decode.string)
+                (Json.Decode.at [ "lexicalCategory", "id" ] Json.Decode.string)
                 (Json.Decode.field "pronunciations" findIpa)
                 (Json.Decode.field "entries" (Json.Decode.index 0 (Json.Decode.field "senses" (Json.Decode.list sense))))
 
@@ -303,12 +376,33 @@ definitionDecoder =
     Json.Decode.field "results" (Json.Decode.index 0 result)
 
 
+translationDecoder : Json.Decode.Decoder Translation
+translationDecoder =
+    let
+        translationSense =
+            Json.Decode.oneOf [ Json.Decode.field "translations" (Json.Decode.list (Json.Decode.field "text" Json.Decode.string)), Json.Decode.succeed [] ]
+
+        translationEntry =
+            Json.Decode.map2 TranslationEntry
+                (Json.Decode.at [ "lexicalCategory", "id" ] Json.Decode.string)
+                (Json.Decode.field "entries" (Json.Decode.index 0 (Json.Decode.field "senses" (Json.Decode.list translationSense |> Json.Decode.map List.concat))))
+
+        result =
+            Json.Decode.map2 Translation
+                (Json.Decode.field "id" Json.Decode.string)
+                (Json.Decode.field "lexicalEntries" (Json.Decode.list translationEntry))
+    in
+    Json.Decode.field "results" (Json.Decode.index 0 result)
+
+
 init : ( Model, Cmd (Lantern.App.Message Message) )
 init =
     ( { userInput = ""
       , words = []
       , cache = Dict.empty
       , uiState = Config { apiCredentials = Nothing }
+      , userTranslations = Dict.empty
+      , fuzzySelect = ( "", Nothing )
       }
     , Lantern.readerQuery
         (Lantern.Query.withArguments
@@ -328,8 +422,8 @@ parseWords =
     String.lines
 
 
-loadWord : ApiCredentials -> String -> Cmd (Lantern.App.Message Message)
-loadWord { appId, appKey } word =
+fetchDefinition : ApiCredentials -> String -> Cmd (Lantern.App.Message Message)
+fetchDefinition { appId, appKey } word =
     Lantern.httpRequest
         { method = "GET"
         , headers =
@@ -341,7 +435,25 @@ loadWord { appId, appKey } word =
             Url.Builder.crossOrigin "https://od-api.oxforddictionaries.com"
                 [ "api", "v2", "entries", "en-us", word ]
                 []
-        , expect = Lantern.Http.expectJson (UpdateDefinition word) definitionDecoder
+        , expect = Lantern.Http.expectJson (LoadDefinition word) definitionDecoder
+        }
+        |> Lantern.App.call
+
+
+fetchTranslation : ApiCredentials -> String -> Cmd (Lantern.App.Message Message)
+fetchTranslation { appId, appKey } word =
+    Lantern.httpRequest
+        { method = "GET"
+        , headers =
+            [ ( "app_id", appId )
+            , ( "app_key", appKey )
+            ]
+        , body = Nothing
+        , url =
+            Url.Builder.crossOrigin "https://od-api.oxforddictionaries.com"
+                [ "api", "v2", "translations", "en", "ru", word ]
+                []
+        , expect = Lantern.Http.expectJson (LoadTranslation word) translationDecoder
         }
         |> Lantern.App.call
 
@@ -359,30 +471,41 @@ refreshCache apiCredentials ({ words, cache } as model) =
 
         newCache =
             List.foldl
-                (\word currentCache -> Dict.update word (cacheDefault { id = word, definition = Loading }) currentCache)
+                (\word currentCache -> Dict.update word (cacheDefault { id = word, definition = Loading, translation = Loading }) currentCache)
                 cache
                 words
 
-        requests =
+        definitionRequests =
             newCache
                 |> Dict.values
                 |> List.filterMap
                     (\{ id, definition } ->
                         if definition == Loading then
-                            Just (loadWord apiCredentials id)
+                            Just (fetchDefinition apiCredentials id)
 
                         else
                             Nothing
                     )
-                |> Cmd.batch
+
+        translationRequests =
+            newCache
+                |> Dict.values
+                |> List.filterMap
+                    (\{ id, translation } ->
+                        if translation == Loading then
+                            Just (fetchTranslation apiCredentials id)
+
+                        else
+                            Nothing
+                    )
     in
-    ( { model | cache = newCache }, requests )
+    ( { model | cache = newCache }, definitionRequests ++ translationRequests |> Cmd.batch )
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg model =
     case msg of
-        UpdateDefinition word result ->
+        LoadDefinition word result ->
             let
                 definition =
                     case result of
@@ -392,7 +515,50 @@ update msg model =
                         Err err ->
                             Errored (Lantern.Http.errorToString err)
             in
-            ( { model | cache = Dict.insert word { id = word, definition = definition } model.cache }, Cmd.none )
+            ( { model
+                | cache =
+                    Dict.update word
+                        (\current ->
+                            case current of
+                                Just w ->
+                                    Just { w | definition = definition }
+
+                                Nothing ->
+                                    current
+                        )
+                        model.cache
+              }
+            , Cmd.none
+            )
+
+        LoadTranslation word result ->
+            let
+                translation =
+                    case result of
+                        Ok def ->
+                            Loaded def
+
+                        Err err ->
+                            Errored (Lantern.Http.errorToString err)
+            in
+            ( { model
+                | cache =
+                    Dict.update word
+                        (\current ->
+                            case current of
+                                Just w ->
+                                    Just { w | translation = translation }
+
+                                Nothing ->
+                                    current
+                        )
+                        model.cache
+              }
+            , Cmd.none
+            )
+
+        UpdateUserTranslation senseId translation ->
+            ( { model | userTranslations = Dict.insert senseId translation model.userTranslations }, Cmd.none )
 
         UpdateUserInput userInput ->
             ( { model | userInput = userInput }, Cmd.none )
@@ -493,7 +659,7 @@ update msg model =
                                                 _ ->
                                                     Nothing
                                         )
-                                    |> Maybe.map renderFlashCardForExport
+                                    |> Maybe.map (renderFlashCardForExport model.userTranslations)
                             )
                         |> List.map (\{ front, back } -> [ Html.String.toString 0 front, Html.String.toString 0 back ])
             in
@@ -502,17 +668,42 @@ update msg model =
                 |> Cmd.map Lantern.App.Message
             )
 
+        FuzzySelectMessage id foreignMsg ->
+            ( { model
+                | fuzzySelect =
+                    model.fuzzySelect
+                        |> Tuple.mapSecond (LanternUi.FuzzySelect.update foreignMsg)
+                        |> Tuple.mapFirst (always id)
+              }
+            , Cmd.none
+            )
 
-flashCard : Word -> Element (Lantern.App.Message Message)
-flashCard { id, definition } =
+
+flashCard : LanternUi.Theme.Theme -> ( String, FuzzySelect ) -> UserTranslations -> Word -> Element (Lantern.App.Message Message)
+flashCard theme fuzzySelectState userTranslations { id, definition, translation } =
     let
+        _ =
+            Debug.log "translation" translation
+
         content =
             case definition of
                 Loading ->
                     { front = Element.text id, back = Element.text "Loading..." }
 
                 Loaded def ->
-                    renderFlashCard def
+                    renderFlashCard
+                        theme
+                        { userTranslations = userTranslations
+                        , definition = def
+                        , fuzzySelectState = fuzzySelectState
+                        , translation =
+                            case translation of
+                                Loaded tr ->
+                                    tr
+
+                                _ ->
+                                    { word = id, translationEntries = [] }
+                        }
 
                 Errored msg ->
                     { front = Element.text id, back = Element.text ("Error: " ++ msg) }
@@ -524,13 +715,13 @@ flashCard { id, definition } =
         ]
 
 
-flashCardForExport : Word -> Element (Lantern.App.Message Message)
-flashCardForExport { definition } =
+flashCardForExport : UserTranslations -> Word -> Element (Lantern.App.Message Message)
+flashCardForExport userTranslations { definition } =
     let
         content =
             case definition of
                 Loaded def ->
-                    Just (renderFlashCardForExport def)
+                    Just (renderFlashCardForExport userTranslations def)
 
                 _ ->
                     Nothing
@@ -548,7 +739,7 @@ flashCardForExport { definition } =
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)
-view { theme } { uiState, userInput, words, cache } =
+view { theme } { fuzzySelect, userTranslations, uiState, userInput, words, cache } =
     case uiState of
         Config { apiCredentials } ->
             case apiCredentials of
@@ -605,7 +796,7 @@ view { theme } { uiState, userInput, words, cache } =
             Element.column
                 [ Element.width Element.fill ]
                 [ words
-                    |> List.filterMap (\word -> Dict.get word cache |> Maybe.map flashCard)
+                    |> List.filterMap (\word -> Dict.get word cache |> Maybe.map (flashCard theme fuzzySelect userTranslations))
                     |> Element.column [ Element.width Element.fill ]
                 , LanternUi.Input.button theme
                     []
@@ -618,7 +809,7 @@ view { theme } { uiState, userInput, words, cache } =
             Element.column
                 [ Element.width Element.fill ]
                 [ words
-                    |> List.filterMap (\word -> Dict.get word cache |> Maybe.map flashCardForExport)
+                    |> List.filterMap (\word -> Dict.get word cache |> Maybe.map (flashCardForExport userTranslations))
                     |> Element.column [ Element.width Element.fill ]
                 , LanternUi.Input.button theme
                     []
