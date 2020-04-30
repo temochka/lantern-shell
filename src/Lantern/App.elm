@@ -1,4 +1,4 @@
-module Lantern.App exposing (App, Message(..), call, liveApp, mount, simpleApp)
+module Lantern.App exposing (App, Message(..), app, call, liveApp, mount, simpleApp)
 
 import Element exposing (Element)
 import Lantern
@@ -51,6 +51,24 @@ liveApp def =
     }
 
 
+app :
+    { init : ( model, Cmd (Message msg) )
+    , view :
+        ctx
+        -> model
+        -> Element (Message msg)
+    , update : msg -> model -> ( model, Cmd (Message msg) )
+    , liveQueries : Maybe (model -> List (LiveQuery msg))
+    }
+    -> App ctx model msg
+app def =
+    { init = def.init
+    , view = def.view
+    , update = def.update
+    , liveQueries = def.liveQueries |> Maybe.withDefault (always [])
+    }
+
+
 simpleApp :
     { init : model
     , view :
@@ -77,7 +95,7 @@ mount :
     }
     -> App ctx appModel appMsg
     -> App () rootModel rootMsg
-mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } app =
+mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } mountedApp =
     let
         wrapResult ( appModel, appCmd ) =
             ( wrapModel appModel, Cmd.map (mapMessage wrapMsg) appCmd )
@@ -85,7 +103,7 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } app =
         wrappedUpdate rootMsg rootModel =
             Maybe.map2
                 (\appMsg appModel ->
-                    app.update appMsg appModel |> wrapResult
+                    mountedApp.update appMsg appModel |> wrapResult
                 )
                 (unwrapMsg rootMsg)
                 (unwrapModel rootModel)
@@ -94,16 +112,16 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } app =
         wrappedView _ rootModel =
             rootModel
                 |> unwrapModel
-                |> Maybe.map (app.view (context rootModel) >> Element.map (mapMessage wrapMsg))
+                |> Maybe.map (mountedApp.view (context rootModel) >> Element.map (mapMessage wrapMsg))
                 |> Maybe.withDefault Element.none
 
         wrappedLiveQueries rootModel =
             rootModel
                 |> unwrapModel
-                |> Maybe.map (app.liveQueries >> List.map (Lantern.LiveQuery.map wrapMsg))
+                |> Maybe.map (mountedApp.liveQueries >> List.map (Lantern.LiveQuery.map wrapMsg))
                 |> Maybe.withDefault []
     in
-    { init = app.init |> wrapResult
+    { init = mountedApp.init |> wrapResult
     , view = wrappedView
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries

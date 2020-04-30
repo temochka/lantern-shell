@@ -65,7 +65,8 @@ type alias Model =
     { lanternConnection : Lantern.Connection Msg
     , processTable : ProcessTable LanternShell.Apps.App
     , windowManager : LanternUi.WindowManager.WindowManager
-    , appLauncher : LanternUi.FuzzySelect.FuzzySelect LauncherEntry
+    , appLauncherQuery : String
+    , fuzzySelect : LanternUi.FuzzySelect.FuzzySelect
     , theme : LanternUi.Theme.Theme
     , liveQueriesCache : Dict ProcessTable.Pid (List (LiveQuery Msg))
     }
@@ -100,21 +101,10 @@ init _ =
             { lanternConnection = lanternConnection
             , processTable = processTable
             , windowManager = LanternUi.WindowManager.new (ProcessTable.pids processTable)
-            , appLauncher =
-                LanternUi.FuzzySelect.new
-                    { options =
-                        [ ( "Run query", \context -> (LanternShell.Apps.readerQuery context).init )
-                        , ( "Run mutator", \context -> (LanternShell.Apps.writerQuery context).init )
-                        , ( "Run migration", \context -> (LanternShell.Apps.migrations context).init )
-                        , ( "Show tables", \context -> (LanternShell.Apps.databaseExplorer context).init )
-                        , ( "Run echo", \context -> (LanternShell.Apps.echo context).init )
-                        , ( "Show logs", \context -> (LanternShell.Apps.logViewer context).init )
-                        ]
-                    , placeholder = Nothing
-                    }
-                    |> LanternUi.FuzzySelect.setId "lanternAppLauncher"
+            , fuzzySelect = Nothing
             , theme = initialTheme
             , liveQueriesCache = Dict.empty
+            , appLauncherQuery = ""
             }
 
         liveQueriesCache =
@@ -152,13 +142,14 @@ subscriptions model =
 
 type Msg
     = Nop
-    | AppLauncherMessage (LanternUi.FuzzySelect.Message LauncherEntry)
+    | AppLauncherMessage LanternUi.FuzzySelect.Message
     | AppMessage ProcessTable.Pid LanternShell.Apps.Message
     | CloseApp ProcessTable.Pid
     | FocusAppLauncher
     | LanternMessage (Lantern.Message Msg)
     | LaunchApp LauncherEntry
     | WindowManagerMessage LanternUi.WindowManager.Message
+    | UpdateLauncherQuery String
 
 
 threadModel : model -> List (model -> ( model, Cmd msg )) -> ( model, Cmd msg )
@@ -201,7 +192,7 @@ update msg model =
             ( { model | lanternConnection = lanternConnection }, lanternCmd )
 
         AppLauncherMessage proxiedMsg ->
-            ( { model | appLauncher = LanternUi.FuzzySelect.update proxiedMsg model.appLauncher }, Cmd.none )
+            ( { model | fuzzySelect = LanternUi.FuzzySelect.update proxiedMsg model.fuzzySelect }, Cmd.none )
 
         LaunchApp launcher ->
             let
@@ -214,7 +205,7 @@ update msg model =
             [ \_ ->
                 ( { model
                     | processTable = newProcessTable
-                    , appLauncher = LanternUi.FuzzySelect.reset model.appLauncher
+                    , fuzzySelect = Nothing
                   }
                 , Cmd.map (wrapAppMessage newProcessTable.pid) appCmd
                 )
@@ -269,6 +260,9 @@ update msg model =
                         )
                     )
                 |> Maybe.withDefault ( model, Cmd.none )
+
+        UpdateLauncherQuery query ->
+            ( { model | appLauncherQuery = query }, Cmd.none )
 
 
 handleShortcuts : Model -> Json.Decode.Decoder Msg
@@ -343,7 +337,26 @@ renderAppLauncher model =
     Element.row
         [ Element.width Element.fill, Element.spacing 10 ]
         [ Element.text ">"
-        , LanternUi.FuzzySelect.render lightTheme model.appLauncher AppLauncherMessage LaunchApp
+        , LanternUi.FuzzySelect.fuzzySelect
+            lightTheme
+            { options =
+                [ ( "Run query", \context -> (LanternShell.Apps.readerQuery context).init )
+                , ( "Run mutator", \context -> (LanternShell.Apps.writerQuery context).init )
+                , ( "Run migration", \context -> (LanternShell.Apps.migrations context).init )
+                , ( "Show tables", \context -> (LanternShell.Apps.databaseExplorer context).init )
+                , ( "Run echo", \context -> (LanternShell.Apps.echo context).init )
+                , ( "Show logs", \context -> (LanternShell.Apps.logViewer context).init )
+                , ( "Flashcard generator", \context -> (LanternShell.Apps.flashcardGenerator context).init )
+                ]
+            , placeholder = Nothing
+            , label = Element.Input.labelHidden "Launch app"
+            , id = Just "lanternAppLauncher"
+            , onInternalMessage = AppLauncherMessage
+            , onOptionSelect = LaunchApp
+            , onQueryChange = UpdateLauncherQuery
+            , state = model.fuzzySelect
+            , query = model.appLauncherQuery
+            }
         ]
 
 

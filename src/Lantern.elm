@@ -5,6 +5,7 @@ module Lantern exposing
     , RequestPort
     , ResponsePort
     , echo
+    , httpRequest
     , liveQueries
     , log
     , map
@@ -24,6 +25,7 @@ import Lantern.Decoders as Decoders
 import Lantern.Encoders as Encoders
 import Lantern.Errors
 import Lantern.Extra.Result
+import Lantern.Http
 import Lantern.LiveQuery exposing (LiveQuery(..))
 import Lantern.Log as Log exposing (Log)
 import Lantern.Query
@@ -134,6 +136,25 @@ readerQuery query decoder msg =
 
                 _ ->
                     [ msg (Err (Lantern.Errors.Error "Unexpected response")) ]
+    in
+    Task.perform identity (Task.succeed (Request request handler))
+
+
+httpRequest :
+    Lantern.Http.Request msg
+    -> Cmd (Message msg)
+httpRequest req =
+    let
+        request =
+            Lantern.Request.HttpRequest (Lantern.Http.requestPayload req)
+
+        handler response =
+            case response of
+                Lantern.Response.HttpRequest httpResponse ->
+                    [ req.expect httpResponse ]
+
+                _ ->
+                    []
     in
     Task.perform identity (Task.succeed (Request request handler))
 

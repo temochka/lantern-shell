@@ -40,6 +40,21 @@ response =
                             Json.Decode.field "results" (Json.Decode.dict Json.Decode.value)
                                 |> Json.Decode.map (dictToLiveQueryResponse >> Response.LiveQuery)
 
+                        "HttpRequest" ->
+                            let
+                                header =
+                                    Json.Decode.map2
+                                        Tuple.pair
+                                        (Json.Decode.index 0 Json.Decode.string)
+                                        (Json.Decode.index 1 Json.Decode.string)
+                            in
+                            Json.Decode.map3 (\status headers body -> { status = status, headers = headers, body = body })
+                                (Json.Decode.field "status" Json.Decode.int)
+                                (Json.Decode.field "headers" (Json.Decode.list header))
+                                (Json.Decode.field "body" (Json.Decode.maybe Json.Decode.string))
+                                |> Json.Decode.map Response.HttpRequest
+                                |> Json.Decode.field "response"
+
                         "Echo" ->
                             Json.Decode.field "text" Json.Decode.string
                                 |> Json.Decode.map Response.Echo

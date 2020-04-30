@@ -1,4 +1,4 @@
-module LanternUi.FuzzySelect exposing (FuzzySelect, Message, new, render, reset, setId, update)
+module LanternUi.FuzzySelect exposing (FuzzySelect, Message, fuzzySelect, update)
 
 import Element exposing (Element)
 import Element.Background
@@ -13,155 +13,139 @@ import LanternUi
 import LanternUi.Theme exposing (Theme)
 
 
-type alias FuzzySelect a =
-    { options : List ( String, a )
-    , cursor : Int
-    , matches : List ( String, a )
-    , query : String
-    , active : Bool
-    , placeholder : Maybe String
-    , id : Maybe String
-    }
+type alias FuzzySelect =
+    Maybe { cursor : Int }
 
 
-new : { options : List ( String, a ), placeholder : Maybe String } -> FuzzySelect a
-new { options, placeholder } =
-    { options = options
-    , matches = options
-    , cursor = 0
-    , query = ""
-    , placeholder = placeholder
-    , active = False
-    , id = Nothing
-    }
+init : FuzzySelect
+init =
+    Just { cursor = 0 }
 
 
-type Message a
-    = UpdateQuery String
-    | SetCursor Int
-    | MoveCursorDown
+type Message
+    = SetCursor Int
+    | Toggle FuzzySelect
+    | MoveCursorDown Int
     | MoveCursorUp
-    | Activate
-    | Deactivate
     | Nop
 
 
-setId : String -> FuzzySelect a -> FuzzySelect a
-setId id select =
-    { select | id = Just id }
-
-
-update : Message a -> FuzzySelect a -> FuzzySelect a
-update msg model =
+update : Message -> FuzzySelect -> FuzzySelect
+update msg maybeModel =
     case msg of
-        UpdateQuery query ->
-            { model
-                | active = True
-                , query = query
-                , cursor = 0
-                , matches = model.options |> List.filter (\( opt, _ ) -> String.contains (String.toLower query) (String.toLower opt))
-            }
-
         SetCursor cursor ->
-            { model | cursor = cursor }
+            Maybe.map (\model -> { model | cursor = cursor }) maybeModel
 
-        Activate ->
-            { model | active = True }
-
-        Deactivate ->
-            { model | active = False }
-
-        MoveCursorDown ->
-            let
-                newCursor =
-                    min (model.cursor + 1) (List.length model.matches - 1)
-            in
-            { model | cursor = newCursor }
+        MoveCursorDown maxCursor ->
+            Maybe.map (\model -> { model | cursor = min maxCursor (model.cursor + 1) }) maybeModel
 
         MoveCursorUp ->
-            let
-                newCursor =
-                    max 0 (model.cursor - 1)
-            in
-            { model | cursor = newCursor }
+            Maybe.map (\model -> { model | cursor = max 0 (model.cursor - 1) }) maybeModel
 
-        Nop ->
+        Toggle model ->
             model
 
-
-reset : FuzzySelect a -> FuzzySelect a
-reset select =
-    { select | active = False, query = "", cursor = 0, matches = select.options }
+        Nop ->
+            maybeModel
 
 
-selectedMatch : FuzzySelect a -> Maybe a
-selectedMatch { cursor, matches } =
+selectedMatch : Int -> List ( String, a ) -> Maybe a
+selectedMatch cursor matches =
     matches
-        |> List.drop cursor
+        |> List.drop (min cursor (List.length matches - 1))
         |> List.head
         |> Maybe.map Tuple.second
 
 
-render : Theme -> FuzzySelect a -> (Message a -> msg) -> (a -> msg) -> Element msg
-render theme select toMsg onSelected =
+fuzzySelect :
+    Theme
+    ->
+        { label : Element.Input.Label msg
+        , onQueryChange : String -> msg
+        , onOptionSelect : a -> msg
+        , onInternalMessage : Message -> msg
+        , options : List ( String, a )
+        , placeholder : Maybe (Element.Input.Placeholder msg)
+        , query : String
+        , state : FuzzySelect
+        , id : Maybe String
+        }
+    -> Element msg
+fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, options, placeholder, query, state, id } =
     let
+        matches =
+            options
+                |> List.filter
+                    (\( opt, _ ) ->
+                        String.contains (String.toLower query) (String.toLower opt)
+                    )
+
         handleKeyPress event =
             case event.keyCode of
                 Keyboard.Key.Up ->
-                    toMsg MoveCursorUp
+                    onInternalMessage MoveCursorUp
 
                 Keyboard.Key.Down ->
-                    toMsg MoveCursorDown
+                    onInternalMessage (MoveCursorDown (List.length options - 1))
 
                 Keyboard.Key.Escape ->
-                    toMsg Deactivate
+                    onInternalMessage (Toggle Nothing)
 
                 Keyboard.Key.Enter ->
-                    selectedMatch select
-                        |> Maybe.map onSelected
-                        |> Maybe.withDefault (toMsg Nop)
+                    state
+                        |> Maybe.andThen
+                            (\{ cursor } ->
+                                selectedMatch cursor matches
+                            )
+                        |> Maybe.map onOptionSelect
+                        |> Maybe.withDefault (onInternalMessage Nop)
 
                 _ ->
-                    toMsg Nop
+                    onInternalMessage Nop
 
         suggestions =
-            (if select.active then
-                select.matches
-                    |> List.indexedMap
-                        (\i ( description, option ) ->
-                            let
-                                bgColor =
-                                    if i == select.cursor then
-                                        theme.bgHighlight
+            (case state of
+                Just { cursor } ->
+                    let
+                        cappedCursor =
+                            min cursor (List.length matches - 1)
+                    in
+                    matches
+                        |> List.indexedMap
+                            (\i ( description, option ) ->
+                                let
+                                    bgColor =
+                                        if i == cappedCursor then
+                                            theme.bgHighlight
 
-                                    else
-                                        theme.bgDefault
-                            in
-                            Element.el
-                                [ Element.Background.color bgColor
-                                , Element.pointer
-                                , Element.width Element.fill
-                                , Element.htmlAttribute (Html.Events.onMouseEnter (toMsg (SetCursor i)))
-                                , Element.Events.onMouseDown (onSelected option)
-                                ]
-                                (Element.text description)
-                        )
+                                        else
+                                            theme.bgDefault
+                                in
+                                Element.el
+                                    [ Element.Background.color bgColor
+                                    , Element.pointer
+                                    , Element.width Element.fill
+                                    , Element.htmlAttribute (Html.Events.onMouseEnter (onInternalMessage (SetCursor i)))
+                                    , Element.Events.onMouseDown (onOptionSelect option)
+                                    ]
+                                    (Element.text description)
+                            )
 
-             else
-                []
+                Nothing ->
+                    []
             )
                 |> Element.column [ Element.width Element.fill ]
     in
     Element.Input.text
         [ Element.width Element.fill
         , Element.below suggestions
-        , Element.Events.onFocus (toMsg Activate)
-        , Element.Events.onLoseFocus (toMsg Deactivate)
+        , Element.Events.onFocus (onInternalMessage (Toggle init))
+        , Element.Events.onLoseFocus (onInternalMessage (Toggle Nothing))
         , Element.htmlAttribute (Html.Events.on "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
-        , select.id |> Maybe.map (Html.Attributes.id >> Element.htmlAttribute) |> Maybe.withDefault LanternUi.noneAttribute
+        , id |> Maybe.map (Html.Attributes.id >> Element.htmlAttribute) |> Maybe.withDefault LanternUi.noneAttribute
         ]
-        { onChange = UpdateQuery >> toMsg
-        , text = select.query
-        , placeholder = select.placeholder |> Maybe.map (Element.text >> Element.Input.placeholder [])
-        , label = Element.Input.labelHidden "Query"
+        { onChange = onQueryChange
+        , text = query
+        , placeholder = placeholder
+        , label = label
         }
