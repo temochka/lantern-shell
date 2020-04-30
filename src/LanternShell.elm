@@ -10,6 +10,7 @@ import Element.Border
 import Element.Font
 import Element.Input
 import Html exposing (Html)
+import Html.Attributes
 import Json.Decode
 import Json.Encode
 import Keyboard.Event
@@ -293,8 +294,12 @@ handleShortcuts model =
 -- VIEW
 
 
-renderApp : Model -> Bool -> ProcessTable.Process LanternShell.Apps.App -> Element Msg
-renderApp model focused process =
+renderApp :
+    Model
+    -> LanternUi.WindowManager.RenderOptions
+    -> ProcessTable.Process LanternShell.Apps.App
+    -> Element Msg
+renderApp model { focused, id, tabindex } process =
     let
         app =
             ProcessTable.processApp process
@@ -304,29 +309,34 @@ renderApp model focused process =
 
         border =
             if focused then
-                Element.Border.shadow
-                    { offset = ( 0.0, 0.0 )
-                    , size = 0.1
-                    , blur = 4.0
-                    , color = model.theme.panelShadow
-                    }
+                [ Element.Border.shadow { offset = ( 0, 0 ), size = 2, blur = 0, color = model.theme.borderHighlight } ]
 
             else
-                LanternUi.noneAttribute
+                [ LanternUi.noneAttribute ]
     in
     LanternUi.panel model.theme
-        [ border ]
-        content
+        border
+        { content = content
+        , header =
+            Just
+                (LanternUi.textPanelHeader
+                    [ Element.htmlAttribute (Html.Attributes.id id)
+                    , Element.htmlAttribute (Html.Attributes.tabindex tabindex)
+                    ]
+                    ("PID=" ++ String.fromInt process.pid)
+                )
+        }
         |> Element.map (wrapAppMessage process.pid)
 
 
 tools : Model -> Element Msg
 tools model =
     let
-        wrapRender pid focused =
+        wrapRender : LanternUi.WindowManager.RenderOptions -> Element Msg
+        wrapRender ({ pid } as renderOptions) =
             pid
                 |> ProcessTable.lookup model.processTable
-                |> Maybe.map (renderApp model focused)
+                |> Maybe.map (renderApp model renderOptions)
                 |> Maybe.withDefault Element.none
     in
     LanternUi.WindowManager.render { spacing = 5, padding = 0 } wrapRender WindowManagerMessage model.windowManager
@@ -335,13 +345,13 @@ tools model =
 renderAppLauncher : Model -> Element Msg
 renderAppLauncher model =
     Element.row
-        [ Element.width Element.fill, Element.spacing 10 ]
-        [ Element.text ">"
+        [ Element.width Element.fill, Element.spacing 10, Element.Background.color model.theme.bgContrast, Element.paddingXY 25 10 ]
+        [ Element.el [ Element.Font.color model.theme.fontContrastInactive ] (Element.text ">")
         , LanternUi.FuzzySelect.fuzzySelect
             lightTheme
             { options =
-                [ ( "Run query", \context -> (LanternShell.Apps.readerQuery context).init )
-                , ( "Run mutator", \context -> (LanternShell.Apps.writerQuery context).init )
+                [ ( "Run reader query", \context -> (LanternShell.Apps.readerQuery context).init )
+                , ( "Run writer query", \context -> (LanternShell.Apps.writerQuery context).init )
                 , ( "Run migration", \context -> (LanternShell.Apps.migrations context).init )
                 , ( "Show tables", \context -> (LanternShell.Apps.databaseExplorer context).init )
                 , ( "Run echo", \context -> (LanternShell.Apps.echo context).init )
@@ -365,5 +375,5 @@ view model =
     LanternUi.columnLayout
         model.theme
         []
-        [ renderAppLauncher model, tools model ]
-        |> Element.layout [ Element.width Element.fill, Element.padding 20 ]
+        [ renderAppLauncher model, Element.el [ Element.paddingXY 20 5, Element.width Element.fill, Element.height Element.fill ] (tools model) ]
+        |> Element.layout [ Element.width Element.fill, Element.Background.color model.theme.bgDefault ]

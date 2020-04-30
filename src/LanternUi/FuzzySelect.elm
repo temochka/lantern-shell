@@ -125,6 +125,7 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
                                     [ Element.Background.color bgColor
                                     , Element.pointer
                                     , Element.width Element.fill
+                                    , Element.paddingXY 10 5
                                     , Element.htmlAttribute (Html.Events.onMouseEnter (onInternalMessage (SetCursor i)))
                                     , Element.Events.onMouseDown (onOptionSelect option)
                                     ]

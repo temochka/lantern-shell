@@ -1,4 +1,4 @@
-module LanternShell.TableViewer exposing (State(..), TableViewer, init, liveQueries, loadRows, loadTable, render, rowDecoder)
+module LanternShell.TableViewer exposing (State(..), TableViewer, init, liveQueries, loadRows, loadTable, loadedTable, render, rowDecoder)
 
 import Dict
 import Element exposing (Element)
@@ -7,6 +7,7 @@ import Lantern
 import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
 import LanternShell.FlexiQuery as FlexiQuery
+import LanternUi
 
 
 type State
@@ -89,6 +90,19 @@ loadTable tableViewer table =
     { tableViewer | state = Loading table, page = 1 }
 
 
+loadedTable : TableViewer -> Maybe String
+loadedTable tableViewer =
+    case tableViewer.state of
+        Inactive ->
+            Nothing
+
+        Loading table ->
+            Just table
+
+        Loaded table _ _ ->
+            Just table
+
+
 render : TableViewer -> Element msg
 render { rowsPerPage, state } =
     case state of
@@ -121,16 +135,16 @@ render { rowsPerPage, state } =
                         |> Maybe.withDefault []
                         |> List.map
                             (\title ->
-                                { header = Element.text title
+                                { header = LanternUi.boldText title
                                 , width = Element.fill
                                 , view = \row -> Dict.get title row |> Maybe.map valueToString |> Maybe.withDefault "" |> Element.text
                                 }
                             )
             in
             Element.column
-                [ Element.width Element.fill ]
+                [ Element.width Element.fill, Element.spacing 10 ]
                 [ Element.text table
-                , Element.table []
+                , Element.table [ Element.spacing 5 ]
                     { data = results
                     , columns = columns
                     }

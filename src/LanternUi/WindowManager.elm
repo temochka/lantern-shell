@@ -1,4 +1,4 @@
-module LanternUi.WindowManager exposing (Message(..), WindowManager, new, nextWindow, prevWindow, render, syncProcesses, update)
+module LanternUi.WindowManager exposing (Message(..), RenderOptions, WindowManager, new, nextWindow, prevWindow, render, syncProcesses, update)
 
 import Browser.Dom
 import Element exposing (Element)
@@ -26,6 +26,14 @@ type Message
     | SyncProcesses (List ProcessTable.Pid)
     | NextWindow
     | PrevWindow
+
+
+type alias RenderOptions =
+    { pid : ProcessTable.Pid
+    , focused : Bool
+    , id : String
+    , tabindex : Int
+    }
 
 
 new : List ProcessTable.Pid -> WindowManager
@@ -135,7 +143,12 @@ windowId windowManager pid =
     "window-" ++ String.fromInt pid
 
 
-render : { spacing : Int, padding : Int } -> (ProcessTable.Pid -> Bool -> Element msg) -> (Message -> msg) -> WindowManager -> Element msg
+render :
+    { spacing : Int, padding : Int }
+    -> (RenderOptions -> Element msg)
+    -> (Message -> msg)
+    -> WindowManager
+    -> Element msg
 render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager) =
     let
         windowPane pid =
@@ -144,10 +157,14 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                 , Element.height Element.fill
                 , Element.Events.onMouseEnter (wrapMsg (Focus pid))
                 , Element.Events.onFocus (wrapMsg (Focus pid))
-                , Element.htmlAttribute (Html.Attributes.id (windowId windowManager pid))
-                , Element.htmlAttribute (Html.Attributes.tabindex 0)
                 ]
-                (renderer pid (focus |> Maybe.map ((==) pid) |> Maybe.withDefault False))
+                (renderer
+                    { pid = pid
+                    , focused = focus |> Maybe.map ((==) pid) |> Maybe.withDefault False
+                    , tabindex = 0
+                    , id = windowId windowManager pid
+                    }
+                )
     in
     case layout of
         Stack windows ->
@@ -188,15 +205,19 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                     , Element.clip
                     ]
                     masterWindowPane
-                , Element.column
-                    [ Element.width (Element.fillPortion 2)
-                    , Element.height Element.fill
-                    , Element.spacing (6 + spacing)
-                    , Element.alignTop
-                    , Element.padding 3
-                    , Element.clip
-                    ]
-                    windowPanes
+                , if not (List.isEmpty windowPanes) then
+                    Element.column
+                        [ Element.width (Element.fillPortion 2)
+                        , Element.height Element.fill
+                        , Element.spacing (6 + spacing)
+                        , Element.alignTop
+                        , Element.padding 3
+                        , Element.clip
+                        ]
+                        windowPanes
+
+                  else
+                    Element.none
                 ]
 
 

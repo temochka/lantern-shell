@@ -1,8 +1,8 @@
 module LanternShell.Apps.LogViewer exposing (Message, Model, init, lanternApp)
 
 import Element exposing (Element)
+import Element.Background
 import Element.Font
-import Lantern
 import Lantern.App
 import Lantern.Log exposing (Log)
 import LanternUi
@@ -38,10 +38,15 @@ view { log, theme } _ =
         []
         [ log
             |> .lines
-            |> List.map (\( _, line ) -> Element.text line)
-            |> Element.column
-                [ Element.width Element.fill
-                , LanternUi.listSpacing
+            |> List.map (\( _, line ) -> Element.paragraph [ Element.width Element.fill ] [ Element.text line ])
+            |> Element.textColumn
+                [ Element.padding 5
+                , Element.width Element.fill
+                , Element.scrollbarX
+                , Element.Background.color theme.bgContrast
+                , Element.Font.color theme.fontContrast
+                , Element.Font.size 12
+                , Element.spacing 10
                 , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
                 ]
         ]

@@ -2,6 +2,9 @@ module LanternShell.Apps.DatabaseExplorer exposing (Message, Model, init, lanter
 
 import Dict exposing (Dict)
 import Element exposing (Element)
+import Element.Background
+import Element.Border
+import Element.Font
 import Element.Input
 import Json.Decode
 import Lantern
@@ -95,14 +98,37 @@ view { theme } { tables, tableViewer } =
     let
         tableList =
             tables
-                |> List.map (\{ name } -> Element.Input.button [] { label = Element.text name, onPress = Just (Lantern.App.Message (LoadTable name)) })
+                |> List.map
+                    (\{ name } ->
+                        Element.Input.button
+                            ((if TableViewer.loadedTable tableViewer == Just name then
+                                [ Element.Background.color theme.bgActive, Element.Font.color theme.fontContrast ]
+
+                              else
+                                [ LanternUi.noneAttribute ]
+                             )
+                                ++ [ Element.width Element.fill, Element.padding 5 ]
+                            )
+                            { label = LanternUi.text name, onPress = Just (Lantern.App.Message (LoadTable name)) }
+                    )
     in
     LanternUi.columnLayout
         theme
         []
-        [ Element.row [ Element.width Element.fill ]
-            [ Element.column [ Element.width (Element.fillPortion 2) ] tableList
-            , Element.el [ Element.width (Element.fillPortion 5) ] (TableViewer.render tableViewer)
+        [ Element.row [ Element.width Element.fill, Element.spacing 10 ]
+            [ Element.column
+                [ Element.alignTop
+                , Element.width (Element.fillPortion 2)
+                , Element.Border.widthEach { top = 0, left = 0, right = 1, bottom = 0 }
+                , Element.Border.color theme.borderDefault
+                , LanternUi.listSpacing
+                ]
+                (LanternUi.boldText "Tables" :: tableList)
+            , Element.column
+                [ Element.width (Element.fillPortion 5), Element.alignTop, LanternUi.listSpacing ]
+                [ LanternUi.boldText "Contents"
+                , TableViewer.render tableViewer
+                ]
             ]
         ]
 

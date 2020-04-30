@@ -3,6 +3,7 @@ module LanternUi.Input exposing (button, multiline, text)
 import Element exposing (Element)
 import Element.Background
 import Element.Border
+import Element.Font
 import Element.Input
 import LanternUi.Theme exposing (Theme)
 
@@ -22,9 +23,11 @@ button :
     -> Element msg
 button theme extraAttrs mainAttrs =
     Element.Input.button
-        ([ Element.Background.color theme.controlActive
+        ([ Element.Background.color theme.bgActive
          , Element.padding 7
          , Element.Border.rounded 3
+         , Element.Font.color theme.fontContrast
+         , Element.Font.size 14
          ]
             ++ extraAttrs
         )
