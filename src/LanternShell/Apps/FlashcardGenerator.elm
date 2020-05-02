@@ -822,7 +822,8 @@ view { theme } { fuzzySelect, userTranslations, uiState, userInput, words, cache
 lanternApp : Lantern.App.App Context Model Message
 lanternApp =
     Lantern.App.app
-        { init = init
+        { name = "Flashcards"
+        , init = init
         , view = view
         , update = update
         , liveQueries = Nothing

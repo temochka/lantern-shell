@@ -2,6 +2,7 @@ module LanternShell.Apps exposing
     ( App
     , Context
     , Message
+    , all
     , databaseExplorer
     , echo
     , flashcardGenerator
@@ -73,6 +74,18 @@ lanternAppFor app =
 
         WriterQueryApp _ ->
             writerQuery
+
+
+all : List (Context msg -> Lantern.App.App () App Message)
+all =
+    [ echo
+    , databaseExplorer
+    , flashcardGenerator
+    , readerQuery
+    , writerQuery
+    , migrations
+    , logViewer
+    ]
 
 
 databaseExplorer : Context msg -> Lantern.App.App () App Message

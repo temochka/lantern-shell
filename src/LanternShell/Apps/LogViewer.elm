@@ -55,7 +55,8 @@ view { log, theme } _ =
 lanternApp : Lantern.App.App Context Model Message
 lanternApp =
     Lantern.App.simpleApp
-        { init = init
+        { name = "Logs"
+        , init = init
         , view = view
         , update = update
         }

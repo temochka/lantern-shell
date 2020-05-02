@@ -148,7 +148,8 @@ liveQueries { tableViewer } =
 lanternApp : Lantern.App.App Context Model Message
 lanternApp =
     Lantern.App.liveApp
-        { init = init
+        { name = "Database Explorer"
+        , init = init
         , view = view
         , update = update
         , liveQueries = liveQueries

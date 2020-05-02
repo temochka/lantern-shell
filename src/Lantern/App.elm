@@ -30,11 +30,13 @@ type alias App ctx model msg =
     , view : ctx -> model -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : model -> List (LiveQuery msg)
+    , name : String
     }
 
 
 liveApp :
-    { init : model
+    { name : String
+    , init : model
     , view :
         ctx
         -> model
@@ -44,7 +46,8 @@ liveApp :
     }
     -> App ctx model msg
 liveApp def =
-    { init = ( def.init, Cmd.none )
+    { name = def.name
+    , init = ( def.init, Cmd.none )
     , view = def.view
     , update = def.update
     , liveQueries = def.liveQueries
@@ -52,7 +55,8 @@ liveApp def =
 
 
 app :
-    { init : ( model, Cmd (Message msg) )
+    { name : String
+    , init : ( model, Cmd (Message msg) )
     , view :
         ctx
         -> model
@@ -62,7 +66,8 @@ app :
     }
     -> App ctx model msg
 app def =
-    { init = def.init
+    { name = def.name
+    , init = def.init
     , view = def.view
     , update = def.update
     , liveQueries = def.liveQueries |> Maybe.withDefault (always [])
@@ -70,7 +75,8 @@ app def =
 
 
 simpleApp :
-    { init : model
+    { name : String
+    , init : model
     , view :
         ctx
         -> model
@@ -79,7 +85,8 @@ simpleApp :
     }
     -> App ctx model msg
 simpleApp def =
-    { init = ( def.init, Cmd.none )
+    { name = def.name
+    , init = ( def.init, Cmd.none )
     , view = def.view
     , update = def.update
     , liveQueries = always []
@@ -121,7 +128,8 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } mountedApp =
                 |> Maybe.map (mountedApp.liveQueries >> List.map (Lantern.LiveQuery.map wrapMsg))
                 |> Maybe.withDefault []
     in
-    { init = mountedApp.init |> wrapResult
+    { name = mountedApp.name
+    , init = mountedApp.init |> wrapResult
     , view = wrappedView
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries

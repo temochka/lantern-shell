@@ -10,7 +10,8 @@ type alias Arg =
 
 type alias Process app =
     { application : app
-    , arguments : Dict String String
+    , name : String
+    , arguments : List Arg
     , pid : Pid
     }
 
@@ -65,15 +66,16 @@ lookup table pid =
     Dict.get pid table.processes
 
 
-launch : app -> ProcessTable app -> ProcessTable app
-launch app processTable =
+launch : app -> { name : String, arguments : List Arg } -> ProcessTable app -> ProcessTable app
+launch app { name, arguments } processTable =
     let
         pid =
             processTable.pid + 1
 
         newProcess =
             { application = app
-            , arguments = Dict.empty
+            , arguments = arguments
+            , name = name
             , pid = pid
             }
     in

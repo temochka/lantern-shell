@@ -74,7 +74,8 @@ view { theme } { query } =
 lanternApp : Lantern.App.App Context Model Message
 lanternApp =
     Lantern.App.simpleApp
-        { init = init
+        { name = "Migrations"
+        , init = init
         , view = view
         , update = update
         }

@@ -121,7 +121,8 @@ view { theme } model =
 lanternApp : Lantern.App.App Context Model Message
 lanternApp =
     Lantern.App.simpleApp
-        { init = init
+        { name = "Reader Query"
+        , init = init
         , view = view
         , update = update
         }

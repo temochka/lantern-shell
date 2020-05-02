@@ -93,7 +93,7 @@ init _ =
                 |> List.map (\app -> (app bootContext).init)
 
         processTable =
-            List.foldl (\( app, _ ) newProcessTable -> ProcessTable.launch app newProcessTable) ProcessTable.empty preloadedApps
+            ProcessTable.empty
 
         preloadedAppsCmds =
             Cmd.batch (List.map Tuple.second preloadedApps)
@@ -197,11 +197,18 @@ update msg model =
 
         LaunchApp launcher ->
             let
+                context =
+                    appContext model
+
                 ( app, appCmd ) =
-                    launcher (appContext model)
+                    launcher context
 
                 newProcessTable =
-                    ProcessTable.launch app model.processTable
+                    ProcessTable.launch app
+                        { name = (LanternShell.Apps.lanternAppFor app context).name
+                        , arguments = []
+                        }
+                        model.processTable
             in
             [ \_ ->
                 ( { model
@@ -323,7 +330,7 @@ renderApp model { focused, id, tabindex } process =
                     [ Element.htmlAttribute (Html.Attributes.id id)
                     , Element.htmlAttribute (Html.Attributes.tabindex tabindex)
                     ]
-                    ("PID=" ++ String.fromInt process.pid)
+                    process.name
                 )
         }
         |> Element.map (wrapAppMessage process.pid)
@@ -349,15 +356,7 @@ renderAppLauncher model =
         [ Element.el [ Element.Font.color model.theme.fontContrastInactive ] (Element.text ">")
         , LanternUi.FuzzySelect.fuzzySelect
             lightTheme
-            { options =
-                [ ( "Run reader query", \context -> (LanternShell.Apps.readerQuery context).init )
-                , ( "Run writer query", \context -> (LanternShell.Apps.writerQuery context).init )
-                , ( "Run migration", \context -> (LanternShell.Apps.migrations context).init )
-                , ( "Show tables", \context -> (LanternShell.Apps.databaseExplorer context).init )
-                , ( "Run echo", \context -> (LanternShell.Apps.echo context).init )
-                , ( "Show logs", \context -> (LanternShell.Apps.logViewer context).init )
-                , ( "Flashcard generator", \context -> (LanternShell.Apps.flashcardGenerator context).init )
-                ]
+            { options = LanternShell.Apps.all |> List.map (\app -> ( (app (appContext model)).name, app >> .init ))
             , placeholder = Nothing
             , label = Element.Input.labelHidden "Launch app"
             , id = Just "lanternAppLauncher"
