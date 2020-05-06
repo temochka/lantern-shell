@@ -3,10 +3,12 @@ module LanternShell.Apps exposing
     , Context
     , Message
     , all
+    , appId
     , databaseExplorer
     , echo
     , flashcardGenerator
     , lanternAppFor
+    , launcherForId
     , logViewer
     , migrations
     , readerQuery
@@ -49,6 +51,59 @@ type Message
     | MigrationsMsg MigrationsApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
     | WriterQueryMsg WriterQueryApp.Message
+
+
+appId : App -> String
+appId app =
+    case app of
+        DatabaseExplorerApp _ ->
+            "DatabaseExplorer"
+
+        EchoApp _ ->
+            "Echo"
+
+        FlashcardGeneratorApp _ ->
+            "FlashcardGenerator"
+
+        LogViewerApp _ ->
+            "LogViewer"
+
+        MigrationsApp _ ->
+            "Migrations"
+
+        ReaderQueryApp _ ->
+            "ReaderQuery"
+
+        WriterQueryApp _ ->
+            "WriterQuery"
+
+
+launcherForId : String -> Maybe (Context msg -> Lantern.App.App () App Message)
+launcherForId id =
+    case id of
+        "DatabaseExplorer" ->
+            Just databaseExplorer
+
+        "Echo" ->
+            Just echo
+
+        "FlashcardGenerator" ->
+            Just flashcardGenerator
+
+        "LogViewer" ->
+            Just logViewer
+
+        "Migrations" ->
+            Just migrations
+
+        "ReaderQuery" ->
+            Just readerQuery
+
+        "WriterQuery" ->
+            Just writerQuery
+
+        _ ->
+            Nothing
 
 
 lanternAppFor : App -> (Context msg -> Lantern.App.App () App Message)

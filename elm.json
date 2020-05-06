@@ -16,11 +16,13 @@
       "elm/parser": "1.1.0",
       "elm/url": "1.0.0",
       "mdgriffith/elm-ui": "1.1.5",
+      "truqu/elm-base64": "2.0.4",
       "zwilias/elm-html-string": "2.0.2"
     },
     "indirect": {
       "NoRedInk/elm-string-conversions": "1.0.1",
       "elm/bytes": "1.0.8",
+      "elm/regex": "1.0.0",
       "elm/time": "1.0.0",
       "elm/virtual-dom": "1.0.2"
     }

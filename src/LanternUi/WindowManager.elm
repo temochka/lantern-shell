@@ -1,9 +1,24 @@
-module LanternUi.WindowManager exposing (Message(..), RenderOptions, WindowManager, new, nextWindow, prevWindow, render, syncProcesses, update)
+module LanternUi.WindowManager exposing
+    ( Message(..)
+    , RenderOptions
+    , WindowManager
+    , deserialize
+    , new
+    , nextWindow
+    , prevWindow
+    , render
+    , serialize
+    , syncProcesses
+    , update
+    )
 
+import Base64
 import Browser.Dom
 import Element exposing (Element)
 import Element.Events
 import Html.Attributes
+import Json.Decode
+import Json.Encode
 import ProcessTable
 import Set
 import Task
@@ -117,6 +132,62 @@ syncProcesses runningPids ({ layout, focus } as windowManager) =
       else
         Cmd.none
     )
+
+
+layoutName : Layout -> String
+layoutName layout =
+    case layout of
+        Stack _ ->
+            "Stack"
+
+        MasterStack _ _ ->
+            "MasterStack"
+
+
+serialize : (ProcessTable.Pid -> String) -> WindowManager -> String
+serialize serializeProcess { layout } =
+    Json.Encode.object
+        [ ( "l", Json.Encode.string (layoutName layout) )
+        , ( "a", Json.Encode.list (serializeProcess >> Json.Encode.string) (layoutToPids layout) )
+        ]
+        |> Json.Encode.encode 0
+        |> Base64.encode
+
+
+deserialize : (String -> Maybe launcher) -> String -> Maybe ( WindowManager, List launcher )
+deserialize toLauncher serialized =
+    let
+        toLayout name =
+            (case name of
+                "Stack" ->
+                    Just (Stack [])
+
+                "MasterStack" ->
+                    Just (MasterStack Nothing [])
+
+                _ ->
+                    Nothing
+            )
+                |> Maybe.map (\layout -> { focus = Nothing, layout = layout })
+
+        layoutDecoder =
+            Json.Decode.field "l" Json.Decode.string
+                |> Json.Decode.map toLayout
+
+        processesDecoder =
+            Json.Decode.field "a" (Json.Decode.list Json.Decode.string)
+                |> Json.Decode.map (List.filterMap toLauncher >> List.reverse >> Just)
+
+        jsonDecoder =
+            Json.Decode.map2 (Maybe.map2 Tuple.pair)
+                layoutDecoder
+                processesDecoder
+    in
+    serialized
+        |> Base64.decode
+        |> Result.toMaybe
+        |> Maybe.andThen (Json.Decode.decodeString jsonDecoder >> Result.toMaybe)
+        |> Maybe.andThen identity
 
 
 update : Message -> WindowManager -> ( WindowManager, Cmd Message )

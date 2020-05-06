@@ -3,36 +3,30 @@ port module LanternShell exposing (..)
 import Browser
 import Browser.Dom
 import Browser.Events
+import Browser.Navigation
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
 import Element.Input
-import Html exposing (Html)
 import Html.Attributes
 import Json.Decode
-import Json.Encode
 import Keyboard.Event
 import Lantern
 import Lantern.App
-import Lantern.Encoders
 import Lantern.LiveQuery exposing (LiveQuery(..))
-import Lantern.Log
-import Lantern.Query
-import Lantern.Request
 import LanternShell.Apps
-import LanternShell.ArgumentParser as ArgumentParser
-import LanternShell.FlexiQuery as FlexiQuery
-import LanternShell.TableViewer as TableViewer
 import LanternUi
 import LanternUi.FuzzySelect
-import LanternUi.Input
 import LanternUi.Theme exposing (lightTheme)
 import LanternUi.WindowManager
 import ProcessTable exposing (ProcessTable)
-import String
 import Task
+import Url
+import Url.Builder
+import Url.Parser
+import Url.Parser.Query
 
 
 port lanternRequestPort : Lantern.RequestPort msg
@@ -46,7 +40,14 @@ port lanternResponsePort : Lantern.ResponsePort msg
 
 
 main =
-    Browser.element { init = init, update = update, view = view, subscriptions = subscriptions }
+    Browser.application
+        { init = init
+        , update = update
+        , view = view
+        , subscriptions = subscriptions
+        , onUrlRequest = UrlRequest
+        , onUrlChange = UrlChange
+        }
 
 
 appContext : Model -> LanternShell.Apps.Context Msg
@@ -70,11 +71,12 @@ type alias Model =
     , fuzzySelect : LanternUi.FuzzySelect.FuzzySelect
     , theme : LanternUi.Theme.Theme
     , liveQueriesCache : Dict ProcessTable.Pid (List (LiveQuery Msg))
+    , navigationKey : Browser.Navigation.Key
     }
 
 
-init : () -> ( Model, Cmd Msg )
-init _ =
+init : () -> Url.Url -> Browser.Navigation.Key -> ( Model, Cmd Msg )
+init _ url key =
     let
         lanternConnection =
             Lantern.newConnection lanternRequestPort
@@ -82,47 +84,30 @@ init _ =
         initialTheme =
             LanternUi.Theme.lightTheme
 
-        bootContext =
-            { theme = initialTheme, lanternConnection = lanternConnection }
+        ( windowManager, launchers ) =
+            url
+                |> (Url.Parser.Query.string "s" |> Url.Parser.query |> Url.Parser.parse)
+                |> Maybe.andThen identity
+                |> Maybe.andThen (LanternUi.WindowManager.deserialize LanternShell.Apps.launcherForId)
+                |> Maybe.withDefault ( LanternUi.WindowManager.new [], [] )
 
-        preloadedApps =
-            [ LanternShell.Apps.databaseExplorer
-            , LanternShell.Apps.readerQuery
-            , LanternShell.Apps.writerQuery
-            ]
-                |> List.map (\app -> (app bootContext).init)
-
-        processTable =
-            ProcessTable.empty
-
-        preloadedAppsCmds =
-            Cmd.batch (List.map Tuple.second preloadedApps)
-
-        model =
+        starterModel =
             { lanternConnection = lanternConnection
-            , processTable = processTable
-            , windowManager = LanternUi.WindowManager.new (ProcessTable.pids processTable)
+            , windowManager = windowManager
+            , processTable = ProcessTable.empty
             , fuzzySelect = Nothing
             , theme = initialTheme
             , liveQueriesCache = Dict.empty
             , appLauncherQuery = ""
+            , navigationKey = key
             }
-
-        liveQueriesCache =
-            processTable
-                |> ProcessTable.processes
-                |> List.map
-                    (\process ->
-                        ( process.pid
-                        , (LanternShell.Apps.lanternAppFor process.application bootContext).liveQueries process.application
-                            |> List.map (Lantern.LiveQuery.map (AppMessage process.pid))
-                        )
-                    )
-                |> Dict.fromList
     in
-    ( { model | liveQueriesCache = liveQueriesCache }
-    , Lantern.liveQueries (liveQueriesCache |> Dict.values |> List.concatMap identity) |> Cmd.map LanternMessage
-    )
+    launchers
+        |> List.foldl
+            (\launcher ( model, cmd ) -> update (LaunchApp (launcher >> .init)) model |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ]))
+            ( starterModel
+            , Cmd.none
+            )
 
 
 
@@ -151,6 +136,8 @@ type Msg
     | LaunchApp LauncherEntry
     | WindowManagerMessage LanternUi.WindowManager.Message
     | UpdateLauncherQuery String
+    | UrlChange Url.Url
+    | UrlRequest Browser.UrlRequest
 
 
 threadModel : model -> List (model -> ( model, Cmd msg )) -> ( model, Cmd msg )
@@ -214,6 +201,7 @@ update msg model =
                 ( { model
                     | processTable = newProcessTable
                     , fuzzySelect = Nothing
+                    , appLauncherQuery = ""
                   }
                 , Cmd.map (wrapAppMessage newProcessTable.pid) appCmd
                 )
@@ -225,8 +213,19 @@ update msg model =
             let
                 ( newWindowManager, cmd ) =
                     LanternUi.WindowManager.update proxiedMsg model.windowManager
+
+                serialized =
+                    LanternUi.WindowManager.serialize
+                        (ProcessTable.lookup model.processTable
+                            >> Maybe.map (ProcessTable.processApp >> LanternShell.Apps.appId)
+                            >> Maybe.withDefault ""
+                        )
+                        newWindowManager
+
+                newUrl =
+                    Url.Builder.relative [] [ Url.Builder.string "s" serialized ]
             in
-            ( { model | windowManager = newWindowManager }, Cmd.map WindowManagerMessage cmd )
+            ( { model | windowManager = newWindowManager }, Cmd.batch [ Cmd.map WindowManagerMessage cmd, Browser.Navigation.replaceUrl model.navigationKey newUrl ] )
 
         AppMessage pid proxiedMsg ->
             pid
@@ -271,6 +270,17 @@ update msg model =
 
         UpdateLauncherQuery query ->
             ( { model | appLauncherQuery = query }, Cmd.none )
+
+        UrlChange _ ->
+            ( model, Cmd.none )
+
+        UrlRequest urlRequest ->
+            case urlRequest of
+                Browser.Internal _ ->
+                    ( model, Cmd.none )
+
+                Browser.External url ->
+                    ( model, Browser.Navigation.load url )
 
 
 handleShortcuts : Model -> Json.Decode.Decoder Msg
@@ -369,10 +379,14 @@ renderAppLauncher model =
         ]
 
 
-view : Model -> Html Msg
+view : Model -> Browser.Document Msg
 view model =
-    LanternUi.columnLayout
-        model.theme
-        []
-        [ renderAppLauncher model, Element.el [ Element.paddingXY 20 5, Element.width Element.fill, Element.height Element.fill ] (tools model) ]
-        |> Element.layout [ Element.width Element.fill, Element.Background.color model.theme.bgDefault ]
+    { title = "Lantern Shell"
+    , body =
+        [ LanternUi.columnLayout
+            model.theme
+            []
+            [ renderAppLauncher model, Element.el [ Element.paddingXY 20 5, Element.width Element.fill, Element.height Element.fill ] (tools model) ]
+            |> Element.layout [ Element.width Element.fill, Element.Background.color model.theme.bgDefault ]
+        ]
+    }
