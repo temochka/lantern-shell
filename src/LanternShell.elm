@@ -155,6 +155,41 @@ wrapAppMessage pid msg =
             LanternMessage (Lantern.map (AppMessage pid) lanternMessage)
 
 
+refreshLiveQueries : ProcessTable.Pid -> Model -> ( Model, Cmd Msg )
+refreshLiveQueries pid model =
+    pid
+        |> ProcessTable.lookup model.processTable
+        |> Maybe.map ProcessTable.processApp
+        |> Maybe.map
+            (\appModel ->
+                let
+                    lanternApp =
+                        LanternShell.Apps.lanternAppFor appModel (appContext model)
+
+                    newLiveQueries =
+                        lanternApp.liveQueries appModel |> List.map (Lantern.LiveQuery.map (AppMessage pid))
+
+                    liveQueriesCache =
+                        Dict.insert pid newLiveQueries model.liveQueriesCache
+
+                    liveQueriesChanged =
+                        Dict.get pid model.liveQueriesCache
+                            |> Maybe.map (Lantern.LiveQuery.areEqualLists newLiveQueries >> not)
+                            |> Maybe.withDefault True
+
+                    cmd =
+                        if liveQueriesChanged then
+                            Lantern.liveQueries (liveQueriesCache |> Dict.values |> List.concatMap identity)
+                                |> Cmd.map LanternMessage
+
+                        else
+                            Cmd.none
+                in
+                ( { model | liveQueriesCache = liveQueriesCache }, cmd )
+            )
+        |> Maybe.withDefault ( model, Cmd.none )
+
+
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
@@ -187,15 +222,21 @@ update msg model =
                 context =
                     appContext model
 
-                ( app, appCmd ) =
+                ( appModel, appCmd ) =
                     launcher context
 
+                app =
+                    LanternShell.Apps.lanternAppFor appModel context
+
                 newProcessTable =
-                    ProcessTable.launch app
-                        { name = (LanternShell.Apps.lanternAppFor app context).name
+                    ProcessTable.launch appModel
+                        { name = app.name
                         , arguments = []
                         }
                         model.processTable
+
+                pid =
+                    newProcessTable.pid
             in
             [ \_ ->
                 ( { model
@@ -203,8 +244,9 @@ update msg model =
                     , fuzzySelect = Nothing
                     , appLauncherQuery = ""
                   }
-                , Cmd.map (wrapAppMessage newProcessTable.pid) appCmd
+                , Cmd.map (wrapAppMessage pid) appCmd
                 )
+            , refreshLiveQueries pid
             , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.pids newProcessTable)))
             ]
                 |> threadModel model
@@ -228,45 +270,27 @@ update msg model =
             ( { model | windowManager = newWindowManager }, Cmd.batch [ Cmd.map WindowManagerMessage cmd, Browser.Navigation.replaceUrl model.navigationKey newUrl ] )
 
         AppMessage pid proxiedMsg ->
-            pid
-                |> ProcessTable.lookup model.processTable
-                |> Maybe.map ProcessTable.processApp
-                |> Maybe.map
-                    (\appModel ->
-                        let
-                            lanternApp =
-                                LanternShell.Apps.lanternAppFor appModel (appContext model)
+            [ \m ->
+                pid
+                    |> ProcessTable.lookup m.processTable
+                    |> Maybe.map ProcessTable.processApp
+                    |> Maybe.map
+                        (\appModel ->
+                            let
+                                lanternApp =
+                                    LanternShell.Apps.lanternAppFor appModel (appContext model)
 
-                            ( newAppModel, appCmd ) =
-                                lanternApp.update proxiedMsg appModel
-
-                            newLiveQueries =
-                                lanternApp.liveQueries newAppModel |> List.map (Lantern.LiveQuery.map (AppMessage pid))
-
-                            newLiveQueriesCache =
-                                Dict.insert pid newLiveQueries model.liveQueriesCache
-
-                            liveQueriesChanged =
-                                Dict.get pid model.liveQueriesCache
-                                    |> Maybe.map (Lantern.LiveQuery.areEqualLists newLiveQueries >> not)
-                                    |> Maybe.withDefault True
-
-                            liveQueriesCmd =
-                                if liveQueriesChanged then
-                                    Lantern.liveQueries (newLiveQueriesCache |> Dict.values |> List.concatMap identity)
-                                        |> Cmd.map LanternMessage
-
-                                else
-                                    Cmd.none
-                        in
-                        ( { model
-                            | processTable = ProcessTable.mapProcess (always newAppModel) pid model.processTable
-                            , liveQueriesCache = newLiveQueriesCache
-                          }
-                        , Cmd.batch [ Cmd.map (wrapAppMessage pid) appCmd, liveQueriesCmd ]
+                                ( newAppModel, cmd ) =
+                                    lanternApp.update proxiedMsg appModel
+                            in
+                            ( { m | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable }
+                            , Cmd.map (wrapAppMessage pid) cmd
+                            )
                         )
-                    )
-                |> Maybe.withDefault ( model, Cmd.none )
+                    |> Maybe.withDefault ( m, Cmd.none )
+            , refreshLiveQueries pid
+            ]
+                |> threadModel model
 
         UpdateLauncherQuery query ->
             ( { model | appLauncherQuery = query }, Cmd.none )
