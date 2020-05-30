@@ -35,7 +35,7 @@ type alias Context =
 type Message
     = UpdateApiCredentials ApiCredentials
     | FuzzySelectMessage String LanternUi.FuzzySelect.Message
-    | ConfigUpdated Bool
+    | ConfigUpdated (Result Lantern.Error Lantern.Query.WriterResult)
     | UpdateUserInput String
     | LoadDefinition String (Result Lantern.Http.Error Definition)
     | LoadTranslation String (Result Lantern.Http.Error Translation)
@@ -827,4 +827,5 @@ lanternApp =
         , view = view
         , update = update
         , liveQueries = Nothing
+        , subscriptions = always Sub.none
         }

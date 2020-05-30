@@ -30,6 +30,7 @@ type alias App ctx model msg =
     , view : ctx -> model -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : model -> List (LiveQuery msg)
+    , subscriptions : model -> Sub (Message msg)
     , name : String
     }
 
@@ -43,6 +44,7 @@ liveApp :
         -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : model -> List (LiveQuery msg)
+    , subscriptions : model -> Sub (Message msg)
     }
     -> App ctx model msg
 liveApp def =
@@ -51,6 +53,7 @@ liveApp def =
     , view = def.view
     , update = def.update
     , liveQueries = def.liveQueries
+    , subscriptions = def.subscriptions
     }
 
 
@@ -63,6 +66,7 @@ app :
         -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : Maybe (model -> List (LiveQuery msg))
+    , subscriptions : model -> Sub (Message msg)
     }
     -> App ctx model msg
 app def =
@@ -71,6 +75,7 @@ app def =
     , view = def.view
     , update = def.update
     , liveQueries = def.liveQueries |> Maybe.withDefault (always [])
+    , subscriptions = def.subscriptions
     }
 
 
@@ -90,6 +95,7 @@ simpleApp def =
     , view = def.view
     , update = def.update
     , liveQueries = always []
+    , subscriptions = always Sub.none
     }
 
 
@@ -127,10 +133,17 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } mountedApp =
                 |> unwrapModel
                 |> Maybe.map (mountedApp.liveQueries >> List.map (Lantern.LiveQuery.map wrapMsg))
                 |> Maybe.withDefault []
+
+        wrappedSubscriptions rootModel =
+            rootModel
+                |> unwrapModel
+                |> Maybe.map (mountedApp.subscriptions >> Sub.map (mapMessage wrapMsg))
+                |> Maybe.withDefault Sub.none
     in
     { name = mountedApp.name
     , init = mountedApp.init |> wrapResult
     , view = wrappedView
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries
+    , subscriptions = wrappedSubscriptions
     }

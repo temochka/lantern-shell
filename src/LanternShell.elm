@@ -116,9 +116,25 @@ init _ url key =
 
 subscriptions : Model -> Sub Msg
 subscriptions model =
+    let
+        appSubs =
+            model.processTable
+                |> ProcessTable.processes
+                |> List.map
+                    (\appProcess ->
+                        let
+                            appModel =
+                                ProcessTable.processApp appProcess
+                        in
+                        (LanternShell.Apps.lanternAppFor appModel (appContext model)).subscriptions appModel
+                            |> Sub.map (wrapAppMessage appProcess.pid)
+                    )
+                |> Sub.batch
+    in
     Sub.batch
         [ Lantern.subscriptions LanternMessage lanternResponsePort
         , Browser.Events.onKeyDown (handleShortcuts model)
+        , appSubs
         ]
 
 

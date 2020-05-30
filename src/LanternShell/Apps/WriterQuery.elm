@@ -26,7 +26,7 @@ type alias Model =
 type Message
     = Update String
     | UpdateArgument String String
-    | HandleResult Bool
+    | HandleResult (Result Lantern.Error Lantern.Query.WriterResult)
     | Run
 
 
@@ -71,7 +71,12 @@ update msg model =
             )
 
         HandleResult result ->
-            ( { model | result = Just result }, Cmd.none )
+            case result of
+                Ok _ ->
+                    ( { model | result = Just True }, Cmd.none )
+
+                Err _ ->
+                    ( { model | result = Just False }, Cmd.none )
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)

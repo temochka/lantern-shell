@@ -153,4 +153,5 @@ lanternApp =
         , view = view
         , update = update
         , liveQueries = liveQueries
+        , subscriptions = always Sub.none
         }

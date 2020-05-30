@@ -161,7 +161,7 @@ httpRequest req =
 
 writerQuery :
     Lantern.Query.Query
-    -> (Bool -> msg)
+    -> (Result Error Lantern.Query.WriterResult -> msg)
     -> Cmd (Message msg)
 writerQuery query msg =
     let
@@ -171,10 +171,10 @@ writerQuery query msg =
         handler response =
             case response of
                 Lantern.Response.WriterQuery r ->
-                    [ msg True ]
+                    [ msg (Ok r) ]
 
                 _ ->
-                    [ msg False ]
+                    [ msg (Err (Lantern.Errors.Error "Unexpected response")) ]
     in
     Task.perform identity (Task.succeed (Request request handler))
 
