@@ -2,13 +2,9 @@ module LanternShell.Apps.Notes exposing (Message, Model, init, lanternApp, updat
 
 import Dict
 import Element
-import Element.Background
 import Element.Font
 import Element.Input
-import Html.Attributes
-import Html.Events
 import Json.Decode
-import Json.Encode
 import Lantern
 import Lantern.App
 import Lantern.LiveQuery exposing (LiveQuery)
