@@ -88,6 +88,7 @@ type alias Translation =
 
 type Remote a
     = Loading
+    | NotFound
     | Errored String
     | Loaded a
 
@@ -365,7 +366,7 @@ definitionDecoder =
         lexicalEntry =
             Json.Decode.map3 LexicalEntry
                 (Json.Decode.at [ "lexicalCategory", "id" ] Json.Decode.string)
-                (Json.Decode.field "pronunciations" findIpa)
+                (Json.Decode.field "entries" (Json.Decode.index 0 (Json.Decode.field "pronunciations" findIpa)))
                 (Json.Decode.field "entries" (Json.Decode.index 0 (Json.Decode.field "senses" (Json.Decode.list sense))))
 
         result =
@@ -513,7 +514,12 @@ update msg model =
                             Loaded def
 
                         Err err ->
-                            Errored (Lantern.Http.errorToString err)
+                            case err of
+                                Lantern.Http.BadStatus 404 ->
+                                    NotFound
+
+                                _ ->
+                                    Errored (Lantern.Http.errorToString err)
             in
             ( { model
                 | cache =
@@ -705,6 +711,9 @@ flashCard theme fuzzySelectState userTranslations { id, definition, translation 
                                     { word = id, translationEntries = [] }
                         }
 
+                NotFound ->
+                    { front = Element.text id, back = Element.el [ Element.Font.color theme.fontSecondary ] (Element.text "No definition found") }
+
                 Errored msg ->
                     { front = Element.text id, back = Element.text ("Error: " ++ msg) }
     in
@@ -794,10 +803,10 @@ view { theme } { fuzzySelect, userTranslations, uiState, userInput, words, cache
 
         Cards _ ->
             Element.column
-                [ Element.width Element.fill ]
+                [ Element.width Element.fill, Element.spacing 10 ]
                 [ words
                     |> List.filterMap (\word -> Dict.get word cache |> Maybe.map (flashCard theme fuzzySelect userTranslations))
-                    |> Element.column [ Element.width Element.fill ]
+                    |> Element.column [ Element.width Element.fill, Element.spacing 20 ]
                 , LanternUi.Input.button theme
                     []
                     { onPress = Just (Lantern.App.Message NextStep)

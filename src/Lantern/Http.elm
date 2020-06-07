@@ -1,4 +1,4 @@
-module Lantern.Http exposing (Error, Request, RequestPayload, Response, errorToString, expectJson, expectString, requestPayload)
+module Lantern.Http exposing (Error(..), Request, RequestPayload, Response, errorToString, expectJson, expectString, requestPayload)
 
 import Json.Decode
 
