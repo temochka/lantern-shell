@@ -6,6 +6,7 @@ module LanternShell.Apps exposing
     , appId
     , lanternAppFor
     , launcherForId
+    , notebook
     )
 
 import Lantern
@@ -16,6 +17,7 @@ import LanternShell.Apps.FlashcardGenerator as FlashcardGeneratorApp
 import LanternShell.Apps.LetterCubes as LetterCubesApp
 import LanternShell.Apps.LogViewer as LogViewerApp
 import LanternShell.Apps.Migrations as MigrationsApp
+import LanternShell.Apps.Notebook as NotebookApp
 import LanternShell.Apps.Notes as NotesApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
 import LanternShell.Apps.WriterQuery as WriterQueryApp
@@ -35,6 +37,7 @@ type App
     | LetterCubesApp LetterCubesApp.Model
     | LogViewerApp LogViewerApp.Model
     | MigrationsApp MigrationsApp.Model
+    | NotebookApp NotebookApp.Model
     | NotesApp NotesApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
     | WriterQueryApp WriterQueryApp.Model
@@ -47,6 +50,7 @@ type Message
     | LetterCubesMsg LetterCubesApp.Message
     | LogViewerMsg LogViewerApp.Message
     | MigrationsMsg MigrationsApp.Message
+    | NotebookMsg NotebookApp.Message
     | NotesMsg NotesApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
     | WriterQueryMsg WriterQueryApp.Message
@@ -72,6 +76,9 @@ appId app =
 
         MigrationsApp _ ->
             "Migrations"
+
+        NotebookApp _ ->
+            "Notebook"
 
         NotesApp _ ->
             "Notes"
@@ -103,6 +110,9 @@ launcherForId id =
 
         "Migrations" ->
             Just migrations
+
+        "Notebook" ->
+            Just notebook
 
         "Notes" ->
             Just notes
@@ -138,6 +148,9 @@ lanternAppFor app =
         MigrationsApp _ ->
             migrations
 
+        NotebookApp _ ->
+            notebook
+
         NotesApp _ ->
             notes
 
@@ -154,6 +167,7 @@ all =
     , databaseExplorer
     , flashcardGenerator
     , letterCubes
+    , notebook
     , notes
     , readerQuery
     , writerQuery
@@ -342,6 +356,32 @@ migrations context =
         , context = \_ -> { theme = context.theme }
         }
         MigrationsApp.lanternApp
+
+
+notebook : Context msg -> Lantern.App.App () App Message
+notebook context =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    NotebookMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    NotebookApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = NotebookApp
+        , wrapMsg = NotebookMsg
+        , context = \_ -> { theme = context.theme }
+        }
+        NotebookApp.lanternApp
 
 
 readerQuery : Context msg -> Lantern.App.App () App Message
