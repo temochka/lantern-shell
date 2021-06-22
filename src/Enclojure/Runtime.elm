@@ -1,7 +1,7 @@
 module Enclojure.Runtime exposing (..)
 
 import Enclojure.Extra.Maybe
-import Enclojure.Located exposing (Located)
+import Enclojure.Located exposing (Located(..))
 import Enclojure.Parser as Parser
 
 
@@ -26,6 +26,7 @@ type Value
     = Number Parser.Number
     | Fn (Maybe String) Callable
     | List (List Value)
+    | Nil
 
 
 emptyCallable : Callable
@@ -157,10 +158,10 @@ invoke callable args =
 
 
 inspectLocated : Located Value -> String
-inspectLocated { startPosition, value } =
+inspectLocated (Located { start } value) =
     let
         ( line, offset ) =
-            startPosition
+            start
 
         suffix =
             ":" ++ String.fromInt line ++ ":" ++ String.fromInt offset
@@ -172,10 +173,13 @@ inspect : Value -> String
 inspect value =
     case value of
         Number x ->
-            "Int<" ++ String.fromInt x ++ ">"
+            "int<" ++ String.fromInt x ++ ">"
 
         Fn name _ ->
-            "Fn<" ++ (name |> Maybe.withDefault "anonymous") ++ ">"
+            "fn<" ++ (name |> Maybe.withDefault "anonymous") ++ ">"
 
         List _ ->
-            "List"
+            "list"
+
+        Nil ->
+            "nil"
