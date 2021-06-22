@@ -2,7 +2,7 @@ module Enclojure exposing (eval)
 
 import Enclojure.Extra.Maybe
 import Enclojure.Lib as Lib
-import Enclojure.Located as Located exposing (Located)
+import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Parser as Parser
 import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), Value(..))
 
@@ -27,12 +27,12 @@ resolveSymbol symbol =
 
 
 apply : Located Value -> List (Located Value) -> Result (Located Exception) (Located Value)
-apply fn args =
-    case fn.value of
+apply ((Located _ value) as fn) args =
+    case value of
         Fn _ callable ->
             let
                 result =
-                    Runtime.invoke callable (List.map .value args)
+                    Runtime.invoke callable (List.map Located.getValue args)
             in
             result
                 |> Result.map (\ret -> Located.replace fn ret)
@@ -43,8 +43,8 @@ apply fn args =
 
 
 evalExpression : Located Parser.Expr -> Result (Located Exception) (Located Value)
-evalExpression expr =
-    case expr.value of
+evalExpression ((Located _ value) as expr) =
+    case value of
         Parser.List expressions ->
             let
                 results =
@@ -71,6 +71,17 @@ evalExpression expr =
 
         Parser.Number number ->
             Ok (Located.replace expr (Number number))
+
+        Parser.Nil ->
+            Ok (Located.replace expr Runtime.Nil)
+
+        Parser.Do exprs ->
+            List.foldl
+                (\e _ ->
+                    evalExpression e
+                )
+                (Ok (Located.replace expr Nil))
+                exprs
 
 
 eval : String -> Result String String

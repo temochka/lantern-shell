@@ -1,6 +1,6 @@
 module Enclojure.Parser exposing (Expr(..), Number, parse)
 
-import Enclojure.Located exposing (Located)
+import Enclojure.Located exposing (Located(..))
 import Parser exposing ((|.), (|=), Parser)
 import Set
 
@@ -14,6 +14,8 @@ type Expr
       -- | Quote Expr
     | Symbol String
     | Number Number
+    | Nil
+    | Do (List (Located Expr))
 
 
 
@@ -22,7 +24,7 @@ type Expr
 
 located : Parser a -> Parser (Located a)
 located p =
-    Parser.succeed Located
+    Parser.succeed (\v start end -> Located { start = start, end = end } v)
         |= p
         |= Parser.getPosition
         |= Parser.getPosition
@@ -79,28 +81,61 @@ symbol =
             }
 
 
+expressionsHelper : List (Located Expr) -> Parser (Parser.Step (List (Located Expr)) (List (Located Expr)))
+expressionsHelper revExprs =
+    Parser.oneOf
+        [ Parser.succeed (\expr -> Parser.Loop (expr :: revExprs))
+            |= located expression
+            |. spaces
+        , Parser.succeed ()
+            |> Parser.map (\_ -> Parser.Done (List.reverse revExprs))
+        ]
+
+
+rootLevelDo : Parser Expr
+rootLevelDo =
+    Parser.loop [] expressionsHelper
+        |> Parser.map Do
+
+
 expression : Parser Expr
 expression =
     Parser.oneOf
-        [ symbol
-        , list
+        [ listForm
+        , symbol
         , int
         ]
 
 
-list : Parser Expr
-list =
-    Parser.succeed List
-        |= Parser.sequence
-            { start = "("
-            , separator = ""
-            , spaces = Parser.spaces
-            , item = Parser.lazy (\_ -> located expression)
-            , trailing = Parser.Optional
-            , end = ")"
-            }
+spaces : Parser ()
+spaces =
+    Parser.oneOf
+        [ Parser.spaces
+        , Parser.chompIf (\c -> c == ',' || c == ';')
+        ]
+
+
+listForm : Parser Expr
+listForm =
+    Parser.sequence
+        { start = "("
+        , separator = ""
+        , spaces = spaces
+        , item = Parser.lazy (\_ -> located expression)
+        , trailing = Parser.Optional
+        , end = ")"
+        }
+        |> Parser.map
+            (\list ->
+                case list of
+                    (Located _ (Symbol "do")) :: rest ->
+                        Do rest
+
+                    _ ->
+                        List list
+            )
 
 
 parser : Parser (Located Expr)
 parser =
-    located expression
+    located rootLevelDo
