@@ -1,6 +1,6 @@
 module Enclojure.Parser exposing (Expr(..), Number, parse)
 
-import Enclojure.Located exposing (Located(..))
+import Enclojure.Located as Located exposing (Located(..))
 import Parser exposing ((|.), (|=), Parser)
 import Set
 
@@ -11,14 +11,15 @@ type alias Number =
 
 type Expr
     = List (List (Located Expr))
+    | Apply (Located Expr) (Located Expr)
       -- | Quote Expr
     | Symbol String
     | Number Number
     | Nil
-    | Do (List (Located Expr))
 
 
 
+-- | Do (List (Located Expr))
 -- | Do (List Expr)
 
 
@@ -92,10 +93,11 @@ expressionsHelper revExprs =
         ]
 
 
-rootLevelDo : Parser Expr
-rootLevelDo =
-    Parser.loop [] expressionsHelper
-        |> Parser.map Do
+
+-- rootLevelDo : Parser Expr
+-- rootLevelDo =
+--     Parser.loop [] expressionsHelper
+--         |> Parser.map Do
 
 
 expression : Parser Expr
@@ -128,14 +130,20 @@ listForm =
         |> Parser.map
             (\list ->
                 case list of
-                    (Located _ (Symbol "do")) :: rest ->
-                        Do rest
+                    -- (Located _ (Symbol "do")) :: rest ->
+                    --     Do rest
+                    expr :: loc :: rest ->
+                        Apply expr (Located.replace loc (List (loc :: rest)))
 
-                    _ ->
-                        List list
+                    [ expr ] ->
+                        Apply expr (Located.replace expr (List []))
+
+                    [] ->
+                        List []
             )
 
 
 parser : Parser (Located Expr)
 parser =
-    located rootLevelDo
+    -- located rootLevelDo
+    located expression

@@ -27,7 +27,7 @@ intOp : { identity : Int, op : Int -> Int -> Int } -> Callable
 intOp { identity, op } =
     let
         arity0 _ =
-            Ok (Number identity)
+            Number identity
 
         arity1 val =
             arity2 { args = ( Number identity, val ), rest = [] }
@@ -37,20 +37,22 @@ intOp { identity, op } =
                 result =
                     case args of
                         ( Number a, Number b ) ->
-                            Ok (Number (op a b))
+                            Number (op a b)
 
-                        ( Number _, invalid ) ->
-                            Err (Exception (inspect invalid ++ " is not a number"))
-
-                        ( invalid, _ ) ->
-                            Err (Exception (inspect invalid ++ " is not a number"))
+                        ( _, _ ) ->
+                            Nil
             in
             case rest of
                 [] ->
                     result
 
                 nextVal1 :: nextRest ->
-                    result |> Result.andThen (\nextVal0 -> arity2 { args = ( nextVal0, nextVal1 ), rest = nextRest })
+                    case result of
+                        Nil ->
+                            Nil
+
+                        _ ->
+                            arity2 { args = ( result, nextVal1 ), rest = nextRest }
     in
     { emptyCallable
         | arity0 = Just (Fixed arity0)
