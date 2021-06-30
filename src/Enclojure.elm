@@ -1,11 +1,10 @@
-module Enclojure exposing (Continuation, eval)
+module Enclojure exposing (Continuation, Thunk(..), eval)
 
 import Dict
-import Enclojure.IO as IO exposing (IO(..))
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Parser as Parser
-import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), Value(..))
+import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), IO(..), Value(..))
 
 
 
@@ -52,8 +51,9 @@ resolveSymbol symbol =
         "*" ->
             Fn (Just symbol) Lib.mul
 
-        -- "sleep" ->
-        --     Ok (Fn (Just symbol) Lib.sleep)
+        "sleep" ->
+            Fn (Just symbol) Lib.sleep
+
         _ ->
             Nil
 
@@ -74,7 +74,7 @@ resolveSymbol symbol =
 --             Err (Located.replace fn (Exception <| Runtime.inspectLocated fn ++ " is not a callable"))
 
 
-apply : Located Value -> Located Value -> Located Value
+apply : Located Value -> Located Value -> Located IO
 apply (Located fnLoc fnExpr) (Located _ argsExpr) =
     -- let
     --     _ =
@@ -85,7 +85,7 @@ apply (Located fnLoc fnExpr) (Located _ argsExpr) =
             Located fnLoc (Runtime.invoke callable (List.map Located.getValue args))
 
         _ ->
-            Located fnLoc Nil
+            Located fnLoc (Const Nil)
 
 
 
@@ -170,77 +170,92 @@ type alias Continuation =
 --                 exprs
 
 
-evalExpression : Located Parser.Expr -> ( String, Continuation ) -> Located Value
-evalExpression (Located loc expr) ( kname, k ) =
-    let
-        _ =
-            Debug.log "expr, k" ( expr, kname )
-    in
-    case expr of
-        Parser.Apply e1 e2 ->
-            evalExpression e1
-                ( "e1k"
-                , \e1ret ->
-                    evalExpression e2
-                        ( "e2k"
-                        , \e2ret ->
-                            let
-                                result =
-                                    apply e1ret e2ret
+type Thunk
+    = Thunk (Located Value -> ( Located IO, Maybe Thunk ))
 
-                                -- _ =
-                                --     Debug.log "(e1ret, e2ret, result)" ( e1ret, e2ret, result )
-                            in
-                            result
+
+{-| Introduce a redundant closure to prevent closure shadowing via tail-call optimization
+in functions with continuations. See: <https://github.com/elm/compiler/issues/2017>
+
+Elm compiler doesn’t seem to be able to optimize this away.
+
+-}
+closureHack : a -> (a -> b) -> b
+closureHack =
+    (|>)
+
+
+closureHack2 : a -> b -> (a -> b -> c) -> c
+closureHack2 a b f =
+    f a b
+
+
+evalExpression : Located Parser.Expr -> Thunk -> ( Located IO, Maybe Thunk )
+evalExpression mutableExpr mutableK =
+    closureHack2
+        mutableExpr
+        mutableK
+        (\(Located loc expr) k ->
+            case expr of
+                Parser.Apply e1 e2 ->
+                    evalExpression e1
+                        (Thunk
+                            (\e1ret ->
+                                evalExpression e2
+                                    (Thunk
+                                        (\e2ret ->
+                                            ( apply e1ret e2ret, Just k )
+                                        )
+                                    )
+                            )
                         )
-                )
-                |> k
 
-        Parser.List l ->
-            case l of
-                x :: rest ->
-                    evalExpression x
-                        ( "listx"
-                        , \xret ->
-                            evalExpression
-                                (Located loc (Parser.List rest))
-                                ( "listrest"
-                                , \(Located _ restRetVal) ->
-                                    case restRetVal of
-                                        List restRet ->
-                                            Located loc (List (xret :: restRet))
+                Parser.List l ->
+                    case l of
+                        x :: rest ->
+                            evalExpression x
+                                (Thunk
+                                    (\xret ->
+                                        evalExpression
+                                            (Located loc (Parser.List rest))
+                                            (Thunk
+                                                (\(Located _ restRetVal) ->
+                                                    case restRetVal of
+                                                        List restRet ->
+                                                            ( Located loc (Const (List (xret :: restRet))), Just k )
 
-                                        v ->
-                                            let
-                                                _ =
-                                                    Debug.log "impossible!" v
-                                            in
-                                            Located loc (List [ xret ])
+                                                        _ ->
+                                                            ( Located loc (Const (List [ xret ])), Just k )
+                                                )
+                                            )
+                                    )
                                 )
-                        )
-                        |> k
 
-                [] ->
-                    Located loc (List []) |> k
+                        [] ->
+                            ( Located loc (Const (List [])), Just k )
 
-        Parser.Symbol s ->
-            Located loc (resolveSymbol s) |> k
+                Parser.Symbol s ->
+                    ( Located loc (Const (resolveSymbol s)), Just k )
 
-        Parser.Number n ->
-            Located loc (Number n) |> k
+                Parser.Number n ->
+                    ( Located loc (Const (Number n)), Just k )
 
-        Parser.Nil ->
-            Located loc Nil |> k
+                Parser.Nil ->
+                    ( Located loc (Const Nil), Just k )
+        )
 
 
-eval : String -> Located Value
+eval : String -> ( Located IO, Maybe Thunk )
 eval code =
     Parser.parse code
         |> Result.mapError (Debug.toString >> Exception)
-        |> Result.map (\expr -> evalExpression expr ( "identity", identity ))
-        |> Result.withDefault (Located { start = ( 0, 0 ), end = ( 0, 0 ) } Runtime.Nil)
-
-
-
--- step : Runtime.Env -> Continuation -> Result Runtime.Exception ( Runtime.Env, InterpreterState )
--- step env callback =
+        |> Result.map
+            (\expr ->
+                evalExpression expr
+                    (Thunk
+                        (\(Located pos v) ->
+                            ( Located pos (Const v), Nothing )
+                        )
+                    )
+            )
+        |> Result.withDefault ( Located { start = ( 0, 0 ), end = ( 0, 0 ) } (Const Runtime.Nil), Nothing )

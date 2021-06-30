@@ -17,8 +17,13 @@ type Exception
 
 
 type Arity a
-    = Fixed (a -> Value)
-    | Variadic ({ args : a, rest : List Value } -> Value)
+    = Fixed (a -> IO)
+    | Variadic ({ args : a, rest : List Value } -> IO)
+
+
+type IO
+    = Const Value
+    | Sleep Float
 
 
 type alias Callable =
@@ -160,7 +165,7 @@ emptyCallable =
 --                 |> Maybe.withDefault (Err (Exception ("Invalid arity " ++ String.fromInt (List.length args))))
 
 
-invoke : Callable -> List Value -> Value
+invoke : Callable -> List Value -> IO
 invoke callable args =
     let
         extractVariadic arity =
@@ -187,7 +192,7 @@ invoke callable args =
                             Variadic fn ->
                                 fn { args = (), rest = [] }
                     )
-                |> Maybe.withDefault Nil
+                |> Maybe.withDefault (Const Nil)
 
         [ a0 ] ->
             extractVariadic callable.arity0
@@ -205,7 +210,7 @@ invoke callable args =
                                             fn { args = a0, rest = [] }
                                 )
                     )
-                |> Maybe.withDefault Nil
+                |> Maybe.withDefault (Const Nil)
 
         [ a0, a1 ] ->
             extractVariadic callable.arity0
@@ -228,7 +233,7 @@ invoke callable args =
                                             fn { args = ( a0, a1 ), rest = [] }
                                 )
                     )
-                |> Maybe.withDefault Nil
+                |> Maybe.withDefault (Const Nil)
 
         [ a0, a1, a2 ] ->
             extractVariadic callable.arity0
@@ -256,7 +261,7 @@ invoke callable args =
                                             fn { args = ( a0, a1, a2 ), rest = [] }
                                 )
                     )
-                |> Maybe.withDefault Nil
+                |> Maybe.withDefault (Const Nil)
 
         a0 :: a1 :: a2 :: rest ->
             extractVariadic callable.arity0
@@ -276,7 +281,7 @@ invoke callable args =
                         extractVariadic callable.arity3
                             |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest })
                     )
-                |> Maybe.withDefault Nil
+                |> Maybe.withDefault (Const Nil)
 
 
 inspectLocated : Located Value -> String
