@@ -3,9 +3,10 @@ module LanternShell.Apps.Notebook exposing (Message, Model, init, lanternApp)
 import Element exposing (Element)
 import Element.Input
 import Enclojure
-import Enclojure.IO as IO
 import Enclojure.Located as Located exposing (Located)
-import Enclojure.Runtime as Runtime
+import Enclojure.Runtime as Runtime exposing (IO(..))
+import Keyboard.Key exposing (Key(..))
+import Lantern
 import Lantern.App
 import LanternUi
 import LanternUi.Input
@@ -18,24 +19,16 @@ type alias Context =
     { theme : LanternUi.Theme.Theme }
 
 
-
--- type Interpreter
---     = Stopped
---     | Done Enclojure.Model (Result Enclojure.Runtime.Exception Enclojure.Runtime.Value)
---     | Running Enclojure.Model
-
-
 type alias Model =
     { code : String
-    , result : String
-
-    -- , interpreter : Interpreter
+    , interpreter : Interpreter
     }
 
 
 type Message
     = SetCode String
     | Eval
+    | HandleIO ( Located Runtime.IO, Maybe Enclojure.Thunk )
 
 
 
@@ -45,9 +38,7 @@ type Message
 init : Model
 init =
     { code = ""
-    , result = ""
-
-    -- , interpreter = Stopped
+    , interpreter = Stopped
     }
 
 
@@ -59,6 +50,38 @@ convergeResult result =
 
         Err v ->
             v
+
+
+type Interpreter
+    = Stopped
+    | Running
+    | Done Runtime.Value
+    | StackOverflow
+
+
+trampoline : ( Located Runtime.IO, Maybe Enclojure.Thunk ) -> Int -> ( Interpreter, Cmd Message )
+trampoline ( io, thunk ) maxdepth =
+    if maxdepth <= 0 then
+        ( StackOverflow, Cmd.none )
+
+    else
+        case Located.getValue io of
+            Const v ->
+                case thunk of
+                    Just (Enclojure.Thunk continuation) ->
+                        trampoline (continuation (Located.replace io v)) (maxdepth - 1)
+
+                    Nothing ->
+                        ( Done v, Cmd.none )
+
+            Sleep ms ->
+                ( Running
+                , Process.sleep ms
+                    |> Task.perform
+                        (\_ ->
+                            HandleIO ( Located.replace io (Const Runtime.Nil), thunk )
+                        )
+                )
 
 
 
@@ -93,7 +116,18 @@ update msg model =
             ( { model | code = code }, Cmd.none )
 
         Eval ->
-            ( { model | result = Debug.toString (Enclojure.eval model.code) }, Cmd.none )
+            let
+                ( interpreter, cmd ) =
+                    trampoline (Enclojure.eval model.code) 100
+            in
+            ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
+
+        HandleIO ret ->
+            let
+                ( interpreter, cmd ) =
+                    trampoline ret 100
+            in
+            ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
 
 
 
@@ -119,6 +153,22 @@ update msg model =
 --     ( model, Cmd.none )
 
 
+inspectInterpreter : Interpreter -> String
+inspectInterpreter interpreter =
+    case interpreter of
+        Stopped ->
+            "Stopped"
+
+        Running ->
+            "Running"
+
+        Done v ->
+            "Done " ++ Debug.toString v
+
+        StackOverflow ->
+            "Stack overflow"
+
+
 view : Context -> Model -> Element (Lantern.App.Message Message)
 view { theme } model =
     LanternUi.columnLayout
@@ -137,7 +187,7 @@ view { theme } model =
             { onPress = Just (Lantern.App.Message Eval)
             , label = Element.text "Eval"
             }
-        , Element.text ("Result: " ++ model.result)
+        , Element.text ("Interpreter: " ++ inspectInterpreter model.interpreter)
         ]
 
 

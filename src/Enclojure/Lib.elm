@@ -1,6 +1,6 @@
-module Enclojure.Lib exposing (div, minus, mul, plus)
+module Enclojure.Lib exposing (div, minus, mul, plus, sleep)
 
-import Enclojure.Runtime exposing (Arity(..), Callable, Exception(..), Value(..), emptyCallable, inspect)
+import Enclojure.Runtime exposing (Arity(..), Callable, Exception(..), IO(..), Value(..), emptyCallable, inspect)
 
 
 plus : Callable
@@ -21,6 +21,22 @@ mul =
 div : Callable
 div =
     intOp { identity = 1, op = (//) }
+
+
+sleep : Callable
+sleep =
+    let
+        arity1 val =
+            case val of
+                Number i ->
+                    Sleep (toFloat i)
+
+                _ ->
+                    Const Nil
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed arity1)
+    }
 
 
 intOp : { identity : Int, op : Int -> Int -> Int } -> Callable
@@ -55,7 +71,7 @@ intOp { identity, op } =
                             arity2 { args = ( result, nextVal1 ), rest = nextRest }
     in
     { emptyCallable
-        | arity0 = Just (Fixed arity0)
-        , arity1 = Just (Fixed arity1)
-        , arity2 = Just (Variadic arity2)
+        | arity0 = Just (Fixed (arity0 >> Const))
+        , arity1 = Just (Fixed (arity1 >> Const))
+        , arity2 = Just (Variadic (arity2 >> Const))
     }
