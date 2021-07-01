@@ -1,100 +1,52 @@
 module Enclojure exposing (Continuation, Thunk(..), eval)
 
-import Dict
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Parser as Parser
 import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), IO(..), Value(..))
 
 
-
--- type alias IO =
---     Enclojure.IO.IO
--- type Continuation
---     = Pure (Runtime.Env -> Result Exception ( Runtime.Env, InterpreterState ))
---     | IO (Runtime.Env -> Result Exception ( Runtime.Env, I ))
--- type alias Model =
---     { env : Runtime.Env
---     , code : String
---     }
--- type Step
---     = Step (Runtime.Env -> Value -> ( Runtime.Env, Result Exception IO ))
--- resolveSymbol : String -> Result Exception Value
--- resolveSymbol symbol =
---     case symbol of
---         "+" ->
---             Ok (Fn (Just symbol) Lib.plus)
---         "-" ->
---             Ok (Fn (Just symbol) Lib.minus)
---         "/" ->
---             Ok (Fn (Just symbol) Lib.div)
---         "*" ->
---             Ok (Fn (Just symbol) Lib.mul)
---         -- "sleep" ->
---         --     Ok (Fn (Just symbol) Lib.sleep)
---         _ ->
---             Err (Exception <| "Unknown symbol " ++ symbol)
-
-
-resolveSymbol : String -> Value
+resolveSymbol : String -> Result Exception Value
 resolveSymbol symbol =
     case symbol of
         "+" ->
-            Fn (Just symbol) Lib.plus
+            Ok (Fn (Just symbol) Lib.plus)
 
         "-" ->
-            Fn (Just symbol) Lib.minus
+            Ok (Fn (Just symbol) Lib.minus)
 
         "/" ->
-            Fn (Just symbol) Lib.div
+            Ok (Fn (Just symbol) Lib.div)
 
         "*" ->
-            Fn (Just symbol) Lib.mul
+            Ok (Fn (Just symbol) Lib.mul)
 
         "sleep" ->
-            Fn (Just symbol) Lib.sleep
+            Ok (Fn (Just symbol) Lib.sleep)
 
         _ ->
-            Nil
+            Err (Exception ("Unknown symbol " ++ symbol))
 
 
-
--- apply : Located Value -> List (Located Value) -> Result (Located Exception) (Located Value)
--- apply ((Located _ value) as fn) args =
---     case value of
---         Fn _ callable ->
---             let
---                 result =
---                     Runtime.invoke callable (List.map Located.getValue args)
---             in
---             result
---                 |> Result.map (\ret -> Located.replace fn ret)
---                 |> Result.mapError (\e -> Located.replace fn e)
---         _ ->
---             Err (Located.replace fn (Exception <| Runtime.inspectLocated fn ++ " is not a callable"))
-
-
-apply : Located Value -> Located Value -> Located IO
-apply (Located fnLoc fnExpr) (Located _ argsExpr) =
+apply : Located Value -> Located Value -> Result (Located Exception) (Located IO)
+apply ((Located fnLoc fnExpr) as fn) ((Located _ argsExpr) as arg) =
     case ( fnExpr, argsExpr ) of
         ( Fn _ callable, List args ) ->
-            Located fnLoc (Runtime.invoke callable (List.map Located.getValue args))
+            Runtime.invoke callable (List.map Located.getValue args) |> Result.map (Located fnLoc) |> Result.mapError (Located fnLoc)
 
-        _ ->
-            Located fnLoc (Const Nil)
+        ( _, List _ ) ->
+            Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable.")))
 
-
-
--- type Continuation
---     = Continuation (Located Value -> Result (Located Exception) ( IO, Maybe Continuation ))
+        ( _, _ ) ->
+            Err (Located fnLoc (Exception ("Cannot apply " ++ Runtime.inspectLocated fn ++ " to " ++ Runtime.inspectLocated arg)))
 
 
 type alias Continuation =
-    Located Value -> Located Value
+    Located Value -> Result (Located Exception) (Located Value)
 
 
 type Thunk
-    = Thunk (Located Value -> ( Located IO, Maybe Thunk ))
+    = Thunk (Located Value -> ( Result (Located Exception) (Located IO), Maybe Thunk ))
 
 
 {-| Introduce a redundant closure to prevent closure shadowing via tail-call optimization
@@ -108,7 +60,7 @@ closureHack2 a b f =
     f a b
 
 
-evalExpression : Located Parser.Expr -> Thunk -> ( Located IO, Maybe Thunk )
+evalExpression : Located Parser.Expr -> Thunk -> ( Result (Located Exception) (Located IO), Maybe Thunk )
 evalExpression mutableExpr mutableK =
     closureHack2
         mutableExpr
@@ -140,17 +92,17 @@ evalExpression mutableExpr mutableK =
                                                 (\(Located _ restRetVal) ->
                                                     case restRetVal of
                                                         List restRet ->
-                                                            ( Located loc (Const (List (xret :: restRet))), Just k )
+                                                            ( Ok (Located loc (Const (List (xret :: restRet)))), Just k )
 
                                                         _ ->
-                                                            ( Located loc (Const (List [ xret ])), Just k )
+                                                            ( Err (Located loc (Exception "Impossible interpreter state: list evaluation yielded a non-list")), Just k )
                                                 )
                                             )
                                     )
                                 )
 
                         [] ->
-                            ( Located loc (Const (List [])), Just k )
+                            ( Ok (Located loc (Const (List []))), Just k )
 
                 Parser.Do l ->
                     case l of
@@ -170,20 +122,25 @@ evalExpression mutableExpr mutableK =
                                 )
 
                         [] ->
-                            ( Located loc (Const Nil), Just k )
+                            ( Ok (Located loc (Const Nil)), Just k )
 
                 Parser.Symbol s ->
-                    ( Located loc (Const (resolveSymbol s)), Just k )
+                    case resolveSymbol s of
+                        Ok v ->
+                            ( Ok (Located loc (Const v)), Just k )
+
+                        Err e ->
+                            ( Err (Located loc e), Just k )
 
                 Parser.Number n ->
-                    ( Located loc (Const (Number n)), Just k )
+                    ( Ok (Located loc (Const (Number n))), Just k )
 
                 Parser.Nil ->
-                    ( Located loc (Const Nil), Just k )
+                    ( Ok (Located loc (Const Nil)), Just k )
         )
 
 
-eval : String -> ( Located IO, Maybe Thunk )
+eval : String -> ( Result (Located Exception) (Located IO), Maybe Thunk )
 eval code =
     Parser.parse code
         |> Result.mapError (Debug.toString >> Exception)
@@ -192,8 +149,8 @@ eval code =
                 evalExpression expr
                     (Thunk
                         (\(Located pos v) ->
-                            ( Located pos (Const v), Nothing )
+                            ( Ok (Located pos (Const v)), Nothing )
                         )
                     )
             )
-        |> Result.withDefault ( Located { start = ( 0, 0 ), end = ( 0, 0 ) } (Const Runtime.Nil), Nothing )
+        |> Result.withDefault ( Err (Located { start = ( 0, 0 ), end = ( 0, 0 ) } (Exception "Parsing error")), Nothing )

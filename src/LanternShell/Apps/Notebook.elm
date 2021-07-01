@@ -6,7 +6,6 @@ import Enclojure
 import Enclojure.Located as Located exposing (Located)
 import Enclojure.Runtime as Runtime exposing (IO(..))
 import Keyboard.Key exposing (Key(..))
-import Lantern
 import Lantern.App
 import LanternUi
 import LanternUi.Input
@@ -28,7 +27,7 @@ type alias Model =
 type Message
     = SetCode String
     | Eval
-    | HandleIO ( Located Runtime.IO, Maybe Enclojure.Thunk )
+    | HandleIO ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Enclojure.Thunk )
 
 
 
@@ -42,71 +41,42 @@ init =
     }
 
 
-convergeResult : Result a a -> a
-convergeResult result =
-    case result of
-        Ok v ->
-            v
-
-        Err v ->
-            v
-
-
 type Interpreter
     = Stopped
     | Running
     | Done Runtime.Value
+    | Panic (Located Runtime.Exception)
     | StackOverflow
 
 
-trampoline : ( Located Runtime.IO, Maybe Enclojure.Thunk ) -> Int -> ( Interpreter, Cmd Message )
-trampoline ( io, thunk ) maxdepth =
+trampoline : ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Enclojure.Thunk ) -> Int -> ( Interpreter, Cmd Message )
+trampoline ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
         ( StackOverflow, Cmd.none )
 
     else
-        case Located.getValue io of
-            Const v ->
-                case thunk of
-                    Just (Enclojure.Thunk continuation) ->
-                        trampoline (continuation (Located.replace io v)) (maxdepth - 1)
+        case result of
+            Ok io ->
+                case Located.getValue io of
+                    Const v ->
+                        case thunk of
+                            Just (Enclojure.Thunk continuation) ->
+                                trampoline (continuation (Located.replace io v)) (maxdepth - 1)
 
-                    Nothing ->
-                        ( Done v, Cmd.none )
+                            Nothing ->
+                                ( Done v, Cmd.none )
 
-            Sleep ms ->
-                ( Running
-                , Process.sleep ms
-                    |> Task.perform
-                        (\_ ->
-                            HandleIO ( Located.replace io (Const Runtime.Nil), thunk )
+                    Sleep ms ->
+                        ( Running
+                        , Process.sleep ms
+                            |> Task.perform
+                                (\_ ->
+                                    HandleIO ( Ok <| Located.replace io (Const Runtime.Nil), thunk )
+                                )
                         )
-                )
 
-
-
--- stepInterpreter : Interpreter -> Result (Located Runtime.Exception) ( Enclojure.IO, Maybe Enclojure.Continuation ) -> ( Interpreter, Cmd Message )
--- stepInterpreter interpreter result =
---     case interpreter of
---         Running model ->
---             result
---                 |> Result.map
---                     (\( io, continuation ) ->
---                         continuation
---                             |> Maybe.map
---                                 (\(Enclojure.Continuation c) ->
---                                     case io of
---                                         IO.Const value ->
---                                             c value |> stepInterpreter interpreter
---                                 )
---                             |> Maybe.withDefault ( Done model (Ok Runtime.Nil), Cmd.none )
---                     )
---                 |> Result.mapError
---                     (\e -> ())
---         Stopped ->
---             ( interpreter, Cmd.none )
---         Done _ _ ->
---             ( interpreter, Cmd.none )
+            Err exception ->
+                ( Panic exception, Cmd.none )
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
@@ -130,29 +100,6 @@ update msg model =
             ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
 
 
-
--- ResumeIO continuation ->
---     case model.interpreter of
---         Running interpreter ->
---             let
---                 ( env, result ) =
---                     continuation interpreter.env
---                 updatedInterpreter =
---                     { interpreter | env = env }
---             in
---             case result of
---                 Ok io ->
---                     let
---                         ( newInterpreter, cmd ) =
---                             stepInterpreter io (Running updatedInterpreter)
---                     in
---                     ( { model | interpreter = newInterpreter }, cmd )
---                 Err exception ->
---                     ( { model | interpreter = Done updatedInterpreter (Err exception) }, Cmd.none )
--- _ ->
---     ( model, Cmd.none )
-
-
 inspectInterpreter : Interpreter -> String
 inspectInterpreter interpreter =
     case interpreter of
@@ -167,6 +114,9 @@ inspectInterpreter interpreter =
 
         StackOverflow ->
             "Stack overflow"
+
+        Panic e ->
+            "Panic " ++ Debug.toString e
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)

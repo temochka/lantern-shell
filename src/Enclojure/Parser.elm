@@ -19,10 +19,6 @@ type Expr
     | Do (List (Located Expr))
 
 
-
--- | Do (List Expr)
-
-
 located : Parser a -> Parser (Located a)
 located p =
     Parser.succeed (\v start end -> Located { start = start, end = end } v)
@@ -93,11 +89,10 @@ expressionsHelper revExprs =
         ]
 
 
-
--- rootLevelDo : Parser Expr
--- rootLevelDo =
---     Parser.loop [] expressionsHelper
---         |> Parser.map Do
+rootLevelDo : Parser Expr
+rootLevelDo =
+    Parser.loop [] expressionsHelper
+        |> Parser.map Do
 
 
 expression : Parser Expr
@@ -146,5 +141,4 @@ listForm =
 
 parser : Parser (Located Expr)
 parser =
-    -- located rootLevelDo
-    located expression
+    located rootLevelDo
