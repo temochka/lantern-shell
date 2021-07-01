@@ -16,10 +16,10 @@ type Expr
     | Symbol String
     | Number Number
     | Nil
+    | Do (List (Located Expr))
 
 
 
--- | Do (List (Located Expr))
 -- | Do (List Expr)
 
 
@@ -130,8 +130,9 @@ listForm =
         |> Parser.map
             (\list ->
                 case list of
-                    -- (Located _ (Symbol "do")) :: rest ->
-                    --     Do rest
+                    (Located _ (Symbol "do")) :: rest ->
+                        Do rest
+
                     expr :: loc :: rest ->
                         Apply expr (Located.replace loc (List (loc :: rest)))
 

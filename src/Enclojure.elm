@@ -76,10 +76,6 @@ resolveSymbol symbol =
 
 apply : Located Value -> Located Value -> Located IO
 apply (Located fnLoc fnExpr) (Located _ argsExpr) =
-    -- let
-    --     _ =
-    --         Debug.log "expr: " ( fnExpr, argsExpr )
-    -- in
     case ( fnExpr, argsExpr ) of
         ( Fn _ callable, List args ) ->
             Located fnLoc (Runtime.invoke callable (List.map Located.getValue args))
@@ -97,79 +93,6 @@ type alias Continuation =
     Located Value -> Located Value
 
 
-
--- (+ 3 5)
--- AST (Apply (Symbol "+") [Num 3, Num 5])
--- Cont: (\x -> (5, (\val -> )))
--- Ok, the type is:
--- (IO, List Continuation) (or at least some sort of list of IO)
--- (do
---   (sleep (- 1000 (+ 1 2 3)))
---   (+ 1 1)
---
--- (() -> (
---    1000,
---    (v_1000) -> (
---      1,
---      (v_1) -> (
---        2,
---        (v_2) -> (
---          3,
---          (v_3) -> (
---
---          )
--- )
---      )
---      n ::
---    )
--- ))
--- evalList : List (Located Parser.Expr) -> ( Result (Located Exception) (List IO), Continuation )
--- evalList expressions =
---     case expressions of
---         current :: next :: rest ->
---             \locatedValue ->
---                 evalExpression current
---                     evalExpression
---                     next
--- evalExpression : Located Parser.Expr -> Result (Located Exception) IO
--- evalExpression ((Located _ value) as expr) =
---     case value of
---         Parser.List expressions ->
---             let
---                 results =
---                     expressions
---                         |> List.map evalExpression
---                         |> List.foldr (Result.map2 (::)) (Ok [])
---             in
---             case results of
---                 Ok evaledExpressions ->
---                     case evaledExpressions of
---                         [] ->
---                             Ok (Located.replace expr (List []))
---                         fn :: xs ->
---                             apply fn xs
---                 Err exception ->
---                     Err exception
---         Parser.Symbol symbol ->
---             resolveSymbol symbol
---                 |> Result.map (Located.replace expr >> Const)
---                 |> Result.mapError (Located.replace expr)
---         Parser.Number number ->
---             Number number
---                 |> Located.replace expr
---                 |> Const
---                 |> Ok
---         Parser.Nil ->
---             Ok (Const (Located.replace expr Runtime.Nil))
---         Parser.Do exprs ->
---             List.foldl
---                 (\e _ ->
---                     evalExpression e
---                 )
---                 (Ok (Located.replace expr Nil))
---                 exprs
-
-
 type Thunk
     = Thunk (Located Value -> ( Located IO, Maybe Thunk ))
 
@@ -180,11 +103,6 @@ in functions with continuations. See: <https://github.com/elm/compiler/issues/20
 Elm compiler doesn’t seem to be able to optimize this away.
 
 -}
-closureHack : a -> (a -> b) -> b
-closureHack =
-    (|>)
-
-
 closureHack2 : a -> b -> (a -> b -> c) -> c
 closureHack2 a b f =
     f a b
@@ -233,6 +151,26 @@ evalExpression mutableExpr mutableK =
 
                         [] ->
                             ( Located loc (Const (List [])), Just k )
+
+                Parser.Do l ->
+                    case l of
+                        [ x ] ->
+                            evalExpression x k
+
+                        x :: rest ->
+                            evalExpression x
+                                (Thunk
+                                    (\_ ->
+                                        evalExpression
+                                            (Located loc
+                                                (Parser.Do rest)
+                                            )
+                                            k
+                                    )
+                                )
+
+                        [] ->
+                            ( Located loc (Const Nil), Just k )
 
                 Parser.Symbol s ->
                     ( Located loc (Const (resolveSymbol s)), Just k )
