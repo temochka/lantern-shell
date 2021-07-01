@@ -29,10 +29,10 @@ sleep =
         arity1 val =
             case val of
                 Number i ->
-                    Sleep (toFloat i)
+                    Ok (Sleep (toFloat i))
 
                 _ ->
-                    Const Nil
+                    Ok (Const Nil)
     in
     { emptyCallable
         | arity1 = Just (Fixed arity1)
@@ -43,7 +43,7 @@ intOp : { identity : Int, op : Int -> Int -> Int } -> Callable
 intOp { identity, op } =
     let
         arity0 _ =
-            Number identity
+            Ok (Number identity)
 
         arity1 val =
             arity2 { args = ( Number identity, val ), rest = [] }
@@ -53,25 +53,27 @@ intOp { identity, op } =
                 result =
                     case args of
                         ( Number a, Number b ) ->
-                            Number (op a b)
+                            Ok (Number (op a b))
 
-                        ( _, _ ) ->
-                            Nil
+                        ( Number _, b ) ->
+                            Err (Exception (inspect b ++ " is not a number"))
+
+                        ( a, _ ) ->
+                            Err (Exception (inspect a ++ " is not a number"))
             in
             case rest of
                 [] ->
                     result
 
                 nextVal1 :: nextRest ->
-                    case result of
-                        Nil ->
-                            Nil
-
-                        _ ->
-                            arity2 { args = ( result, nextVal1 ), rest = nextRest }
+                    result
+                        |> Result.andThen
+                            (\x ->
+                                arity2 { args = ( x, nextVal1 ), rest = nextRest }
+                            )
     in
     { emptyCallable
-        | arity0 = Just (Fixed (arity0 >> Const))
-        , arity1 = Just (Fixed (arity1 >> Const))
-        , arity2 = Just (Variadic (arity2 >> Const))
+        | arity0 = Just (Fixed (arity0 >> Result.map Const))
+        , arity1 = Just (Fixed (arity1 >> Result.map Const))
+        , arity2 = Just (Variadic (arity2 >> Result.map Const))
     }
