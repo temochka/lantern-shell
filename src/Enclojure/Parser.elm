@@ -16,7 +16,9 @@ type Expr
     | Symbol String
     | Number Number
     | Nil
+    | Bool Basics.Bool
     | Do (List (Located Expr))
+    | Conditional { ifExpression : Located Expr, thenExpression : Located Expr, elseExpression : Maybe (Located Expr) }
 
 
 located : Parser a -> Parser (Located a)
@@ -99,6 +101,8 @@ expression : Parser Expr
 expression =
     Parser.oneOf
         [ listForm
+        , bool
+        , nil
         , symbol
         , int
         ]
@@ -112,6 +116,26 @@ spaces =
         ]
 
 
+nil : Parser Expr
+nil =
+    Parser.keyword "nil" |> Parser.map (always Nil)
+
+
+true : Parser Expr
+true =
+    Parser.keyword "true" |> Parser.map (always (Bool True))
+
+
+bool : Parser Expr
+bool =
+    Parser.oneOf [ true, false ]
+
+
+false : Parser Expr
+false =
+    Parser.keyword "false" |> Parser.map (always (Bool False))
+
+
 listForm : Parser Expr
 listForm =
     Parser.sequence
@@ -122,20 +146,37 @@ listForm =
         , trailing = Parser.Optional
         , end = ")"
         }
-        |> Parser.map
+        |> Parser.andThen
             (\list ->
                 case list of
                     (Located _ (Symbol "do")) :: rest ->
-                        Do rest
+                        Parser.succeed (Do rest)
+
+                    (Located _ (Symbol "if")) :: rest ->
+                        case rest of
+                            _ :: _ :: _ :: _ :: _ ->
+                                Parser.problem "an if with too many forms"
+
+                            [ eIf, eThen, eElse ] ->
+                                Parser.succeed (Conditional { ifExpression = eIf, thenExpression = eThen, elseExpression = Just eElse })
+
+                            [ eIf, eThen ] ->
+                                Parser.succeed (Conditional { ifExpression = eIf, thenExpression = eThen, elseExpression = Nothing })
+
+                            [ _ ] ->
+                                Parser.problem "an if without then"
+
+                            [] ->
+                                Parser.problem "an empty if"
 
                     expr :: loc :: rest ->
-                        Apply expr (Located.replace loc (List (loc :: rest)))
+                        Apply expr (Located.replace loc (List (loc :: rest))) |> Parser.succeed
 
                     [ expr ] ->
-                        Apply expr (Located.replace expr (List []))
+                        Apply expr (Located.replace expr (List [])) |> Parser.succeed
 
                     [] ->
-                        List []
+                        List [] |> Parser.succeed
             )
 
 

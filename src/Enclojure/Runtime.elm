@@ -33,6 +33,7 @@ type Value
     | Fn (Maybe String) Callable
     | List (List (Located Value))
     | Nil
+    | Bool Basics.Bool
 
 
 type alias Env =
@@ -167,6 +168,19 @@ invoke callable args =
                 |> Maybe.withDefault (Err (Exception ("Invalid arity " ++ String.fromInt (List.length args))))
 
 
+isTruthy : Value -> Bool
+isTruthy val =
+    case val of
+        Nil ->
+            False
+
+        Bool False ->
+            False
+
+        _ ->
+            True
+
+
 inspectLocated : Located Value -> String
 inspectLocated (Located { start } value) =
     let
@@ -193,3 +207,10 @@ inspect value =
 
         Nil ->
             "nil"
+
+        Bool b ->
+            if b then
+                "true"
+
+            else
+                "false"

@@ -104,6 +104,20 @@ evalExpression mutableExpr mutableK =
                         [] ->
                             ( Ok (Located loc (Const (List []))), Just k )
 
+                Parser.Conditional { ifExpression, thenExpression, elseExpression } ->
+                    evalExpression ifExpression
+                        (Thunk
+                            (\ifRet ->
+                                if Runtime.isTruthy (Located.getValue ifRet) then
+                                    evalExpression thenExpression k
+
+                                else
+                                    elseExpression
+                                        |> Maybe.map (\e -> evalExpression e k)
+                                        |> Maybe.withDefault ( Ok (Located loc (Const Nil)), Just k )
+                            )
+                        )
+
                 Parser.Do l ->
                     case l of
                         [ x ] ->
@@ -137,6 +151,9 @@ evalExpression mutableExpr mutableK =
 
                 Parser.Nil ->
                     ( Ok (Located loc (Const Nil)), Just k )
+
+                Parser.Bool b ->
+                    ( Ok (Located loc (Const (Bool b))), Just k )
         )
 
 
