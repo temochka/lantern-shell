@@ -30,6 +30,7 @@ type alias Callable =
 
 type Value
     = Number Parser.Number
+    | Ref String (Located Value)
     | Fn (Maybe String) Callable
     | List (List (Located Value))
     | Nil
@@ -196,6 +197,9 @@ inspectLocated (Located { start } value) =
 inspect : Value -> String
 inspect value =
     case value of
+        Ref name _ ->
+            "#'" ++ name
+
         Number x ->
             "int<" ++ String.fromInt x ++ ">"
 

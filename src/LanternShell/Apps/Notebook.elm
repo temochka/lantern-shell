@@ -30,10 +30,6 @@ type Message
     | HandleIO ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Enclojure.Thunk )
 
 
-
--- | ResumeIO (Enclojure.Runtime.Env -> ( Enclojure.Runtime.Env, Result Enclojure.Runtime.Exception Enclojure.IO ))
-
-
 init : Model
 init =
     { code = ""

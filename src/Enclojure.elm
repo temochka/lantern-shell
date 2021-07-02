@@ -80,6 +80,14 @@ evalExpression mutableExpr mutableK =
                             )
                         )
 
+                Parser.Def name e ->
+                    evalExpression e
+                        (Thunk
+                            (\eret ->
+                                ( Ok (Located loc (Const (Ref name eret))), Just k )
+                            )
+                        )
+
                 Parser.List l ->
                     case l of
                         x :: rest ->
