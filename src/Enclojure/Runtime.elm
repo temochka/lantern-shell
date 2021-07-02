@@ -2,7 +2,7 @@ module Enclojure.Runtime exposing (..)
 
 import Dict
 import Enclojure.Extra.Maybe
-import Enclojure.Located exposing (Located(..))
+import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Parser as Parser
 
 
@@ -33,6 +33,7 @@ type Value
     | Ref String (Located Value)
     | Fn (Maybe String) Callable
     | List (List (Located Value))
+    | Vector (List (Located Value))
     | Nil
     | Bool Basics.Bool
 
@@ -201,13 +202,13 @@ inspect value =
             "#'" ++ name
 
         Number x ->
-            "int<" ++ String.fromInt x ++ ">"
+            String.fromInt x
 
         Fn name _ ->
             "fn<" ++ (name |> Maybe.withDefault "anonymous") ++ ">"
 
-        List _ ->
-            "list"
+        List l ->
+            "(" ++ (List.map (Located.getValue >> inspect) l |> String.join " ") ++ ")"
 
         Nil ->
             "nil"
@@ -218,3 +219,6 @@ inspect value =
 
             else
                 "false"
+
+        Vector l ->
+            "[" ++ (List.map (Located.getValue >> inspect) l |> String.join " ") ++ "]"
