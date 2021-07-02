@@ -106,7 +106,7 @@ inspectInterpreter interpreter =
             "Running"
 
         Done v ->
-            "Done " ++ Debug.toString v
+            "Done " ++ Runtime.inspect v
 
         StackOverflow ->
             "Stack overflow"

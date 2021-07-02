@@ -112,6 +112,30 @@ evalExpression mutableExpr mutableK =
                         [] ->
                             ( Ok (Located loc (Const (List []))), Just k )
 
+                Parser.Vector l ->
+                    case l of
+                        x :: rest ->
+                            evalExpression x
+                                (Thunk
+                                    (\xret ->
+                                        evalExpression
+                                            (Located loc (Parser.Vector rest))
+                                            (Thunk
+                                                (\(Located _ restRetVal) ->
+                                                    case restRetVal of
+                                                        Vector restRet ->
+                                                            ( Ok (Located loc (Const (Vector (xret :: restRet)))), Just k )
+
+                                                        _ ->
+                                                            ( Err (Located loc (Exception "Impossible interpreter state: list evaluation yielded a non-list")), Just k )
+                                                )
+                                            )
+                                    )
+                                )
+
+                        [] ->
+                            ( Ok (Located loc (Const (Vector []))), Just k )
+
                 Parser.Conditional { ifExpression, thenExpression, elseExpression } ->
                     evalExpression ifExpression
                         (Thunk

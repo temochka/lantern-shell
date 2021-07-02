@@ -20,6 +20,7 @@ type Expr
     | Do (List (Located Expr))
     | Conditional { ifExpression : Located Expr, thenExpression : Located Expr, elseExpression : Maybe (Located Expr) }
     | Def String (Located Expr)
+    | Vector (List (Located Expr))
 
 
 located : Parser a -> Parser (Located a)
@@ -101,7 +102,8 @@ rootLevelDo =
 expression : Parser Expr
 expression =
     Parser.oneOf
-        [ listForm
+        [ list
+        , vector
         , bool
         , nil
         , symbol
@@ -137,8 +139,21 @@ false =
     Parser.keyword "false" |> Parser.map (always (Bool False))
 
 
-listForm : Parser Expr
-listForm =
+vector : Parser Expr
+vector =
+    Parser.sequence
+        { start = "["
+        , separator = ""
+        , spaces = spaces
+        , item = Parser.lazy (\_ -> located expression)
+        , trailing = Parser.Optional
+        , end = "]"
+        }
+        |> Parser.map Vector
+
+
+list : Parser Expr
+list =
     Parser.sequence
         { start = "("
         , separator = ""
@@ -148,8 +163,8 @@ listForm =
         , end = ")"
         }
         |> Parser.andThen
-            (\list ->
-                case list of
+            (\l ->
+                case l of
                     (Located _ (Symbol "do")) :: rest ->
                         Parser.succeed (Do rest)
 
