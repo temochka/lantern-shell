@@ -19,6 +19,7 @@ type Expr
     | Bool Basics.Bool
     | Do (List (Located Expr))
     | Conditional { ifExpression : Located Expr, thenExpression : Located Expr, elseExpression : Maybe (Located Expr) }
+    | Def String (Located Expr)
 
 
 located : Parser a -> Parser (Located a)
@@ -151,6 +152,26 @@ listForm =
                 case list of
                     (Located _ (Symbol "do")) :: rest ->
                         Parser.succeed (Do rest)
+
+                    (Located _ (Symbol "def")) :: args ->
+                        case args of
+                            _ :: _ :: _ :: _ ->
+                                Parser.problem "too many arguments to def"
+
+                            [ Located _ (Symbol name), expr ] ->
+                                Parser.succeed (Def name expr)
+
+                            [ _, _ ] ->
+                                Parser.problem "def accepts a symbol and an expression"
+
+                            [ Located _ (Symbol name) ] ->
+                                Parser.problem ("empty def " ++ name)
+
+                            [ _ ] ->
+                                Parser.problem "foo"
+
+                            [] ->
+                                Parser.problem "no arguments to def"
 
                     (Located _ (Symbol "if")) :: rest ->
                         case rest of
