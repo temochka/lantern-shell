@@ -67,6 +67,8 @@ isAllowedSymbolSpecialChar c =
         == '='
         || c
         == '\''
+        || c
+        == '&'
 
 
 symbol : Parser Expr
