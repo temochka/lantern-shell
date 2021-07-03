@@ -1,4 +1,4 @@
-module Enclojure.Parser exposing (Expr(..), Number, parse)
+module Enclojure.Reader exposing (Expr(..), Number, parse)
 
 import Enclojure.Located as Located exposing (Located(..))
 import Parser exposing ((|.), (|=), Parser)
