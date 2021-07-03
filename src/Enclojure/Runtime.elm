@@ -3,7 +3,7 @@ module Enclojure.Runtime exposing (..)
 import Dict
 import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Parser as Parser
+import Enclojure.Reader as Parser
 
 
 type Exception

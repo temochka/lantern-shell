@@ -2,7 +2,7 @@ module Enclojure exposing (Continuation, Thunk(..), eval)
 
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Parser as Parser
+import Enclojure.Reader as Parser
 import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), IO(..), Value(..))
 
 
