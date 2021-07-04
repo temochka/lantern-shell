@@ -39,6 +39,7 @@ init =
     (sleep 10)
     (if true (* 2 2) (/ 2 2))
     nil
+    (quot (a b c d))
 ]
     """
     , interpreter = Stopped
