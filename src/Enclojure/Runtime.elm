@@ -3,7 +3,6 @@ module Enclojure.Runtime exposing (..)
 import Dict
 import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Reader as Parser
 
 
 type Exception
@@ -28,14 +27,19 @@ type alias Callable =
     }
 
 
+type alias Number =
+    Int
+
+
 type Value
-    = Number Parser.Number
+    = Number Number
     | Ref String (Located Value)
     | Fn (Maybe String) Callable
     | List (List (Located Value))
     | Vector (List (Located Value))
     | Nil
     | Bool Basics.Bool
+    | Symbol String
 
 
 type alias Env =
@@ -222,3 +226,6 @@ inspect value =
 
         Vector l ->
             "[" ++ (List.map (Located.getValue >> inspect) l |> String.join " ") ++ "]"
+
+        Symbol name ->
+            name

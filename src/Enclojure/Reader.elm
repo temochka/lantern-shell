@@ -1,26 +1,9 @@
-module Enclojure.Reader exposing (Expr(..), Number, parse)
+module Enclojure.Reader exposing (parse)
 
-import Enclojure.Located as Located exposing (Located(..))
+import Enclojure.Located exposing (Located(..))
+import Enclojure.Runtime exposing (Value(..))
 import Parser exposing ((|.), (|=), Parser)
 import Set
-
-
-type alias Number =
-    Int
-
-
-type Expr
-    = List (List (Located Expr))
-    | Apply (Located Expr) (Located Expr)
-      -- | Quote Expr
-    | Symbol String
-    | Number Number
-    | Nil
-    | Bool Basics.Bool
-    | Do (List (Located Expr))
-    | Conditional { ifExpression : Located Expr, thenExpression : Located Expr, elseExpression : Maybe (Located Expr) }
-    | Def String (Located Expr)
-    | Vector (List (Located Expr))
 
 
 located : Parser a -> Parser (Located a)
@@ -31,12 +14,12 @@ located p =
         |= Parser.getPosition
 
 
-parse : String -> Result (List Parser.DeadEnd) (Located Expr)
+parse : String -> Result (List Parser.DeadEnd) (List (Located Value))
 parse code =
     Parser.run parser code
 
 
-int : Parser Expr
+int : Parser Value
 int =
     Parser.oneOf
         [ Parser.map Number <|
@@ -71,7 +54,7 @@ isAllowedSymbolSpecialChar c =
         == '&'
 
 
-symbol : Parser Expr
+symbol : Parser Value
 symbol =
     Parser.succeed Symbol
         |= Parser.variable
@@ -84,7 +67,7 @@ symbol =
             }
 
 
-expressionsHelper : List (Located Expr) -> Parser (Parser.Step (List (Located Expr)) (List (Located Expr)))
+expressionsHelper : List (Located Value) -> Parser (Parser.Step (List (Located Value)) (List (Located Value)))
 expressionsHelper revExprs =
     Parser.oneOf
         [ Parser.succeed (\expr -> Parser.Loop (expr :: revExprs))
@@ -95,22 +78,19 @@ expressionsHelper revExprs =
         ]
 
 
-rootLevelDo : Parser Expr
-rootLevelDo =
-    Parser.loop [] expressionsHelper
-        |> Parser.map Do
-
-
-expression : Parser Expr
+expression : Parser Value
 expression =
-    Parser.oneOf
-        [ list
-        , vector
-        , bool
-        , nil
-        , symbol
-        , int
-        ]
+    Parser.succeed identity
+        |. Parser.spaces
+        |= Parser.oneOf
+            [ list
+            , vector
+            , bool
+            , nil
+            , symbol
+            , int
+            ]
+        |. Parser.spaces
 
 
 spaces : Parser ()
@@ -121,27 +101,27 @@ spaces =
         ]
 
 
-nil : Parser Expr
+nil : Parser Value
 nil =
     Parser.keyword "nil" |> Parser.map (always Nil)
 
 
-true : Parser Expr
+true : Parser Value
 true =
     Parser.keyword "true" |> Parser.map (always (Bool True))
 
 
-bool : Parser Expr
+bool : Parser Value
 bool =
     Parser.oneOf [ true, false ]
 
 
-false : Parser Expr
+false : Parser Value
 false =
     Parser.keyword "false" |> Parser.map (always (Bool False))
 
 
-vector : Parser Expr
+vector : Parser Value
 vector =
     Parser.sequence
         { start = "["
@@ -154,7 +134,7 @@ vector =
         |> Parser.map Vector
 
 
-list : Parser Expr
+list : Parser Value
 list =
     Parser.sequence
         { start = "("
@@ -164,60 +144,9 @@ list =
         , trailing = Parser.Optional
         , end = ")"
         }
-        |> Parser.andThen
-            (\l ->
-                case l of
-                    (Located _ (Symbol "do")) :: rest ->
-                        Parser.succeed (Do rest)
-
-                    (Located _ (Symbol "def")) :: args ->
-                        case args of
-                            _ :: _ :: _ :: _ ->
-                                Parser.problem "too many arguments to def"
-
-                            [ Located _ (Symbol name), expr ] ->
-                                Parser.succeed (Def name expr)
-
-                            [ _, _ ] ->
-                                Parser.problem "def accepts a symbol and an expression"
-
-                            [ Located _ (Symbol name) ] ->
-                                Parser.problem ("empty def " ++ name)
-
-                            [ _ ] ->
-                                Parser.problem "foo"
-
-                            [] ->
-                                Parser.problem "no arguments to def"
-
-                    (Located _ (Symbol "if")) :: rest ->
-                        case rest of
-                            _ :: _ :: _ :: _ :: _ ->
-                                Parser.problem "an if with too many forms"
-
-                            [ eIf, eThen, eElse ] ->
-                                Parser.succeed (Conditional { ifExpression = eIf, thenExpression = eThen, elseExpression = Just eElse })
-
-                            [ eIf, eThen ] ->
-                                Parser.succeed (Conditional { ifExpression = eIf, thenExpression = eThen, elseExpression = Nothing })
-
-                            [ _ ] ->
-                                Parser.problem "an if without then"
-
-                            [] ->
-                                Parser.problem "an empty if"
-
-                    expr :: loc :: rest ->
-                        Apply expr (Located.replace loc (List (loc :: rest))) |> Parser.succeed
-
-                    [ expr ] ->
-                        Apply expr (Located.replace expr (List [])) |> Parser.succeed
-
-                    [] ->
-                        List [] |> Parser.succeed
-            )
+        |> Parser.map List
 
 
-parser : Parser (Located Expr)
+parser : Parser (List (Located Value))
 parser =
-    located rootLevelDo
+    Parser.loop [] expressionsHelper

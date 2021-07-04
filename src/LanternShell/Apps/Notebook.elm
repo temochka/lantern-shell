@@ -32,7 +32,15 @@ type Message
 
 init : Model
 init =
-    { code = ""
+    { code = """[
+    (def foo 42)
+    (+ 1 2)
+    (- 10 9 8)
+    (sleep 10)
+    (if true (* 2 2) (/ 2 2))
+    nil
+]
+    """
     , interpreter = Stopped
     }
 
