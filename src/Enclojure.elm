@@ -60,66 +60,21 @@ closureHack2 a b f =
     f a b
 
 
-evalExpression : Located Parser.Expr -> Thunk -> ( Result (Located Exception) (Located IO), Maybe Thunk )
+evalExpression : Located Value -> Thunk -> ( Result (Located Exception) (Located IO), Maybe Thunk )
 evalExpression mutableExpr mutableK =
     closureHack2
         mutableExpr
         mutableK
         (\(Located loc expr) k ->
             case expr of
-                Parser.Apply e1 e2 ->
-                    evalExpression e1
-                        (Thunk
-                            (\e1ret ->
-                                evalExpression e2
-                                    (Thunk
-                                        (\e2ret ->
-                                            ( apply e1ret e2ret, Just k )
-                                        )
-                                    )
-                            )
-                        )
-
-                Parser.Def name e ->
-                    evalExpression e
-                        (Thunk
-                            (\eret ->
-                                ( Ok (Located loc (Const (Ref name eret))), Just k )
-                            )
-                        )
-
-                Parser.List l ->
+                Vector l ->
                     case l of
                         x :: rest ->
                             evalExpression x
                                 (Thunk
                                     (\xret ->
                                         evalExpression
-                                            (Located loc (Parser.List rest))
-                                            (Thunk
-                                                (\(Located _ restRetVal) ->
-                                                    case restRetVal of
-                                                        List restRet ->
-                                                            ( Ok (Located loc (Const (List (xret :: restRet)))), Just k )
-
-                                                        _ ->
-                                                            ( Err (Located loc (Exception "Impossible interpreter state: list evaluation yielded a non-list")), Just k )
-                                                )
-                                            )
-                                    )
-                                )
-
-                        [] ->
-                            ( Ok (Located loc (Const (List []))), Just k )
-
-                Parser.Vector l ->
-                    case l of
-                        x :: rest ->
-                            evalExpression x
-                                (Thunk
-                                    (\xret ->
-                                        evalExpression
-                                            (Located loc (Parser.Vector rest))
+                                            (Located loc (Vector rest))
                                             (Thunk
                                                 (\(Located _ restRetVal) ->
                                                     case restRetVal of
@@ -136,41 +91,7 @@ evalExpression mutableExpr mutableK =
                         [] ->
                             ( Ok (Located loc (Const (Vector []))), Just k )
 
-                Parser.Conditional { ifExpression, thenExpression, elseExpression } ->
-                    evalExpression ifExpression
-                        (Thunk
-                            (\ifRet ->
-                                if Runtime.isTruthy (Located.getValue ifRet) then
-                                    evalExpression thenExpression k
-
-                                else
-                                    elseExpression
-                                        |> Maybe.map (\e -> evalExpression e k)
-                                        |> Maybe.withDefault ( Ok (Located loc (Const Nil)), Just k )
-                            )
-                        )
-
-                Parser.Do l ->
-                    case l of
-                        [ x ] ->
-                            evalExpression x k
-
-                        x :: rest ->
-                            evalExpression x
-                                (Thunk
-                                    (\_ ->
-                                        evalExpression
-                                            (Located loc
-                                                (Parser.Do rest)
-                                            )
-                                            k
-                                    )
-                                )
-
-                        [] ->
-                            ( Ok (Located loc (Const Nil)), Just k )
-
-                Parser.Symbol s ->
+                Symbol s ->
                     case resolveSymbol s of
                         Ok v ->
                             ( Ok (Located loc (Const v)), Just k )
@@ -178,28 +99,164 @@ evalExpression mutableExpr mutableK =
                         Err e ->
                             ( Err (Located loc e), Just k )
 
-                Parser.Number n ->
+                Number n ->
                     ( Ok (Located loc (Const (Number n))), Just k )
 
-                Parser.Nil ->
+                Nil ->
                     ( Ok (Located loc (Const Nil)), Just k )
 
-                Parser.Bool b ->
-                    ( Ok (Located loc (Const (Bool b))), Just k )
+                Bool _ ->
+                    ( Ok (Located loc (Const expr)), Just k )
+
+                Ref _ _ ->
+                    ( Ok (Located loc (Const expr)), Just k )
+
+                Fn _ _ ->
+                    ( Ok (Located loc (Const expr)), Just k )
+
+                List l ->
+                    case l of
+                        (Located _ (Symbol "def")) :: args ->
+                            case args of
+                                _ :: _ :: _ :: _ ->
+                                    ( Err (Located loc (Exception "too many arguments to def")), Just k )
+
+                                [ Located _ (Symbol name), e ] ->
+                                    evalExpression e
+                                        (Thunk
+                                            (\eret ->
+                                                ( Ok (Located loc (Const (Ref name eret))), Just k )
+                                            )
+                                        )
+
+                                [ _, _ ] ->
+                                    ( Err (Located loc (Exception "def accepts a symbol and an expression")), Just k )
+
+                                [ Located _ (Symbol name) ] ->
+                                    ( Err (Located loc (Exception ("empty def " ++ name))), Just k )
+
+                                [ _ ] ->
+                                    ( Err (Located loc (Exception "def expects a symbol as its first argument")), Just k )
+
+                                [] ->
+                                    ( Err (Located loc (Exception "no arguments to def")), Just k )
+
+                        (Located _ (Symbol "if")) :: args ->
+                            case args of
+                                _ :: _ :: _ :: _ :: _ ->
+                                    ( Err (Located loc (Exception "an if with too many forms")), Just k )
+
+                                [ eIf, eThen, eElse ] ->
+                                    evalExpression eIf
+                                        (Thunk
+                                            (\ifRet ->
+                                                if Runtime.isTruthy (Located.getValue ifRet) then
+                                                    evalExpression eThen k
+
+                                                else
+                                                    evalExpression eElse k
+                                            )
+                                        )
+
+                                [ eIf, eThen ] ->
+                                    evalExpression eIf
+                                        (Thunk
+                                            (\ifRet ->
+                                                if Runtime.isTruthy (Located.getValue ifRet) then
+                                                    evalExpression eThen k
+
+                                                else
+                                                    ( Ok (Located loc (Const Nil)), Just k )
+                                            )
+                                        )
+
+                                [ _ ] ->
+                                    ( Err (Located loc (Exception "an if without then")), Just k )
+
+                                [] ->
+                                    ( Err (Located loc (Exception "an empty if")), Just k )
+
+                        (Located _ (Symbol "do")) :: exprs ->
+                            ( Ok (Located loc (Const Nil))
+                            , Just
+                                (Thunk
+                                    (exprs
+                                        |> List.foldr
+                                            (\e a -> \_ -> evalExpression e (Thunk a))
+                                            (\r -> ( Ok (Located.map Const r), Just k ))
+                                    )
+                                )
+                            )
+
+                        -- apply
+                        fnExpr :: argExprs ->
+                            evalExpression fnExpr
+                                (Thunk
+                                    (\fn ->
+                                        ( Ok (Located loc (Const (List [])))
+                                        , Just
+                                            (Thunk
+                                                (argExprs
+                                                    |> List.foldr
+                                                        (\e a ->
+                                                            \(Located _ args) ->
+                                                                evalExpression e
+                                                                    (Thunk
+                                                                        (\arg ->
+                                                                            case args of
+                                                                                List ea ->
+                                                                                    ( Ok (Located loc (Const (List (arg :: ea))))
+                                                                                    , Just (Thunk a)
+                                                                                    )
+
+                                                                                _ ->
+                                                                                    ( Err (Located loc (Exception "Impossible interpreter state: list evaluation yielded a non-list"))
+                                                                                    , Just (Thunk a)
+                                                                                    )
+                                                                        )
+                                                                    )
+                                                        )
+                                                        (\args -> ( apply fn args, Just k ))
+                                                )
+                                            )
+                                        )
+                                    )
+                                )
+
+                        [] ->
+                            ( Ok (Located loc (Const expr)), Just k )
         )
+
+
+wrapInDo : List (Located Value) -> Maybe (Located Value)
+wrapInDo vs =
+    vs
+        |> List.head
+        |> Maybe.map
+            (\loc ->
+                Located.replace loc (List (Located.replace loc (Symbol "do") :: vs))
+            )
 
 
 eval : String -> ( Result (Located Exception) (Located IO), Maybe Thunk )
 eval code =
     Parser.parse code
         |> Result.mapError (Debug.toString >> Exception)
+        |> Result.andThen (\exprs -> wrapInDo exprs |> Result.fromMaybe (Exception "Empty program"))
         |> Result.map
-            (\expr ->
-                evalExpression expr
+            (\program ->
+                evalExpression program
                     (Thunk
                         (\(Located pos v) ->
                             ( Ok (Located pos (Const v)), Nothing )
                         )
                     )
             )
-        |> Result.withDefault ( Err (Located { start = ( 0, 0 ), end = ( 0, 0 ) } (Exception "Parsing error")), Nothing )
+        |> (\r ->
+                case r of
+                    Ok v ->
+                        v
+
+                    Err e ->
+                        ( Err (Located { start = ( 0, 0 ), end = ( 0, 0 ) } e), Nothing )
+           )
