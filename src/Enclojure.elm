@@ -188,6 +188,16 @@ evalExpression mutableExpr mutableK =
                                 )
                             )
 
+                        (Located _ (Symbol "quot")) :: exprs ->
+                            case exprs of
+                                [ arg ] ->
+                                    ( Ok (Located.map Const arg)
+                                    , Just k
+                                    )
+
+                                _ ->
+                                    ( Err (Located loc (Exception ("Wrong number of arguments (" ++ String.fromInt (List.length exprs) ++ ") passed to quot"))), Just k )
+
                         -- apply
                         fnExpr :: argExprs ->
                             evalExpression fnExpr
