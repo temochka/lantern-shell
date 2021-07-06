@@ -27,7 +27,7 @@ type alias Model =
 type Message
     = SetCode String
     | Eval
-    | HandleIO ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Enclojure.Thunk )
+    | HandleIO ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Runtime.Thunk )
 
 
 init : Model
@@ -54,7 +54,7 @@ type Interpreter
     | StackOverflow
 
 
-trampoline : ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Enclojure.Thunk ) -> Int -> ( Interpreter, Cmd Message )
+trampoline : ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Runtime.Thunk ) -> Int -> ( Interpreter, Cmd Message )
 trampoline ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
         ( StackOverflow, Cmd.none )
@@ -65,7 +65,7 @@ trampoline ( result, thunk ) maxdepth =
                 case Located.getValue io of
                     Const v ->
                         case thunk of
-                            Just (Enclojure.Thunk continuation) ->
+                            Just (Runtime.Thunk continuation) ->
                                 trampoline (continuation (Located.replace io v)) (maxdepth - 1)
 
                             Nothing ->
