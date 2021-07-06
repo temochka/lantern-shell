@@ -1,6 +1,6 @@
 module Enclojure.Lib exposing (div, minus, mul, plus, sleep)
 
-import Enclojure.Runtime exposing (Arity(..), Callable, Exception(..), IO(..), Value(..), emptyCallable, inspect)
+import Enclojure.Runtime exposing (Arity(..), Callable, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
 
 
 plus : Callable
@@ -23,6 +23,11 @@ div =
     intOp { identity = 1, op = (//) }
 
 
+pure : (a -> Result Exception IO) -> (a -> Thunk -> ( Result Exception IO, Maybe Thunk ))
+pure fn =
+    \v k -> ( fn v, Just k )
+
+
 sleep : Callable
 sleep =
     let
@@ -32,10 +37,10 @@ sleep =
                     Ok (Sleep (toFloat i))
 
                 _ ->
-                    Ok (Const Nil)
+                    Err (Exception "type error: sleep expects one integer argument")
     in
     { emptyCallable
-        | arity1 = Just (Fixed arity1)
+        | arity1 = Just (Fixed (pure arity1))
     }
 
 
@@ -73,7 +78,7 @@ intOp { identity, op } =
                             )
     in
     { emptyCallable
-        | arity0 = Just (Fixed (arity0 >> Result.map Const))
-        , arity1 = Just (Fixed (arity1 >> Result.map Const))
-        , arity2 = Just (Variadic (arity2 >> Result.map Const))
+        | arity0 = Just (Fixed (pure (arity0 >> Result.map Const)))
+        , arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
+        , arity2 = Just (Variadic (pure (arity2 >> Result.map Const)))
     }

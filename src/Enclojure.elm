@@ -1,52 +1,41 @@
-module Enclojure exposing (Continuation, Thunk(..), eval)
+module Enclojure exposing (eval)
 
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
-import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), IO(..), Value(..))
+import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), IO(..), Thunk(..), Value(..))
 
 
 resolveSymbol : String -> Result Exception Value
 resolveSymbol symbol =
     case symbol of
         "+" ->
-            Ok (Fn (Just symbol) Lib.plus)
+            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.plus))
 
         "-" ->
-            Ok (Fn (Just symbol) Lib.minus)
+            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.minus))
 
         "/" ->
-            Ok (Fn (Just symbol) Lib.div)
+            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.div))
 
         "*" ->
-            Ok (Fn (Just symbol) Lib.mul)
+            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mul))
 
         "sleep" ->
-            Ok (Fn (Just symbol) Lib.sleep)
+            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
 
         _ ->
             Err (Exception ("Unknown symbol " ++ symbol))
 
 
-apply : Located Value -> Located Value -> Result (Located Exception) (Located IO)
-apply ((Located fnLoc fnExpr) as fn) ((Located _ argsExpr) as arg) =
-    case ( fnExpr, argsExpr ) of
-        ( Fn _ callable, List args ) ->
-            Runtime.invoke callable (List.map Located.getValue args) |> Result.map (Located fnLoc) |> Result.mapError (Located fnLoc)
+apply : Located Value -> Located Value -> Thunk -> ( Result (Located Exception) (Located IO), Maybe Thunk )
+apply ((Located fnLoc fnExpr) as fn) arg k =
+    case fnExpr of
+        Fn _ callable ->
+            ( Ok (Located.map Const arg), Just (callable k) )
 
-        ( _, List _ ) ->
-            Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable.")))
-
-        ( _, _ ) ->
-            Err (Located fnLoc (Exception ("Cannot apply " ++ Runtime.inspectLocated fn ++ " to " ++ Runtime.inspectLocated arg)))
-
-
-type alias Continuation =
-    Located Value -> Result (Located Exception) (Located Value)
-
-
-type Thunk
-    = Thunk (Located Value -> ( Result (Located Exception) (Located IO), Maybe Thunk ))
+        _ ->
+            ( Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable."))), Just k )
 
 
 {-| Introduce a redundant closure to prevent closure shadowing via tail-call optimization
@@ -226,7 +215,7 @@ evalExpression mutableExpr mutableK =
                                                                         )
                                                                     )
                                                         )
-                                                        (\args -> ( apply fn args, Just k ))
+                                                        (\args -> apply fn args k)
                                                 )
                                             )
                                         )
