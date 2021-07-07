@@ -59,9 +59,14 @@ emptyEnv =
     }
 
 
-setEnv : String -> Value -> Dict.Dict String Value -> Dict.Dict String Value
-setEnv =
-    Dict.insert
+setLocalEnv : Env -> String -> Value -> Env
+setLocalEnv env key value =
+    { env | local = Dict.insert key value env.local }
+
+
+setGlobalEnv : Env -> String -> Value -> Env
+setGlobalEnv env key value =
+    { env | global = Dict.insert key value env.global }
 
 
 fetchEnv : String -> Dict.Dict String Value -> Maybe Value

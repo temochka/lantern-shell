@@ -42,6 +42,8 @@ init =
     (if true (* 2 2) (/ 2 2))
     nil
     (quote (a b c d))
+    (let [foo 43 bar (+ 1 1)] [foo bar])
+    foo
 ]
     """
     , interpreter = Stopped

@@ -4,7 +4,7 @@ import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
-import Enclojure.Runtime as Runtime exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..))
+import Enclojure.Runtime as Runtime exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..), setLocalEnv)
 
 
 resolveSymbol : Env -> String -> Result Exception Value
@@ -128,6 +128,9 @@ evalExpression mutableExpr mutableEnv mutableK =
                         (Located _ (Symbol "quote")) :: exprs ->
                             evalQuote (Located loc exprs) env k
 
+                        (Located _ (Symbol "let")) :: exprs ->
+                            evalLet (Located loc exprs) env k
+
                         -- apply
                         fnExpr :: argExprs ->
                             evalApply fnExpr (Located loc argExprs) env k
@@ -136,6 +139,61 @@ evalExpression mutableExpr mutableEnv mutableK =
                         [] ->
                             ( Ok ( Located loc (Const expr), env ), Just k )
         )
+
+
+scrubLocalEnv : Env -> Thunk -> Thunk
+scrubLocalEnv priorEnv k =
+    Thunk
+        (\v env ->
+            ( Ok ( Located.map Const v, { env | local = priorEnv.local } ), Just k )
+        )
+
+
+revertLocal : Env -> Env -> Env
+revertLocal priorEnv env =
+    { env | local = priorEnv.local }
+
+
+evalLet : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalLet (Located loc body) env k =
+    let
+        parseBindings bindings =
+            case bindings of
+                (Located _ (Symbol name)) :: value :: rest ->
+                    parseBindings rest
+                        |> Result.map (\r -> ( name, value ) :: r)
+
+                [] ->
+                    Ok []
+
+                _ ->
+                    Err (Located loc (Exception "Syntax error: let received an uneven number of binding pairs"))
+    in
+    case body of
+        (Located _ (Vector bindings)) :: doBody ->
+            ( Ok ( Located loc (Const Nil), env )
+            , Just
+                (bindings
+                    |> parseBindings
+                    |> Result.map
+                        (List.foldr
+                            (\( name, e ) a -> \_ eenv -> evalExpression e eenv (Thunk (\ret retEnv -> ( Ok ( Located loc (Const Nil), Runtime.setLocalEnv retEnv name (Located.getValue ret) ), Just (Thunk a) ))))
+                            (\_ renv -> wrapInDo doBody |> Maybe.map (\b -> evalExpression b renv (scrubLocalEnv env k)) |> Maybe.withDefault ( Ok ( Located loc (Const Nil), revertLocal env renv ), Just k ))
+                        )
+                    |> Result.map Thunk
+                    |> (\r ->
+                            case r of
+                                Ok v ->
+                                    v
+
+                                Err e ->
+                                    Thunk (\_ _ -> ( Err e, Just (scrubLocalEnv env k) ))
+                       )
+                )
+            )
+
+        _ ->
+            ( Err (Located loc (Exception "Syntax error: let expects a vector of bindings")), Just k )
 
 
 evalApply : Located Value -> Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
@@ -252,7 +310,7 @@ evalDef (Located loc args) env k =
                 env
                 (Thunk
                     (\eret eenv ->
-                        ( Ok ( Located loc (Const (Ref name eret)), { eenv | global = Runtime.setEnv name (Located.getValue eret) eenv.global } ), Just k )
+                        ( Ok ( Located loc (Const (Ref name eret)), Runtime.setGlobalEnv eenv name (Located.getValue eret) ), Just k )
                     )
                 )
 
