@@ -1,5 +1,6 @@
 module LanternShell.Apps.Notebook exposing (Message, Model, init, lanternApp)
 
+import Dict
 import Element exposing (Element)
 import Element.Input
 import Enclojure
@@ -27,13 +28,14 @@ type alias Model =
 type Message
     = SetCode String
     | Eval
-    | HandleIO ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Runtime.Thunk )
+    | HandleIO ( Result (Located Runtime.Exception) ( Located Runtime.IO, Runtime.Env ), Maybe Runtime.Thunk )
 
 
 init : Model
 init =
     { code = """[
     (def foo 42)
+    foo
     (+ 1 2)
     (- 10 9 8)
     (sleep 10)
@@ -49,34 +51,34 @@ init =
 type Interpreter
     = Stopped
     | Running
-    | Done Runtime.Value
+    | Done Runtime.Value Runtime.Env
     | Panic (Located Runtime.Exception)
     | StackOverflow
 
 
-trampoline : ( Result (Located Runtime.Exception) (Located Runtime.IO), Maybe Runtime.Thunk ) -> Int -> ( Interpreter, Cmd Message )
+trampoline : ( Result (Located Runtime.Exception) ( Located Runtime.IO, Runtime.Env ), Maybe Runtime.Thunk ) -> Int -> ( Interpreter, Cmd Message )
 trampoline ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
         ( StackOverflow, Cmd.none )
 
     else
         case result of
-            Ok io ->
+            Ok ( io, env ) ->
                 case Located.getValue io of
                     Const v ->
                         case thunk of
                             Just (Runtime.Thunk continuation) ->
-                                trampoline (continuation (Located.replace io v)) (maxdepth - 1)
+                                trampoline (continuation (Located.replace io v) env) (maxdepth - 1)
 
                             Nothing ->
-                                ( Done v, Cmd.none )
+                                ( Done v env, Cmd.none )
 
                     Sleep ms ->
                         ( Running
                         , Process.sleep ms
                             |> Task.perform
                                 (\_ ->
-                                    HandleIO ( Ok <| Located.replace io (Const Runtime.Nil), thunk )
+                                    HandleIO ( Ok ( Located.replace io (Const Runtime.Nil), env ), thunk )
                                 )
                         )
 
@@ -105,6 +107,15 @@ update msg model =
             ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
 
 
+inspectEnv : Runtime.Env -> String
+inspectEnv { global, local } =
+    let
+        inspectDict dict =
+            "{" ++ Dict.foldl (\k v s -> s ++ "\"" ++ k ++ "\" " ++ Runtime.inspect v ++ " ") "" dict ++ "}"
+    in
+    "{\"local\" " ++ inspectDict local ++ " \"global\" " ++ inspectDict global ++ "}"
+
+
 inspectInterpreter : Interpreter -> String
 inspectInterpreter interpreter =
     case interpreter of
@@ -114,8 +125,8 @@ inspectInterpreter interpreter =
         Running ->
             "Running"
 
-        Done v ->
-            "Done " ++ Runtime.inspect v
+        Done v env ->
+            "Done " ++ Runtime.inspect v ++ " " ++ inspectEnv env
 
         StackOverflow ->
             "Stack overflow"
