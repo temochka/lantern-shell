@@ -115,131 +115,158 @@ evalExpression mutableExpr mutableEnv mutableK =
 
                 List l ->
                     case l of
+                        -- special forms
                         (Located _ (Symbol "def")) :: args ->
-                            case args of
-                                _ :: _ :: _ :: _ ->
-                                    ( Err (Located loc (Exception "too many arguments to def")), Just k )
-
-                                [ Located _ (Symbol name), e ] ->
-                                    evalExpression e
-                                        env
-                                        (Thunk
-                                            (\eret eenv ->
-                                                ( Ok ( Located loc (Const (Ref name eret)), { eenv | global = Runtime.setEnv name (Located.getValue eret) eenv.global } ), Just k )
-                                            )
-                                        )
-
-                                [ _, _ ] ->
-                                    ( Err (Located loc (Exception "def accepts a symbol and an expression")), Just k )
-
-                                [ Located _ (Symbol name) ] ->
-                                    ( Err (Located loc (Exception ("empty def " ++ name))), Just k )
-
-                                [ _ ] ->
-                                    ( Err (Located loc (Exception "def expects a symbol as its first argument")), Just k )
-
-                                [] ->
-                                    ( Err (Located loc (Exception "no arguments to def")), Just k )
+                            evalDef (Located loc args) env k
 
                         (Located _ (Symbol "if")) :: args ->
-                            case args of
-                                _ :: _ :: _ :: _ :: _ ->
-                                    ( Err (Located loc (Exception "an if with too many forms")), Just k )
-
-                                [ eIf, eThen, eElse ] ->
-                                    evalExpression eIf
-                                        env
-                                        (Thunk
-                                            (\ifRet ifEnv ->
-                                                if Runtime.isTruthy (Located.getValue ifRet) then
-                                                    evalExpression eThen ifEnv k
-
-                                                else
-                                                    evalExpression eElse ifEnv k
-                                            )
-                                        )
-
-                                [ eIf, eThen ] ->
-                                    evalExpression eIf
-                                        env
-                                        (Thunk
-                                            (\ifRet ifEnv ->
-                                                if Runtime.isTruthy (Located.getValue ifRet) then
-                                                    evalExpression eThen ifEnv k
-
-                                                else
-                                                    ( Ok ( Located loc (Const Nil), ifEnv ), Just k )
-                                            )
-                                        )
-
-                                [ _ ] ->
-                                    ( Err (Located loc (Exception "an if without then")), Just k )
-
-                                [] ->
-                                    ( Err (Located loc (Exception "an empty if")), Just k )
+                            evalIf (Located loc args) env k
 
                         (Located _ (Symbol "do")) :: exprs ->
-                            ( Ok ( Located loc (Const Nil), env )
-                            , Just
-                                (Thunk
-                                    (exprs
-                                        |> List.foldr
-                                            (\e a -> \_ eenv -> evalExpression e eenv (Thunk a))
-                                            (\r renv -> ( Ok ( Located.map Const r, renv ), Just k ))
-                                    )
-                                )
-                            )
+                            evalDo (Located loc exprs) env k
 
                         (Located _ (Symbol "quote")) :: exprs ->
-                            case exprs of
-                                [ arg ] ->
-                                    ( Ok ( Located.map Const arg, env )
-                                    , Just k
-                                    )
-
-                                _ ->
-                                    ( Err (Located loc (Exception ("Wrong number of arguments (" ++ String.fromInt (List.length exprs) ++ ") passed to quote"))), Just k )
+                            evalQuote (Located loc exprs) env k
 
                         -- apply
                         fnExpr :: argExprs ->
-                            evalExpression fnExpr
-                                env
-                                (Thunk
-                                    (\fn fnEnv ->
-                                        ( Ok ( Located loc (Const (List [])), fnEnv )
-                                        , Just
-                                            (Thunk
-                                                (argExprs
-                                                    |> List.foldr
-                                                        (\e a ->
-                                                            \(Located _ args) argsEnv ->
-                                                                evalExpression e
-                                                                    argsEnv
-                                                                    (Thunk
-                                                                        (\arg argEnv ->
-                                                                            case args of
-                                                                                List ea ->
-                                                                                    ( Ok ( Located loc (Const (List (arg :: ea))), argEnv )
-                                                                                    , Just (Thunk a)
-                                                                                    )
+                            evalApply fnExpr (Located loc argExprs) env k
 
-                                                                                _ ->
-                                                                                    ( Err (Located loc (Exception "Impossible interpreter state: list evaluation yielded a non-list"))
-                                                                                    , Just (Thunk a)
-                                                                                    )
-                                                                        )
-                                                                    )
-                                                        )
-                                                        (\args argsEnv -> apply fn args argsEnv k)
-                                                )
-                                            )
-                                        )
-                                    )
-                                )
-
+                        -- empty list ()
                         [] ->
                             ( Ok ( Located loc (Const expr), env ), Just k )
         )
+
+
+evalApply : Located Value -> Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalApply fnExpr (Located loc argExprs) env k =
+    evalExpression fnExpr
+        env
+        (Thunk
+            (\fn fnEnv ->
+                ( Ok ( Located loc (Const (List [])), fnEnv )
+                , Just
+                    (Thunk
+                        (argExprs
+                            |> List.foldr
+                                (\e a ->
+                                    \(Located _ args) argsEnv ->
+                                        evalExpression e
+                                            argsEnv
+                                            (Thunk
+                                                (\arg argEnv ->
+                                                    case args of
+                                                        List ea ->
+                                                            ( Ok ( Located loc (Const (List (arg :: ea))), argEnv )
+                                                            , Just (Thunk a)
+                                                            )
+
+                                                        _ ->
+                                                            ( Err (Located loc (Exception "Impossible interpreter state: list evaluation yielded a non-list"))
+                                                            , Just (Thunk a)
+                                                            )
+                                                )
+                                            )
+                                )
+                                (\args argsEnv -> apply fn args argsEnv k)
+                        )
+                    )
+                )
+            )
+        )
+
+
+evalQuote : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalQuote (Located loc exprs) env k =
+    case exprs of
+        [ arg ] ->
+            ( Ok ( Located.map Const arg, env )
+            , Just k
+            )
+
+        _ ->
+            ( Err (Located loc (Exception ("Wrong number of arguments (" ++ String.fromInt (List.length exprs) ++ ") passed to quote"))), Just k )
+
+
+evalDo : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalDo (Located loc exprs) env k =
+    ( Ok ( Located loc (Const Nil), env )
+    , Just
+        (Thunk
+            (exprs
+                |> List.foldr
+                    (\e a -> \_ eenv -> evalExpression e eenv (Thunk a))
+                    (\r renv -> ( Ok ( Located.map Const r, renv ), Just k ))
+            )
+        )
+    )
+
+
+evalIf : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalIf (Located loc args) env k =
+    case args of
+        _ :: _ :: _ :: _ :: _ ->
+            ( Err (Located loc (Exception "an if with too many forms")), Just k )
+
+        [ eIf, eThen, eElse ] ->
+            evalExpression eIf
+                env
+                (Thunk
+                    (\ifRet ifEnv ->
+                        if Runtime.isTruthy (Located.getValue ifRet) then
+                            evalExpression eThen ifEnv k
+
+                        else
+                            evalExpression eElse ifEnv k
+                    )
+                )
+
+        [ eIf, eThen ] ->
+            evalExpression eIf
+                env
+                (Thunk
+                    (\ifRet ifEnv ->
+                        if Runtime.isTruthy (Located.getValue ifRet) then
+                            evalExpression eThen ifEnv k
+
+                        else
+                            ( Ok ( Located loc (Const Nil), ifEnv ), Just k )
+                    )
+                )
+
+        [ _ ] ->
+            ( Err (Located loc (Exception "an if without then")), Just k )
+
+        [] ->
+            ( Err (Located loc (Exception "an empty if")), Just k )
+
+
+evalDef : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalDef (Located loc args) env k =
+    case args of
+        _ :: _ :: _ :: _ ->
+            ( Err (Located loc (Exception "too many arguments to def")), Just k )
+
+        [ Located _ (Symbol name), e ] ->
+            evalExpression e
+                env
+                (Thunk
+                    (\eret eenv ->
+                        ( Ok ( Located loc (Const (Ref name eret)), { eenv | global = Runtime.setEnv name (Located.getValue eret) eenv.global } ), Just k )
+                    )
+                )
+
+        [ _, _ ] ->
+            ( Err (Located loc (Exception "def accepts a symbol and an expression")), Just k )
+
+        [ Located _ (Symbol name) ] ->
+            ( Err (Located loc (Exception ("empty def " ++ name))), Just k )
+
+        [ _ ] ->
+            ( Err (Located loc (Exception "def expects a symbol as its first argument")), Just k )
+
+        [] ->
+            ( Err (Located loc (Exception "no arguments to def")), Just k )
 
 
 wrapInDo : List (Located Value) -> Maybe (Located Value)
