@@ -10,12 +10,12 @@ type Exception
 
 
 type Thunk
-    = Thunk (Located Value -> ( Result (Located Exception) (Located IO), Maybe Thunk ))
+    = Thunk (Located Value -> Env -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ))
 
 
 type Arity a
-    = Fixed (a -> Thunk -> ( Result Exception IO, Maybe Thunk ))
-    | Variadic ({ args : a, rest : List Value } -> Thunk -> ( Result Exception IO, Maybe Thunk ))
+    = Fixed (a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+    | Variadic ({ args : a, rest : List Value } -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
 
 
 type IO
@@ -47,7 +47,26 @@ type Value
 
 
 type alias Env =
-    Dict.Dict String Value
+    { global : Dict.Dict String Value
+    , local : Dict.Dict String Value
+    }
+
+
+emptyEnv : Env
+emptyEnv =
+    { global = Dict.empty
+    , local = Dict.empty
+    }
+
+
+setEnv : String -> Value -> Dict.Dict String Value -> Dict.Dict String Value
+setEnv =
+    Dict.insert
+
+
+fetchEnv : String -> Dict.Dict String Value -> Maybe Value
+fetchEnv =
+    Dict.get
 
 
 emptyCallable : Callable
@@ -59,7 +78,7 @@ emptyCallable =
     }
 
 
-extractVariadic : Maybe (Arity a) -> Maybe ({ args : a, rest : List Value } -> Thunk -> ( Result Exception IO, Maybe Thunk ))
+extractVariadic : Maybe (Arity a) -> Maybe ({ args : a, rest : List Value } -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
 extractVariadic arity =
     arity
         |> Maybe.andThen
@@ -73,8 +92,8 @@ extractVariadic arity =
             )
 
 
-dispatch : Callable -> List Value -> Thunk -> ( Result Exception IO, Maybe Thunk )
-dispatch callable args k =
+dispatch : Callable -> List Value -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk )
+dispatch callable args env k =
     case args of
         [] ->
             callable.arity0
@@ -82,16 +101,16 @@ dispatch callable args k =
                     (\arity0 ->
                         case arity0 of
                             Fixed fn ->
-                                fn () k
+                                fn () env k
 
                             Variadic fn ->
-                                fn { args = (), rest = [] } k
+                                fn { args = (), rest = [] } env k
                     )
                 |> Maybe.withDefault ( Err (Exception "Invalid arity 0"), Just k )
 
         [ a0 ] ->
             extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } k)
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
                         callable.arity1
@@ -99,21 +118,21 @@ dispatch callable args k =
                                 (\arity1 ->
                                     case arity1 of
                                         Fixed fn ->
-                                            fn a0 k
+                                            fn a0 env k
 
                                         Variadic fn ->
-                                            fn { args = a0, rest = [] } k
+                                            fn { args = a0, rest = [] } env k
                                 )
                     )
                 |> Maybe.withDefault ( Err (Exception "Invalid arity 1"), Just k )
 
         [ a0, a1 ] ->
             extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } k)
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
                         extractVariadic callable.arity1
-                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1 ] } k)
+                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1 ] } env k)
                     )
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
@@ -122,26 +141,26 @@ dispatch callable args k =
                                 (\arity2 ->
                                     case arity2 of
                                         Fixed fn ->
-                                            fn ( a0, a1 ) k
+                                            fn ( a0, a1 ) env k
 
                                         Variadic fn ->
-                                            fn { args = ( a0, a1 ), rest = [] } k
+                                            fn { args = ( a0, a1 ), rest = [] } env k
                                 )
                     )
                 |> Maybe.withDefault ( Err (Exception "Invalid arity 2"), Just k )
 
         [ a0, a1, a2 ] ->
             extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } k)
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
                         extractVariadic callable.arity1
-                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1, a2 ] } k)
+                            |> Maybe.map (\fn -> fn { args = a0, rest = [ a1, a2 ] } env k)
                     )
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
                         extractVariadic callable.arity2
-                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = [ a2 ] } k)
+                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = [ a2 ] } env k)
                     )
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
@@ -150,31 +169,31 @@ dispatch callable args k =
                                 (\arity3 ->
                                     case arity3 of
                                         Fixed fn ->
-                                            fn ( a0, a1, a2 ) k
+                                            fn ( a0, a1, a2 ) env k
 
                                         Variadic fn ->
-                                            fn { args = ( a0, a1, a2 ), rest = [] } k
+                                            fn { args = ( a0, a1, a2 ), rest = [] } env k
                                 )
                     )
                 |> Maybe.withDefault ( Err (Exception "Invalid arity 3"), Just k )
 
         a0 :: a1 :: a2 :: rest ->
             extractVariadic callable.arity0
-                |> Maybe.map (\fn -> fn { args = (), rest = args } k)
+                |> Maybe.map (\fn -> fn { args = (), rest = args } env k)
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
                         extractVariadic callable.arity1
-                            |> Maybe.map (\fn -> fn { args = a0, rest = a1 :: a2 :: rest } k)
+                            |> Maybe.map (\fn -> fn { args = a0, rest = a1 :: a2 :: rest } env k)
                     )
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
                         extractVariadic callable.arity2
-                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = a2 :: rest } k)
+                            |> Maybe.map (\fn -> fn { args = ( a0, a1 ), rest = a2 :: rest } env k)
                     )
                 |> Enclojure.Extra.Maybe.orElse
                     (\_ ->
                         extractVariadic callable.arity3
-                            |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest } k)
+                            |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest } env k)
                     )
                 |> Maybe.withDefault ( Err (Exception ("Invalid arity " ++ String.fromInt (List.length args))), Nothing )
 
@@ -182,14 +201,14 @@ dispatch callable args k =
 toContinuation : Callable -> Thunk -> Thunk
 toContinuation callable k =
     Thunk
-        (\(Located pos arg) ->
+        (\(Located pos arg) env ->
             case arg of
                 List args ->
-                    dispatch callable (List.map Located.getValue args) k
+                    dispatch callable (List.map Located.getValue args) env k
                         |> Tuple.mapFirst
                             (\r ->
                                 r
-                                    |> Result.map (Located pos)
+                                    |> Result.map (Tuple.mapFirst (Located pos))
                                     |> Result.mapError (Located pos)
                             )
 

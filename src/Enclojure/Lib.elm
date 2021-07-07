@@ -1,6 +1,6 @@
 module Enclojure.Lib exposing (div, minus, mul, plus, sleep)
 
-import Enclojure.Runtime exposing (Arity(..), Callable, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
+import Enclojure.Runtime exposing (Arity(..), Callable, Env, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
 
 
 plus : Callable
@@ -23,9 +23,9 @@ div =
     intOp { identity = 1, op = (//) }
 
 
-pure : (a -> Result Exception IO) -> (a -> Thunk -> ( Result Exception IO, Maybe Thunk ))
+pure : (a -> Result Exception IO) -> (a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
 pure fn =
-    \v k -> ( fn v, Just k )
+    \v env k -> ( fn v |> Result.map (\io -> ( io, env )), Just k )
 
 
 sleep : Callable

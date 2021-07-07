@@ -1,38 +1,44 @@
 module Enclojure exposing (eval)
 
+import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
-import Enclojure.Runtime as Runtime exposing (Arity(..), Exception(..), IO(..), Thunk(..), Value(..))
+import Enclojure.Runtime as Runtime exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..))
 
 
-resolveSymbol : String -> Result Exception Value
-resolveSymbol symbol =
-    case symbol of
-        "+" ->
-            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.plus))
+resolveSymbol : Env -> String -> Result Exception Value
+resolveSymbol env symbol =
+    Runtime.fetchEnv symbol env.local
+        |> orElse (\_ -> Runtime.fetchEnv symbol env.global)
+        |> Maybe.map Ok
+        |> Maybe.withDefault
+            (case symbol of
+                "+" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.plus))
 
-        "-" ->
-            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.minus))
+                "-" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.minus))
 
-        "/" ->
-            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.div))
+                "/" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.div))
 
-        "*" ->
-            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mul))
+                "*" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mul))
 
-        "sleep" ->
-            Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
+                "sleep" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
 
-        _ ->
-            Err (Exception ("Unknown symbol " ++ symbol))
+                _ ->
+                    Err (Exception ("Unknown symbol " ++ symbol))
+            )
 
 
-apply : Located Value -> Located Value -> Thunk -> ( Result (Located Exception) (Located IO), Maybe Thunk )
-apply ((Located fnLoc fnExpr) as fn) arg k =
+apply : Located Value -> Located Value -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+apply ((Located fnLoc fnExpr) as fn) arg env k =
     case fnExpr of
         Fn _ callable ->
-            ( Ok (Located.map Const arg), Just (callable k) )
+            ( Ok ( Located.map Const arg, env ), Just (callable k) )
 
         _ ->
             ( Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable."))), Just k )
@@ -44,31 +50,35 @@ in functions with continuations. See: <https://github.com/elm/compiler/issues/20
 Elm compiler doesn’t seem to be able to optimize this away.
 
 -}
-closureHack2 : a -> b -> (a -> b -> c) -> c
-closureHack2 a b f =
-    f a b
+closureHack3 : a -> b -> c -> (a -> b -> c -> d) -> d
+closureHack3 a b c f =
+    f a b c
 
 
-evalExpression : Located Value -> Thunk -> ( Result (Located Exception) (Located IO), Maybe Thunk )
-evalExpression mutableExpr mutableK =
-    closureHack2
+evalExpression : Located Value -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalExpression mutableExpr mutableEnv mutableK =
+    closureHack3
         mutableExpr
+        mutableEnv
         mutableK
-        (\(Located loc expr) k ->
+        (\(Located loc expr) env k ->
             case expr of
                 Vector l ->
                     case l of
                         x :: rest ->
-                            evalExpression x
+                            evalExpression
+                                x
+                                env
                                 (Thunk
-                                    (\xret ->
+                                    (\xret xenv ->
                                         evalExpression
                                             (Located loc (Vector rest))
+                                            xenv
                                             (Thunk
-                                                (\(Located _ restRetVal) ->
+                                                (\(Located _ restRetVal) restEnv ->
                                                     case restRetVal of
                                                         Vector restRet ->
-                                                            ( Ok (Located loc (Const (Vector (xret :: restRet)))), Just k )
+                                                            ( Ok ( Located loc (Const (Vector (xret :: restRet))), restEnv ), Just k )
 
                                                         _ ->
                                                             ( Err (Located loc (Exception "Impossible interpreter state: list evaluation yielded a non-list")), Just k )
@@ -78,30 +88,30 @@ evalExpression mutableExpr mutableK =
                                 )
 
                         [] ->
-                            ( Ok (Located loc (Const (Vector []))), Just k )
+                            ( Ok ( Located loc (Const (Vector [])), env ), Just k )
 
                 Symbol s ->
-                    case resolveSymbol s of
+                    case resolveSymbol env s of
                         Ok v ->
-                            ( Ok (Located loc (Const v)), Just k )
+                            ( Ok ( Located loc (Const v), env ), Just k )
 
                         Err e ->
                             ( Err (Located loc e), Just k )
 
                 Number n ->
-                    ( Ok (Located loc (Const (Number n))), Just k )
+                    ( Ok ( Located loc (Const (Number n)), env ), Just k )
 
                 Nil ->
-                    ( Ok (Located loc (Const Nil)), Just k )
+                    ( Ok ( Located loc (Const Nil), env ), Just k )
 
                 Bool _ ->
-                    ( Ok (Located loc (Const expr)), Just k )
+                    ( Ok ( Located loc (Const expr), env ), Just k )
 
                 Ref _ _ ->
-                    ( Ok (Located loc (Const expr)), Just k )
+                    ( Ok ( Located loc (Const expr), env ), Just k )
 
                 Fn _ _ ->
-                    ( Ok (Located loc (Const expr)), Just k )
+                    ( Ok ( Located loc (Const expr), env ), Just k )
 
                 List l ->
                     case l of
@@ -112,9 +122,10 @@ evalExpression mutableExpr mutableK =
 
                                 [ Located _ (Symbol name), e ] ->
                                     evalExpression e
+                                        env
                                         (Thunk
-                                            (\eret ->
-                                                ( Ok (Located loc (Const (Ref name eret))), Just k )
+                                            (\eret eenv ->
+                                                ( Ok ( Located loc (Const (Ref name eret)), { eenv | global = Runtime.setEnv name (Located.getValue eret) eenv.global } ), Just k )
                                             )
                                         )
 
@@ -137,25 +148,27 @@ evalExpression mutableExpr mutableK =
 
                                 [ eIf, eThen, eElse ] ->
                                     evalExpression eIf
+                                        env
                                         (Thunk
-                                            (\ifRet ->
+                                            (\ifRet ifEnv ->
                                                 if Runtime.isTruthy (Located.getValue ifRet) then
-                                                    evalExpression eThen k
+                                                    evalExpression eThen ifEnv k
 
                                                 else
-                                                    evalExpression eElse k
+                                                    evalExpression eElse ifEnv k
                                             )
                                         )
 
                                 [ eIf, eThen ] ->
                                     evalExpression eIf
+                                        env
                                         (Thunk
-                                            (\ifRet ->
+                                            (\ifRet ifEnv ->
                                                 if Runtime.isTruthy (Located.getValue ifRet) then
-                                                    evalExpression eThen k
+                                                    evalExpression eThen ifEnv k
 
                                                 else
-                                                    ( Ok (Located loc (Const Nil)), Just k )
+                                                    ( Ok ( Located loc (Const Nil), ifEnv ), Just k )
                                             )
                                         )
 
@@ -166,13 +179,13 @@ evalExpression mutableExpr mutableK =
                                     ( Err (Located loc (Exception "an empty if")), Just k )
 
                         (Located _ (Symbol "do")) :: exprs ->
-                            ( Ok (Located loc (Const Nil))
+                            ( Ok ( Located loc (Const Nil), env )
                             , Just
                                 (Thunk
                                     (exprs
                                         |> List.foldr
-                                            (\e a -> \_ -> evalExpression e (Thunk a))
-                                            (\r -> ( Ok (Located.map Const r), Just k ))
+                                            (\e a -> \_ eenv -> evalExpression e eenv (Thunk a))
+                                            (\r renv -> ( Ok ( Located.map Const r, renv ), Just k ))
                                     )
                                 )
                             )
@@ -180,7 +193,7 @@ evalExpression mutableExpr mutableK =
                         (Located _ (Symbol "quote")) :: exprs ->
                             case exprs of
                                 [ arg ] ->
-                                    ( Ok (Located.map Const arg)
+                                    ( Ok ( Located.map Const arg, env )
                                     , Just k
                                     )
 
@@ -190,21 +203,23 @@ evalExpression mutableExpr mutableK =
                         -- apply
                         fnExpr :: argExprs ->
                             evalExpression fnExpr
+                                env
                                 (Thunk
-                                    (\fn ->
-                                        ( Ok (Located loc (Const (List [])))
+                                    (\fn fnEnv ->
+                                        ( Ok ( Located loc (Const (List [])), fnEnv )
                                         , Just
                                             (Thunk
                                                 (argExprs
                                                     |> List.foldr
                                                         (\e a ->
-                                                            \(Located _ args) ->
+                                                            \(Located _ args) argsEnv ->
                                                                 evalExpression e
+                                                                    argsEnv
                                                                     (Thunk
-                                                                        (\arg ->
+                                                                        (\arg argEnv ->
                                                                             case args of
                                                                                 List ea ->
-                                                                                    ( Ok (Located loc (Const (List (arg :: ea))))
+                                                                                    ( Ok ( Located loc (Const (List (arg :: ea))), argEnv )
                                                                                     , Just (Thunk a)
                                                                                     )
 
@@ -215,7 +230,7 @@ evalExpression mutableExpr mutableK =
                                                                         )
                                                                     )
                                                         )
-                                                        (\args -> apply fn args k)
+                                                        (\args argsEnv -> apply fn args argsEnv k)
                                                 )
                                             )
                                         )
@@ -223,7 +238,7 @@ evalExpression mutableExpr mutableK =
                                 )
 
                         [] ->
-                            ( Ok (Located loc (Const expr)), Just k )
+                            ( Ok ( Located loc (Const expr), env ), Just k )
         )
 
 
@@ -237,7 +252,7 @@ wrapInDo vs =
             )
 
 
-eval : String -> ( Result (Located Exception) (Located IO), Maybe Thunk )
+eval : String -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 eval code =
     Parser.parse code
         |> Result.mapError (Debug.toString >> Exception)
@@ -245,9 +260,10 @@ eval code =
         |> Result.map
             (\program ->
                 evalExpression program
+                    Runtime.emptyEnv
                     (Thunk
-                        (\(Located pos v) ->
-                            ( Ok (Located pos (Const v)), Nothing )
+                        (\(Located pos v) env ->
+                            ( Ok ( Located pos (Const v), env ), Nothing )
                         )
                     )
             )
