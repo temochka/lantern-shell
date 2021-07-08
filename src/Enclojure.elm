@@ -131,6 +131,9 @@ evalExpression mutableExpr mutableEnv mutableK =
                         (Located _ (Symbol "let")) :: exprs ->
                             evalLet (Located loc exprs) env k
 
+                        (Located _ (Symbol "fn")) :: exprs ->
+                            evalFn (Located loc exprs) env k
+
                         -- apply
                         fnExpr :: argExprs ->
                             evalApply fnExpr (Located loc argExprs) env k
@@ -141,17 +144,41 @@ evalExpression mutableExpr mutableEnv mutableK =
         )
 
 
+evalFn : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalFn (Located loc exprs) fnEnv k =
+    case exprs of
+        (Located _ (Symbol name)) :: (Located _ (Vector arguments)) :: body ->
+            ( Ok
+                ( Located loc <|
+                    Const
+                        (Fn (Just name)
+                            (\fnK ->
+                                Thunk
+                                    (\_ callsiteEnv ->
+                                        evalExpression (wrapInDo (Located loc body))
+                                            { fnEnv | global = callsiteEnv.global }
+                                            (scrubLocalEnv callsiteEnv fnK)
+                                    )
+                            )
+                        )
+                , fnEnv
+                )
+            , Just k
+            )
+
+        (Located _ (Symbol _)) :: _ ->
+            ( Err (Located loc (Exception "Parsing error: expected a vector of arguments after function name")), Just k )
+
+        _ ->
+            ( Err (Located loc (Exception "Parsing error: function definition consists of a symbol and a vector of arguments")), Just k )
+
+
 scrubLocalEnv : Env -> Thunk -> Thunk
 scrubLocalEnv priorEnv k =
     Thunk
         (\v env ->
             ( Ok ( Located.map Const v, { env | local = priorEnv.local } ), Just k )
         )
-
-
-revertLocal : Env -> Env -> Env
-revertLocal priorEnv env =
-    { env | local = priorEnv.local }
 
 
 evalLet : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
@@ -170,7 +197,7 @@ evalLet (Located loc body) env k =
                     Err (Located loc (Exception "Syntax error: let received an uneven number of binding pairs"))
     in
     case body of
-        (Located _ (Vector bindings)) :: doBody ->
+        (Located bodyLoc (Vector bindings)) :: doBody ->
             ( Ok ( Located loc (Const Nil), env )
             , Just
                 (bindings
@@ -178,7 +205,7 @@ evalLet (Located loc body) env k =
                     |> Result.map
                         (List.foldr
                             (\( name, e ) a -> \_ eenv -> evalExpression e eenv (Thunk (\ret retEnv -> ( Ok ( Located loc (Const Nil), Runtime.setLocalEnv retEnv name (Located.getValue ret) ), Just (Thunk a) ))))
-                            (\_ renv -> wrapInDo doBody |> Maybe.map (\b -> evalExpression b renv (scrubLocalEnv env k)) |> Maybe.withDefault ( Ok ( Located loc (Const Nil), revertLocal env renv ), Just k ))
+                            (\_ renv -> wrapInDo (Located bodyLoc doBody) |> (\b -> evalExpression b renv (scrubLocalEnv env k)))
                         )
                     |> Result.map Thunk
                     |> (\r ->
@@ -327,21 +354,16 @@ evalDef (Located loc args) env k =
             ( Err (Located loc (Exception "no arguments to def")), Just k )
 
 
-wrapInDo : List (Located Value) -> Maybe (Located Value)
-wrapInDo vs =
-    vs
-        |> List.head
-        |> Maybe.map
-            (\loc ->
-                Located.replace loc (List (Located.replace loc (Symbol "do") :: vs))
-            )
+wrapInDo : Located (List (Located Value)) -> Located Value
+wrapInDo (Located loc vs) =
+    Located loc (List (Located loc (Symbol "do") :: vs))
 
 
 eval : String -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 eval code =
     Parser.parse code
         |> Result.mapError (Debug.toString >> Exception)
-        |> Result.andThen (\exprs -> wrapInDo exprs |> Result.fromMaybe (Exception "Empty program"))
+        |> Result.andThen (\exprs -> exprs |> List.head |> Maybe.map ((\lv -> Located.replace lv exprs) >> wrapInDo) |> Result.fromMaybe (Exception "Empty program"))
         |> Result.map
             (\program ->
                 evalExpression program

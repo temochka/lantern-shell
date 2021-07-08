@@ -42,7 +42,11 @@ init =
     (if true (* 2 2) (/ 2 2))
     nil
     (quote (a b c d))
-    (let [foo 43 bar (+ 1 1)] [foo bar])
+    (let [foo 43 bar (+ 1 1)]
+        (def userfn (fn userfn [] [foo bar 666]))
+        [foo bar]
+    )
+    (userfn)
     foo
 ]
     """
