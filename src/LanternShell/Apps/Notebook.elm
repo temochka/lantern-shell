@@ -53,6 +53,9 @@ init =
     (recfn true)
     (userfn)
     foo
+    (def multi-fn (fn ([] (multi-fn 666)) ([a & rest] [a rest])))
+    (multi-fn)
+    (multi-fn 1 2 3 4 5 6)
 ]
     """
     , interpreter = Stopped

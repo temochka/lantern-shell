@@ -5,6 +5,7 @@ import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
 import Enclojure.Runtime as Runtime exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..))
+import Html exposing (a)
 
 
 resolveSymbol : Env -> String -> Result Exception Value
@@ -182,75 +183,122 @@ bindArgs (Located loc argsExpr) bindings env =
             Err (Located loc (Exception "Interpreter error: applied arguments are not a list"))
 
 
+mapBindingsToBodies : List (Located Value) -> Result (Located Exception) (List ( List (Located Value), Located Value ))
+mapBindingsToBodies signatures =
+    case signatures of
+        (Located _ (List ((Located loc (Vector argBindings)) :: body))) :: rest ->
+            mapBindingsToBodies rest |> Result.map (\r -> ( argBindings, wrapInDo (Located loc body) ) :: r)
+
+        (Located loc _) :: _ ->
+            Err (Located loc (Exception "Parsing error: malformed function arity"))
+
+        [] ->
+            Ok []
+
+
+listLocate : (a -> Maybe b) -> List a -> Maybe b
+listLocate pFn l =
+    case l of
+        [] ->
+            Nothing
+
+        e :: rest ->
+            case pFn e of
+                Just v ->
+                    Just v
+
+                Nothing ->
+                    listLocate pFn rest
+
+
 evalFn : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 evalFn (Located loc exprs) fnEnv k =
-    case exprs of
-        (Located _ (Vector argBindings)) :: body ->
-            ( Ok
-                ( Located loc <|
-                    Const
-                        (Fn Nothing
-                            (\fn ->
-                                Thunk
-                                    (\args callsiteEnv ->
-                                        let
-                                            callEnvResult =
-                                                { fnEnv | global = callsiteEnv.global }
-                                                    |> Runtime.setLocalEnv "recur" fn.self
-                                                    |> bindArgs args argBindings
-                                        in
-                                        case callEnvResult of
-                                            Ok callEnv ->
-                                                evalExpression (wrapInDo (Located loc body))
-                                                    callEnv
-                                                    (scrubLocalEnv callsiteEnv fn.k)
-
-                                            Err e ->
-                                                ( Err e, Just fn.k )
-                                    )
-                            )
-                        )
-                , fnEnv
-                )
-            , Just k
-            )
-
-        (Located _ (Symbol name)) :: (Located _ (Vector argBindings)) :: body ->
-            ( Ok
-                ( Located loc <|
-                    Const
-                        (Fn (Just name)
-                            (\fn ->
-                                Thunk
-                                    (\args callsiteEnv ->
-                                        let
-                                            callEnvResult =
-                                                { fnEnv | global = callsiteEnv.global }
-                                                    |> Runtime.setLocalEnv name fn.self
-                                                    |> Runtime.setLocalEnv "recur" fn.self
-                                                    |> bindArgs args argBindings
-                                        in
-                                        case callEnvResult of
-                                            Ok callEnv ->
-                                                evalExpression (wrapInDo (Located loc body))
-                                                    callEnv
-                                                    (scrubLocalEnv callsiteEnv fn.k)
-
-                                            Err e ->
-                                                ( Err e, Just fn.k )
-                                    )
-                            )
-                        )
-                , fnEnv
-                )
-            , Just k
-            )
-
-        (Located _ (Symbol _)) :: _ ->
-            ( Err (Located loc (Exception "Parsing error: expected a vector of arguments after function name")), Just k )
+    (case exprs of
+        (Located _ (Symbol name)) :: rest ->
+            ( Just name, rest )
 
         _ ->
-            ( Err (Located loc (Exception "Parsing error: function definition consists of a symbol and a vector of arguments")), Just k )
+            ( Nothing, exprs )
+    )
+        |> (\( name, arity ) ->
+                case arity of
+                    (Located _ (Vector argBindings)) :: body ->
+                        ( Ok
+                            ( Located loc <|
+                                Const
+                                    (Fn name
+                                        (\fn ->
+                                            Thunk
+                                                (\args callsiteEnv ->
+                                                    let
+                                                        callEnvResult =
+                                                            { fnEnv | global = callsiteEnv.global }
+                                                                |> (name |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self) |> Maybe.withDefault identity)
+                                                                |> Runtime.setLocalEnv "recur" fn.self
+                                                                |> bindArgs args argBindings
+                                                    in
+                                                    case callEnvResult of
+                                                        Ok callEnv ->
+                                                            evalExpression (wrapInDo (Located loc body))
+                                                                callEnv
+                                                                (scrubLocalEnv callsiteEnv fn.k)
+
+                                                        Err e ->
+                                                            ( Err e, Just fn.k )
+                                                )
+                                        )
+                                    )
+                            , fnEnv
+                            )
+                        , Just k
+                        )
+
+                    signatures ->
+                        let
+                            bindingsAndBodies =
+                                mapBindingsToBodies signatures
+                        in
+                        ( Ok
+                            ( Located loc <|
+                                Const
+                                    (Fn name
+                                        (\fn ->
+                                            Thunk
+                                                (\args callsiteEnv ->
+                                                    let
+                                                        callEnvBodyResult =
+                                                            { fnEnv | global = callsiteEnv.global }
+                                                                |> (name |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self) |> Maybe.withDefault identity)
+                                                                |> Runtime.setLocalEnv "recur" fn.self
+                                                                |> (\env ->
+                                                                        bindingsAndBodies
+                                                                            |> Result.andThen
+                                                                                (listLocate
+                                                                                    (\( bindings, body ) ->
+                                                                                        bindArgs args bindings env
+                                                                                            |> Result.toMaybe
+                                                                                            |> Maybe.map (\e -> ( e, body ))
+                                                                                    )
+                                                                                    >> Result.fromMaybe (Located loc (Exception "Argument error: no matching arity"))
+                                                                                )
+                                                                   )
+                                                    in
+                                                    case callEnvBodyResult of
+                                                        Ok ( callEnv, fnBody ) ->
+                                                            evalExpression fnBody
+                                                                callEnv
+                                                                (scrubLocalEnv callsiteEnv fn.k)
+
+                                                        Err e ->
+                                                            ( Err e, Just fn.k )
+                                                )
+                                        )
+                                    )
+                            , fnEnv
+                            )
+                        , Just k
+                        )
+           )
 
 
 scrubLocalEnv : Env -> Thunk -> Thunk
