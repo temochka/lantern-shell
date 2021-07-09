@@ -4,7 +4,7 @@ import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
-import Enclojure.Runtime as Runtime exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..), setLocalEnv)
+import Enclojure.Runtime as Runtime exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..))
 
 
 resolveSymbol : Env -> String -> Result Exception Value
@@ -38,7 +38,7 @@ apply : Located Value -> Located Value -> Env -> Thunk -> ( Result (Located Exce
 apply ((Located fnLoc fnExpr) as fn) arg env k =
     case fnExpr of
         Fn _ callable ->
-            ( Ok ( Located.map Const arg, env ), Just (callable k) )
+            ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
 
         _ ->
             ( Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable."))), Just k )
@@ -144,20 +144,100 @@ evalExpression mutableExpr mutableEnv mutableK =
         )
 
 
+mapArgs : List (Located Value) -> List (Located Value) -> Result (Located Exception) (List ( String, Value ))
+mapArgs args bindings =
+    case ( args, bindings ) of
+        ( _, (Located _ (Symbol "&")) :: (Located _ (Symbol name)) :: [] ) ->
+            Ok [ ( name, List args ) ]
+
+        ( _, (Located loc (Symbol "&")) :: [] ) ->
+            Err (Located loc (Exception "Parsing error: no symbol after &"))
+
+        ( (Located loc _) :: _, [] ) ->
+            Err (Located loc (Exception "Argument error: Too many arguments"))
+
+        ( [], (Located loc (Symbol _)) :: _ ) ->
+            Err (Located loc (Exception "Argument error: Too few arguments"))
+
+        ( (Located _ arg) :: restArgs, (Located _ (Symbol name)) :: restBindings ) ->
+            mapArgs restArgs restBindings |> Result.map (\b -> ( name, arg ) :: b)
+
+        ( (Located loc _) :: _, _ ) ->
+            Err (Located loc (Exception "Parsing error: arguments didn't match the function definition"))
+
+        ( _, (Located loc _) :: _ ) ->
+            Err (Located loc (Exception "Parsing error: arguments didn't match the function definition"))
+
+        ( [], [] ) ->
+            Ok []
+
+
+bindArgs : Located Value -> List (Located Value) -> Env -> Result (Located Exception) Env
+bindArgs (Located loc argsExpr) bindings env =
+    case argsExpr of
+        List args ->
+            mapArgs args bindings |> Result.map (\boundArgs -> boundArgs |> List.foldl (\( k, v ) aEnv -> Runtime.setLocalEnv k v aEnv) env)
+
+        _ ->
+            Err (Located loc (Exception "Interpreter error: applied arguments are not a list"))
+
+
 evalFn : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 evalFn (Located loc exprs) fnEnv k =
     case exprs of
-        (Located _ (Symbol name)) :: (Located _ (Vector arguments)) :: body ->
+        (Located _ (Vector argBindings)) :: body ->
+            ( Ok
+                ( Located loc <|
+                    Const
+                        (Fn Nothing
+                            (\fn ->
+                                Thunk
+                                    (\args callsiteEnv ->
+                                        let
+                                            callEnvResult =
+                                                { fnEnv | global = callsiteEnv.global }
+                                                    |> Runtime.setLocalEnv "recur" fn.self
+                                                    |> bindArgs args argBindings
+                                        in
+                                        case callEnvResult of
+                                            Ok callEnv ->
+                                                evalExpression (wrapInDo (Located loc body))
+                                                    callEnv
+                                                    (scrubLocalEnv callsiteEnv fn.k)
+
+                                            Err e ->
+                                                ( Err e, Just fn.k )
+                                    )
+                            )
+                        )
+                , fnEnv
+                )
+            , Just k
+            )
+
+        (Located _ (Symbol name)) :: (Located _ (Vector argBindings)) :: body ->
             ( Ok
                 ( Located loc <|
                     Const
                         (Fn (Just name)
-                            (\fnK ->
+                            (\fn ->
                                 Thunk
-                                    (\_ callsiteEnv ->
-                                        evalExpression (wrapInDo (Located loc body))
-                                            { fnEnv | global = callsiteEnv.global }
-                                            (scrubLocalEnv callsiteEnv fnK)
+                                    (\args callsiteEnv ->
+                                        let
+                                            callEnvResult =
+                                                { fnEnv | global = callsiteEnv.global }
+                                                    |> Runtime.setLocalEnv name fn.self
+                                                    |> Runtime.setLocalEnv "recur" fn.self
+                                                    |> bindArgs args argBindings
+                                        in
+                                        case callEnvResult of
+                                            Ok callEnv ->
+                                                evalExpression (wrapInDo (Located loc body))
+                                                    callEnv
+                                                    (scrubLocalEnv callsiteEnv fn.k)
+
+                                            Err e ->
+                                                ( Err e, Just fn.k )
                                     )
                             )
                         )
@@ -204,7 +284,7 @@ evalLet (Located loc body) env k =
                     |> parseBindings
                     |> Result.map
                         (List.foldr
-                            (\( name, e ) a -> \_ eenv -> evalExpression e eenv (Thunk (\ret retEnv -> ( Ok ( Located loc (Const Nil), Runtime.setLocalEnv retEnv name (Located.getValue ret) ), Just (Thunk a) ))))
+                            (\( name, e ) a -> \_ eenv -> evalExpression e eenv (Thunk (\ret retEnv -> ( Ok ( Located loc (Const Nil), Runtime.setLocalEnv name (Located.getValue ret) retEnv ), Just (Thunk a) ))))
                             (\_ renv -> wrapInDo (Located bodyLoc doBody) |> (\b -> evalExpression b renv (scrubLocalEnv env k)))
                         )
                     |> Result.map Thunk
@@ -242,7 +322,7 @@ evalApply fnExpr (Located loc argExprs) env k =
                                                 (\arg argEnv ->
                                                     case args of
                                                         List ea ->
-                                                            ( Ok ( Located loc (Const (List (arg :: ea))), argEnv )
+                                                            ( Ok ( Located loc (Const (List (ea ++ [ arg ]))), argEnv )
                                                             , Just (Thunk a)
                                                             )
 
@@ -270,7 +350,7 @@ evalQuote (Located loc exprs) env k =
             )
 
         _ ->
-            ( Err (Located loc (Exception ("Wrong number of arguments (" ++ String.fromInt (List.length exprs) ++ ") passed to quote"))), Just k )
+            ( Err (Located loc (Exception ("Argument error: Wrong number of arguments (" ++ String.fromInt (List.length exprs) ++ ") passed to quote"))), Just k )
 
 
 evalDo : Located (List (Located Value)) -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
@@ -337,7 +417,7 @@ evalDef (Located loc args) env k =
                 env
                 (Thunk
                     (\eret eenv ->
-                        ( Ok ( Located loc (Const (Ref name eret)), Runtime.setGlobalEnv eenv name (Located.getValue eret) ), Just k )
+                        ( Ok ( Located loc (Const (Ref name eret)), Runtime.setGlobalEnv name (Located.getValue eret) eenv ), Just k )
                     )
                 )
 

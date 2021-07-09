@@ -38,7 +38,7 @@ type alias Number =
 type Value
     = Number Number
     | Ref String (Located Value)
-    | Fn (Maybe String) (Thunk -> Thunk)
+    | Fn (Maybe String) ({ self : Value, k : Thunk } -> Thunk)
     | List (List (Located Value))
     | Vector (List (Located Value))
     | Nil
@@ -59,13 +59,13 @@ emptyEnv =
     }
 
 
-setLocalEnv : Env -> String -> Value -> Env
-setLocalEnv env key value =
+setLocalEnv : String -> Value -> Env -> Env
+setLocalEnv key value env =
     { env | local = Dict.insert key value env.local }
 
 
-setGlobalEnv : Env -> String -> Value -> Env
-setGlobalEnv env key value =
+setGlobalEnv : String -> Value -> Env -> Env
+setGlobalEnv key value env =
     { env | global = Dict.insert key value env.global }
 
 
@@ -203,8 +203,8 @@ dispatch callable args env k =
                 |> Maybe.withDefault ( Err (Exception ("Invalid arity " ++ String.fromInt (List.length args))), Nothing )
 
 
-toContinuation : Callable -> Thunk -> Thunk
-toContinuation callable k =
+toContinuation : Callable -> { self : Value, k : Thunk } -> Thunk
+toContinuation callable { k } =
     Thunk
         (\(Located pos arg) env ->
             case arg of
