@@ -44,8 +44,13 @@ init =
     (quote (a b c d))
     (let [foo 43 bar (+ 1 1)]
         (def userfn (fn userfn [] [foo bar 666]))
-        [foo bar]
-    )
+        [foo bar])
+    (def three-arg-fn (fn [a b c] [a b c]))
+    (three-arg-fn 1 2 3)
+    (def var-arg-fn (fn var-arg-fn [a b & rest] [a b rest]))
+    (var-arg-fn 1 2 3 4 5 6)
+    (def recfn (fn [continue] (if continue (recur false) (quote done))))
+    (recfn true)
     (userfn)
     foo
 ]
@@ -65,6 +70,10 @@ type Interpreter
 trampoline : ( Result (Located Runtime.Exception) ( Located Runtime.IO, Runtime.Env ), Maybe Runtime.Thunk ) -> Int -> ( Interpreter, Cmd Message )
 trampoline ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
+        let
+            _ =
+                Debug.log "trace" ( result, thunk )
+        in
         ( StackOverflow, Cmd.none )
 
     else
@@ -101,14 +110,14 @@ update msg model =
         Eval ->
             let
                 ( interpreter, cmd ) =
-                    trampoline (Enclojure.eval model.code) 100
+                    trampoline (Enclojure.eval model.code) 1000
             in
             ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
 
         HandleIO ret ->
             let
                 ( interpreter, cmd ) =
-                    trampoline ret 100
+                    trampoline ret 1000
             in
             ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
 
