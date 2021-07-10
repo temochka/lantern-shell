@@ -1,7 +1,8 @@
 module Enclojure.Reader exposing (parse)
 
 import Enclojure.Located exposing (Located(..))
-import Enclojure.Runtime exposing (Value(..))
+import Enclojure.Reader.Macros as Macros
+import Enclojure.Runtime exposing (Exception(..), Value(..))
 import Parser exposing ((|.), (|=), Parser)
 import Set
 
@@ -150,3 +151,17 @@ list =
 parser : Parser (List (Located Value))
 parser =
     Parser.loop [] expressionsHelper
+        |> Parser.andThen
+            (\l ->
+                List.foldl (\e a -> a |> Result.andThen (\lr -> Macros.macroexpandAll e |> Result.map (\v -> v :: lr)))
+                    (Ok [])
+                    l
+                    |> (\r ->
+                            case r of
+                                Ok v ->
+                                    Parser.succeed v
+
+                                Err (Exception e) ->
+                                    Parser.problem e
+                       )
+            )

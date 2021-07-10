@@ -56,6 +56,7 @@ init =
     (def multi-fn (fn ([] (multi-fn 666)) ([a & rest] [a rest])))
     (multi-fn)
     (multi-fn 1 2 3 4 5 6)
+    (and 1 true (quote foo) [] false)
 ]
     """
     , interpreter = Stopped
