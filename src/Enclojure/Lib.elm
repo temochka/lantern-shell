@@ -1,6 +1,6 @@
-module Enclojure.Lib exposing (div, minus, mul, plus, sleep)
+module Enclojure.Lib exposing (div, minus, mul, not_, plus, sleep)
 
-import Enclojure.Runtime exposing (Arity(..), Callable, Env, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
+import Enclojure.Runtime as Runtime exposing (Arity(..), Callable, Env, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
 
 
 plus : Callable
@@ -38,6 +38,17 @@ sleep =
 
                 _ ->
                     Err (Exception "type error: sleep expects one integer argument")
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed (pure arity1))
+    }
+
+
+not_ : Callable
+not_ =
+    let
+        arity1 val =
+            Ok (Const (Bool (not (Runtime.isTruthy val))))
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
