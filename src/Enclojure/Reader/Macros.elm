@@ -1,8 +1,8 @@
 module Enclojure.Reader.Macros exposing (macroexpandAll)
 
+import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime exposing (Exception(..), Value(..))
-import Html exposing (i)
 
 
 type Expansion a
@@ -57,6 +57,10 @@ macroexpand i (Located loc value) =
     case value of
         List l ->
             case l of
+                (Located _ (Symbol "__lambda")) :: args ->
+                    expandLambda i (Located loc args)
+                        |> Result.map Expanded
+
                 (Located _ (Symbol "and")) :: args ->
                     expandAnd i (Located loc args)
                         |> Result.map Expanded
@@ -250,3 +254,133 @@ expandThreadLast i (Located loc args) =
 
         [] ->
             Err (Exception "Argument error: wrong number of arguments (0) passed to ->>")
+
+
+walk : a -> (a -> Located Value -> Result (Located Exception) ( a, Located Value )) -> Located Value -> Result (Located Exception) ( a, Located Value )
+walk state f (Located loc val) =
+    case val of
+        List l ->
+            l
+                |> List.foldr (\e a -> a |> Result.andThen (\( aState, av ) -> walk aState f e |> Result.map (\( nState, v ) -> ( nState, v :: av )))) (Ok ( state, [] ))
+                |> Result.map (\( s, r ) -> ( s, Located loc (List r) ))
+
+        Vector l ->
+            l
+                |> List.foldr (\e a -> a |> Result.andThen (\( aState, av ) -> walk aState f e |> Result.map (\( nState, v ) -> ( nState, v :: av )))) (Ok ( state, [] ))
+                |> Result.map (\( s, r ) -> ( s, Located loc (Vector r) ))
+
+        _ ->
+            f state (Located loc val)
+
+
+type alias Arguments =
+    { positional : Dict Int String
+    , variadic : Maybe String
+    }
+
+
+expandLambda : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandLambda i (Located loc body) =
+    case body of
+        [] ->
+            Ok ( i, Located loc (List [ Located loc (Symbol "fn"), Located loc (Vector []), Located loc (List []) ]) )
+
+        exprs ->
+            case substituteLambdaArgs i exprs of
+                Ok ( ( newI, args ), newExprs ) ->
+                    let
+                        ( finalI, completedArgs ) =
+                            completeArguments newI args
+                    in
+                    Ok ( finalI, Located loc (List [ Located loc (Symbol "fn"), Located loc (argsToValue (Located loc completedArgs)), Located loc (List newExprs) ]) )
+
+                Err e ->
+                    Err (Located.getValue e)
+
+
+completeArguments : Int -> Arguments -> ( Int, Arguments )
+completeArguments startI arguments =
+    let
+        maxPositional =
+            List.maximum (Dict.keys arguments.positional) |> Maybe.withDefault 0
+    in
+    List.range 1 maxPositional
+        |> List.foldr
+            (\e ( i, a ) ->
+                let
+                    ( newI, id ) =
+                        a.positional
+                            |> Dict.get e
+                            |> Maybe.map (Tuple.pair i)
+                            |> Maybe.withDefault ( i + 1, "p" ++ String.fromInt e ++ "__" ++ String.fromInt i )
+                in
+                ( newI, { a | positional = Dict.insert e id a.positional } )
+            )
+            ( startI, arguments )
+
+
+argsToValue : Located Arguments -> Value
+argsToValue (Located loc arguments) =
+    let
+        positional =
+            arguments.positional
+                |> Dict.toList
+                |> List.sortBy Tuple.first
+                |> List.map (Tuple.second >> Symbol >> Located loc)
+
+        variadic =
+            arguments.variadic |> Maybe.map (Symbol >> Located loc >> List.singleton >> (++) [ Located loc (Symbol "&") ]) |> Maybe.withDefault []
+    in
+    Vector (positional ++ variadic)
+
+
+substituteLambdaArgsWalker : ( Int, Arguments ) -> Located Value -> Result (Located Exception) ( ( Int, Arguments ), Located Value )
+substituteLambdaArgsWalker ( i, args ) (Located loc expr) =
+    case expr of
+        Symbol "__lambda" ->
+            Err (Located loc (Exception "Parsing error: nested #() are not supported, use fn instead."))
+
+        Symbol "%&" ->
+            let
+                ( newI, id ) =
+                    args.variadic |> Maybe.map (Tuple.pair i) |> Maybe.withDefault ( i + 1, "rest__" ++ String.fromInt i )
+            in
+            Ok ( ( newI, { args | variadic = Just id } ), Located loc (Symbol id) )
+
+        Symbol name ->
+            let
+                argN =
+                    if name == "%" then
+                        Just 1
+
+                    else if String.startsWith "%" name then
+                        String.toInt (String.dropLeft 1 name)
+
+                    else
+                        Nothing
+            in
+            case argN of
+                Just n ->
+                    let
+                        ( newI, id ) =
+                            Dict.get n args.positional |> Maybe.map (Tuple.pair i) |> Maybe.withDefault ( i + 1, "p" ++ String.fromInt n ++ "__" ++ String.fromInt i )
+                    in
+                    Ok ( ( newI, { args | positional = Dict.insert n id args.positional } ), Located loc (Symbol id) )
+
+                Nothing ->
+                    Ok ( ( i, args ), Located loc expr )
+
+        _ ->
+            Ok ( ( i, args ), Located loc expr )
+
+
+substituteLambdaArgs : Int -> List (Located Value) -> Result (Located Exception) ( ( Int, Arguments ), List (Located Value) )
+substituteLambdaArgs i exprs =
+    let
+        startState =
+            ( i, { positional = Dict.empty, variadic = Nothing } )
+    in
+    exprs
+        |> List.foldr
+            (\e a -> a |> Result.andThen (\( aState, av ) -> walk aState substituteLambdaArgsWalker e |> Result.map (\( nState, v ) -> ( nState, v :: av ))))
+            (Ok ( startState, [] ))

@@ -53,6 +53,8 @@ isAllowedSymbolSpecialChar c =
         == '\''
         || c
         == '&'
+        || c
+        == '%'
 
 
 symbol : Parser Value
@@ -84,7 +86,8 @@ expression =
     Parser.succeed identity
         |. Parser.spaces
         |= Parser.oneOf
-            [ list
+            [ lambda
+            , list
             , vector
             , bool
             , nil
@@ -133,6 +136,20 @@ vector =
         , end = "]"
         }
         |> Parser.map Vector
+
+
+lambda : Parser Value
+lambda =
+    Parser.sequence
+        { start = "#("
+        , separator = ""
+        , spaces = spaces
+        , item = Parser.lazy (\_ -> located expression)
+        , trailing = Parser.Optional
+        , end = ")"
+        }
+        |> located
+        |> Parser.map (\(Located loc v) -> List (Located loc (Symbol "__lambda") :: v))
 
 
 list : Parser Value
