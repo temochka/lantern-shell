@@ -27,6 +27,9 @@ resolveSymbol env symbol =
                 "*" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mul))
 
+                "list" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
+
                 "not" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
 

@@ -1,6 +1,20 @@
-module Enclojure.Lib exposing (div, minus, mul, not_, plus, sleep)
+module Enclojure.Lib exposing (div, list, minus, mul, not_, plus, sleep)
 
+import Enclojure.Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (Arity(..), Callable, Env, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
+
+
+fakeLoc =
+    { start = ( 0, 0 ), end = ( 0, 0 ) }
+
+
+list : Callable
+list =
+    let
+        arity0 { rest } =
+            Ok (Const (List (List.map (Located fakeLoc) rest)))
+    in
+    { emptyCallable | arity0 = Just (Variadic (pure arity0)) }
 
 
 plus : Callable
