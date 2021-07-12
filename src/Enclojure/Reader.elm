@@ -23,11 +23,22 @@ parse code =
 int : Parser Value
 int =
     Parser.oneOf
-        [ Parser.map Number <|
+        [ Parser.map Int <|
             Parser.succeed negate
                 |. Parser.symbol "-"
                 |= Parser.int
-        , Parser.succeed Number |= Parser.int
+        , Parser.succeed Int |= Parser.int
+        ]
+
+
+float : Parser Value
+float =
+    Parser.oneOf
+        [ Parser.map Float <|
+            Parser.succeed negate
+                |. Parser.symbol "-"
+                |= Parser.float
+        , Parser.succeed Float |= Parser.float
         ]
 
 
@@ -91,8 +102,9 @@ expression =
             , vector
             , bool
             , nil
-            , symbol
+            , float
             , int
+            , symbol
             ]
         |. Parser.spaces
 

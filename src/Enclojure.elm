@@ -27,6 +27,24 @@ resolveSymbol env symbol =
                 "*" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mul))
 
+                "=" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isEqual))
+
+                "not=" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isNotEqual))
+
+                ">" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isGreaterThan))
+
+                ">=" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isGreaterThanOrEqual))
+
+                "<" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThan))
+
+                "<=" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThanOrEqual))
+
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
 
@@ -105,8 +123,11 @@ evalExpression mutableExpr mutableEnv mutableK =
                         Err e ->
                             ( Err (Located loc e), Just k )
 
-                Number n ->
-                    ( Ok ( Located loc (Const (Number n)), env ), Just k )
+                Float n ->
+                    ( Ok ( Located loc (Const (Float n)), env ), Just k )
+
+                Int n ->
+                    ( Ok ( Located loc (Const (Int n)), env ), Just k )
 
                 Nil ->
                     ( Ok ( Located loc (Const Nil), env ), Just k )

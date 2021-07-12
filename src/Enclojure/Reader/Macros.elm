@@ -355,6 +355,14 @@ substituteLambdaArgsWalker ( i, args ) (Located loc expr) =
 
                     else if String.startsWith "%" name then
                         String.toInt (String.dropLeft 1 name)
+                            |> Maybe.andThen
+                                (\n ->
+                                    if n < 1 then
+                                        Nothing
+
+                                    else
+                                        Just n
+                                )
 
                     else
                         Nothing
