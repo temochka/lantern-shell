@@ -69,17 +69,29 @@ isAllowedSymbolSpecialChar c =
         == '%'
 
 
+symbolLike : Parser String
+symbolLike =
+    Parser.variable
+        { start =
+            \c ->
+                Char.isAlpha c
+                    || isAllowedSymbolSpecialChar c
+        , inner = \c -> Char.isAlphaNum c || isAllowedSymbolSpecialChar c
+        , reserved = Set.empty
+        }
+
+
 symbol : Parser Value
 symbol =
     Parser.succeed Symbol
-        |= Parser.variable
-            { start =
-                \c ->
-                    Char.isAlpha c
-                        || isAllowedSymbolSpecialChar c
-            , inner = \c -> Char.isAlphaNum c || isAllowedSymbolSpecialChar c
-            , reserved = Set.empty
-            }
+        |= symbolLike
+
+
+keyword : Parser Value
+keyword =
+    Parser.succeed Keyword
+        |. Parser.symbol ":"
+        |= symbolLike
 
 
 expressionsHelper : List (Located Value) -> Parser (Parser.Step (List (Located Value)) (List (Located Value)))
@@ -106,6 +118,7 @@ expression =
             , nil
             , float
             , int
+            , keyword
             , symbol
             ]
         |. Parser.spaces

@@ -41,6 +41,7 @@ type Value
     | Vector (List (Located Value))
     | Nil
     | Bool Basics.Bool
+    | Keyword String
     | Symbol String
 
 
@@ -278,6 +279,9 @@ inspect value =
 
         Vector l ->
             "[" ++ (List.map (Located.getValue >> inspect) l |> String.join " ") ++ "]"
+
+        Keyword name ->
+            ":" ++ name
 
         Symbol name ->
             name

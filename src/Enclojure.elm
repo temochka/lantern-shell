@@ -129,6 +129,9 @@ evalExpression mutableExpr mutableEnv mutableK =
                 String s ->
                     ( Ok ( Located loc (Const (String s)), env ), Just k )
 
+                Keyword s ->
+                    ( Ok ( Located loc (Const (Keyword s)), env ), Just k )
+
                 Float n ->
                     ( Ok ( Located loc (Const (Float n)), env ), Just k )
 
