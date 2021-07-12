@@ -2,53 +2,9 @@ module Enclojure.Runtime exposing (..)
 
 import Dict
 import Enclojure.Extra.Maybe
+import Enclojure.HashMap as HashMap
 import Enclojure.Located as Located exposing (Located(..))
-
-
-type Exception
-    = Exception String
-
-
-type Thunk
-    = Thunk (Located Value -> Env -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ))
-
-
-type Arity a
-    = Fixed (a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
-    | Variadic ({ args : a, rest : List Value } -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
-
-
-type IO
-    = Const Value
-    | Sleep Float
-
-
-type alias Callable =
-    { arity0 : Maybe (Arity ())
-    , arity1 : Maybe (Arity Value)
-    , arity2 : Maybe (Arity ( Value, Value ))
-    , arity3 : Maybe (Arity ( Value, Value, Value ))
-    }
-
-
-type Value
-    = Int Int
-    | Float Float
-    | String String
-    | Ref String (Located Value)
-    | Fn (Maybe String) ({ self : Value, k : Thunk } -> Thunk)
-    | List (List (Located Value))
-    | Vector (List (Located Value))
-    | Nil
-    | Bool Basics.Bool
-    | Keyword String
-    | Symbol String
-
-
-type alias Env =
-    { global : Dict.Dict String Value
-    , local : Dict.Dict String Value
-    }
+import Enclojure.Types exposing (..)
 
 
 emptyEnv : Env
@@ -282,6 +238,14 @@ inspect value =
 
         Keyword name ->
             ":" ++ name
+
+        Map m ->
+            List.map (\( k, Located _ v ) -> inspect k ++ " " ++ inspect v) (HashMap.toList m)
+                |> String.join ", "
+                |> (\r -> "{" ++ r ++ "}")
+
+        MapEntry ( k, v ) ->
+            inspect (Vector [ Located fakeLoc k, v ])
 
         Symbol name ->
             name

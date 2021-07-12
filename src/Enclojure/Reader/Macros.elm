@@ -2,7 +2,7 @@ module Enclojure.Reader.Macros exposing (macroexpandAll)
 
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime exposing (Exception(..), Value(..))
+import Enclojure.Types exposing (Exception(..), Value(..))
 
 
 type Expansion a

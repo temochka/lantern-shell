@@ -1,9 +1,10 @@
 module Enclojure.Reader exposing (parse)
 
+import Enclojure.HashMap as HashMap
 import Enclojure.Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
-import Enclojure.Runtime exposing (Exception(..), Value(..))
+import Enclojure.Types exposing (..)
 import Parser exposing ((|.), (|=), Parser)
 import Set
 
@@ -21,26 +22,15 @@ parse code =
     Parser.run parser code
 
 
-int : Parser Value
-int =
-    Parser.oneOf
-        [ Parser.map Int <|
-            Parser.succeed negate
-                |. Parser.symbol "-"
-                |= Parser.int
-        , Parser.succeed Int |= Parser.int
-        ]
-
-
-float : Parser Value
-float =
-    Parser.oneOf
-        [ Parser.map Float <|
-            Parser.succeed negate
-                |. Parser.symbol "-"
-                |= Parser.float
-        , Parser.succeed Float |= Parser.float
-        ]
+number : Parser Value
+number =
+    Parser.number
+        { int = Just Int
+        , float = Just Float
+        , hex = Nothing
+        , octal = Nothing
+        , binary = Nothing
+        }
 
 
 isAllowedSymbolSpecialChar : Char -> Bool
@@ -114,12 +104,12 @@ expression =
             , string
             , list
             , vector
+            , hashMap
             , bool
             , nil
-            , float
-            , int
-            , keyword
+            , number
             , symbol
+            , keyword
             ]
         |. Parser.spaces
 
@@ -190,6 +180,27 @@ list =
         , end = ")"
         }
         |> Parser.map List
+
+
+mapEntry : Parser HashMapEntry
+mapEntry =
+    Parser.succeed Tuple.pair
+        |= expression
+        |. spaces
+        |= located expression
+
+
+hashMap : Parser Value
+hashMap =
+    Parser.sequence
+        { start = "{"
+        , separator = ""
+        , spaces = spaces
+        , item = Parser.lazy (\_ -> mapEntry)
+        , trailing = Parser.Optional
+        , end = "}"
+        }
+        |> Parser.map (HashMap.fromList >> Map)
 
 
 string : Parser Value
