@@ -1,4 +1,4 @@
-module Enclojure.Lib exposing (div, isEqual, isGreaterThan, isGreaterThanOrEqual, isLessThan, isLessThanOrEqual, isNotEqual, list, minus, mul, not_, plus, sleep)
+module Enclojure.Lib exposing (div, isEqual, isGreaterThan, isGreaterThanOrEqual, isLessThan, isLessThanOrEqual, isNotEqual, list, minus, mul, not_, plus, sleep, str)
 
 import Enclojure.Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (Arity(..), Callable, Env, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
@@ -124,26 +124,26 @@ numOp { identity, intOp, floatOp } =
 
 isLessThan : Callable
 isLessThan =
-    compOp { intOp = (<), floatOp = (<) }
+    compOp { intOp = (<), floatOp = (<), stringOp = (<) }
 
 
 isLessThanOrEqual : Callable
 isLessThanOrEqual =
-    compOp { intOp = (<=), floatOp = (<=) }
+    compOp { intOp = (<=), floatOp = (<=), stringOp = (<=) }
 
 
 isGreaterThan : Callable
 isGreaterThan =
-    compOp { intOp = (>), floatOp = (>) }
+    compOp { intOp = (>), floatOp = (>), stringOp = (<=) }
 
 
 isGreaterThanOrEqual : Callable
 isGreaterThanOrEqual =
-    compOp { intOp = (>=), floatOp = (>=) }
+    compOp { intOp = (>=), floatOp = (>=), stringOp = (>=) }
 
 
-compOp : { intOp : Int -> Int -> Bool, floatOp : Float -> Float -> Bool } -> Callable
-compOp { intOp, floatOp } =
+compOp : { intOp : Int -> Int -> Bool, floatOp : Float -> Float -> Bool, stringOp : String -> String -> Bool } -> Callable
+compOp { intOp, floatOp, stringOp } =
     let
         arity1 _ =
             Ok (Bool True)
@@ -163,6 +163,9 @@ compOp { intOp, floatOp } =
 
                         ( Int a, Int b ) ->
                             Ok (intOp a b)
+
+                        ( String a, String b ) ->
+                            Ok (stringOp a b)
 
                         ( a, b ) ->
                             Err (Exception ("can't compare " ++ inspect a ++ " and " ++ inspect b))
@@ -241,4 +244,19 @@ isNotEqual =
     { emptyCallable
         | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
         , arity2 = Just (Variadic (pure (arity2 >> Result.map Const)))
+    }
+
+
+str : Callable
+str =
+    let
+        arity0 { rest } =
+            rest
+                |> List.map Runtime.toString
+                |> String.join ""
+                |> String
+                |> Ok
+    in
+    { emptyCallable
+        | arity0 = Just (Variadic (pure (arity0 >> Result.map Const)))
     }
