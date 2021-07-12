@@ -34,6 +34,7 @@ type alias Callable =
 type Value
     = Int Int
     | Float Float
+    | String String
     | Ref String (Located Value)
     | Fn (Maybe String) ({ self : Value, k : Thunk } -> Thunk)
     | List (List (Located Value))
@@ -250,6 +251,9 @@ inspect value =
         Ref name _ ->
             "#'" ++ name
 
+        String string ->
+            "\"" ++ string ++ "\""
+
         Int x ->
             String.fromInt x
 
@@ -277,3 +281,13 @@ inspect value =
 
         Symbol name ->
             name
+
+
+toString : Value -> String
+toString value =
+    case value of
+        String s ->
+            s
+
+        _ ->
+            inspect value

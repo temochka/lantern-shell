@@ -1,6 +1,7 @@
 module Enclojure.Reader exposing (parse)
 
 import Enclojure.Located exposing (Located(..))
+import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
 import Enclojure.Runtime exposing (Exception(..), Value(..))
 import Parser exposing ((|.), (|=), Parser)
@@ -98,6 +99,7 @@ expression =
         |. Parser.spaces
         |= Parser.oneOf
             [ lambda
+            , string
             , list
             , vector
             , bool
@@ -175,6 +177,11 @@ list =
         , end = ")"
         }
         |> Parser.map List
+
+
+string : Parser Value
+string =
+    DoubleQuotedString.string |> Parser.map String
 
 
 parser : Parser (List (Located Value))

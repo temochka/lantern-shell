@@ -54,6 +54,9 @@ resolveSymbol env symbol =
                 "sleep" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
 
+                "str" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.str))
+
                 _ ->
                     Err (Exception ("Unknown symbol " ++ symbol))
             )
@@ -122,6 +125,9 @@ evalExpression mutableExpr mutableEnv mutableK =
 
                         Err e ->
                             ( Err (Located loc e), Just k )
+
+                String s ->
+                    ( Ok ( Located loc (Const (String s)), env ), Just k )
 
                 Float n ->
                     ( Ok ( Located loc (Const (Float n)), env ), Just k )
