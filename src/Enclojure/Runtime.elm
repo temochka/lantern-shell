@@ -31,12 +31,9 @@ type alias Callable =
     }
 
 
-type alias Number =
-    Int
-
-
 type Value
-    = Number Number
+    = Int Int
+    | Float Float
     | Ref String (Located Value)
     | Fn (Maybe String) ({ self : Value, k : Thunk } -> Thunk)
     | List (List (Located Value))
@@ -253,8 +250,11 @@ inspect value =
         Ref name _ ->
             "#'" ++ name
 
-        Number x ->
+        Int x ->
             String.fromInt x
+
+        Float x ->
+            String.fromFloat x
 
         Fn name _ ->
             "fn<" ++ (name |> Maybe.withDefault "anonymous") ++ ">"
