@@ -1,0 +1,78 @@
+module Enclojure.Types exposing (..)
+
+import Dict exposing (Dict)
+import Enclojure.Located exposing (Located)
+
+
+fakeLoc : { start : ( number, number ), end : ( number, number ) }
+fakeLoc =
+    { start = ( 0, 0 ), end = ( 0, 0 ) }
+
+
+type Exception
+    = Exception String
+
+
+type Thunk
+    = Thunk (Located Value -> Env -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ))
+
+
+type Arity a
+    = Fixed (a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+    | Variadic ({ args : a, rest : List Value } -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+
+
+type IO
+    = Const Value
+    | Sleep Float
+
+
+type alias Callable =
+    { arity0 : Maybe (Arity ())
+    , arity1 : Maybe (Arity Value)
+    , arity2 : Maybe (Arity ( Value, Value ))
+    , arity3 : Maybe (Arity ( Value, Value, Value ))
+    }
+
+
+type alias HashMapEntry =
+    ( Value, Located Value )
+
+
+type alias HashMap =
+    { ints : Dict Int (Located Value)
+    , floats : Dict Float (Located Value)
+    , strings : Dict String (Located Value)
+    , nil : Maybe (Located Value)
+    , bools : { true : Maybe (Located Value), false : Maybe (Located Value) }
+    , keywords : Dict String (Located Value)
+    , symbols : Dict String (Located Value)
+    , fns : List ( Value, Located Value )
+    , maps : List ( Value, Located Value )
+    , mapEntries : List ( Value, Located Value )
+    , lists : List ( Value, Located Value )
+    , refs : List ( Value, Located Value )
+    , vectors : List ( Value, Located Value )
+    }
+
+
+type Value
+    = Int Int
+    | Float Float
+    | String String
+    | Ref String (Located Value)
+    | Fn (Maybe String) ({ self : Value, k : Thunk } -> Thunk)
+    | List (List (Located Value))
+    | Vector (List (Located Value))
+    | Nil
+    | Bool Basics.Bool
+    | Keyword String
+    | Map HashMap
+    | MapEntry HashMapEntry
+    | Symbol String
+
+
+type alias Env =
+    { global : Dict String Value
+    , local : Dict String Value
+    }

@@ -1,12 +1,8 @@
 module Enclojure.Lib exposing (div, isEqual, isGreaterThan, isGreaterThanOrEqual, isLessThan, isLessThanOrEqual, isNotEqual, list, minus, mul, not_, plus, sleep, str)
 
 import Enclojure.Located exposing (Located(..))
-import Enclojure.Runtime as Runtime exposing (Arity(..), Callable, Env, Exception(..), IO(..), Thunk(..), Value(..), emptyCallable, inspect)
-
-
-fakeLoc : { start : ( number, number ), end : ( number, number ) }
-fakeLoc =
-    { start = ( 0, 0 ), end = ( 0, 0 ) }
+import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect)
+import Enclojure.Types exposing (..)
 
 
 pure : (a -> Result Exception IO) -> (a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))

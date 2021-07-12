@@ -1,11 +1,14 @@
 module Enclojure exposing (eval)
 
 import Enclojure.Extra.Maybe exposing (orElse)
+import Enclojure.HashMap as HashMap
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
-import Enclojure.Runtime as Runtime exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..))
+import Enclojure.Runtime as Runtime
+import Enclojure.Types exposing (Arity(..), Env, Exception(..), HashMap, IO(..), Thunk(..), Value(..))
 import Html exposing (a)
+import List exposing (map)
 
 
 resolveSymbol : Env -> String -> Result Exception Value
@@ -118,6 +121,9 @@ evalExpression mutableExpr mutableEnv mutableK =
                         [] ->
                             ( Ok ( Located loc (Const (Vector [])), env ), Just k )
 
+                Map m ->
+                    evalMap (Located loc m) env k
+
                 Symbol s ->
                     case resolveSymbol env s of
                         Ok v ->
@@ -137,6 +143,9 @@ evalExpression mutableExpr mutableEnv mutableK =
 
                 Int n ->
                     ( Ok ( Located loc (Const (Int n)), env ), Just k )
+
+                MapEntry _ ->
+                    ( Ok ( Located loc (Const expr), env ), Just k )
 
                 Nil ->
                     ( Ok ( Located loc (Const Nil), env ), Just k )
@@ -178,6 +187,61 @@ evalExpression mutableExpr mutableEnv mutableK =
                         -- empty list ()
                         [] ->
                             ( Ok ( Located loc (Const expr), env ), Just k )
+        )
+
+
+evalMap : Located Enclojure.Types.HashMap -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalMap (Located mapLoc map) env (Thunk k) =
+    let
+        thunk =
+            map
+                |> HashMap.toList
+                |> List.map (Located mapLoc)
+                |> List.foldl
+                    (\e a ->
+                        \(Located loc v) renv ->
+                            case v of
+                                Map m ->
+                                    evalMapEntry e
+                                        renv
+                                        (Thunk
+                                            (\(Located mapEntryLoc mapEntryV) mapEntryEnv ->
+                                                case mapEntryV of
+                                                    MapEntry ( key, value ) ->
+                                                        ( Ok ( Located mapEntryLoc (Const (Map (HashMap.insert key value m))), mapEntryEnv ), Just (Thunk a) )
+
+                                                    _ ->
+                                                        ( Err (Located loc (Exception "Interpreter error: impossible interpreter state! Map entry avluation yielded a non-map entry")), Just (Thunk a) )
+                                            )
+                                        )
+
+                                _ ->
+                                    ( Err (Located loc (Exception "Interpreter error: impossible interpreter state! Map avluation yielded a non-map")), Just (Thunk a) )
+                    )
+                    k
+                |> Thunk
+    in
+    ( Ok ( Located mapLoc (Const (Map HashMap.empty)), env )
+    , Just thunk
+    )
+
+
+evalMapEntry : Located Enclojure.Types.HashMapEntry -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalMapEntry (Located loc ( key, value )) env k =
+    evalExpression (Located Enclojure.Types.fakeLoc key)
+        env
+        (Thunk
+            (\keyRet keyEnv ->
+                evalExpression value
+                    keyEnv
+                    (Thunk
+                        (\valRet valEnv ->
+                            ( Ok ( Located loc (Const (MapEntry ( Located.getValue keyRet, valRet ))), valEnv )
+                            , Just k
+                            )
+                        )
+                    )
+            )
         )
 
 
