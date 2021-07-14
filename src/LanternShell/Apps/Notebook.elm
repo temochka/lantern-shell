@@ -58,6 +58,8 @@ init =
     (multi-fn)
     (multi-fn 1 2 3 4 5 6)
     (and 1 true (quote foo) [] false)
+    {:foo "bar" :buz "yay"}
+    #{1 2 :foo 42.0}
 ]
     """
     , interpreter = Stopped

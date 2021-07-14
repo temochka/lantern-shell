@@ -1,10 +1,11 @@
 module Enclojure.Reader exposing (parse)
 
-import Enclojure.HashMap as HashMap
 import Enclojure.Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
 import Enclojure.Types exposing (..)
+import Enclojure.ValueMap as ValueMap
+import Enclojure.ValueSet as ValueSet
 import Parser exposing ((|.), (|=), Parser)
 import Set
 
@@ -104,7 +105,8 @@ expression =
             , string
             , list
             , vector
-            , hashMap
+            , valueMap
+            , valueSet
             , bool
             , nil
             , number
@@ -182,7 +184,7 @@ list =
         |> Parser.map List
 
 
-mapEntry : Parser HashMapEntry
+mapEntry : Parser ValueMapEntry
 mapEntry =
     Parser.succeed Tuple.pair
         |= expression
@@ -190,8 +192,8 @@ mapEntry =
         |= located expression
 
 
-hashMap : Parser Value
-hashMap =
+valueMap : Parser Value
+valueMap =
     Parser.sequence
         { start = "{"
         , separator = ""
@@ -200,7 +202,20 @@ hashMap =
         , trailing = Parser.Optional
         , end = "}"
         }
-        |> Parser.map (HashMap.fromList >> Map)
+        |> Parser.map (ValueMap.fromList >> Map)
+
+
+valueSet : Parser Value
+valueSet =
+    Parser.sequence
+        { start = "#{"
+        , separator = ""
+        , spaces = spaces
+        , item = Parser.lazy (\_ -> expression)
+        , trailing = Parser.Optional
+        , end = "}"
+        }
+        |> Parser.map (ValueSet.fromList >> Set)
 
 
 string : Parser Value
