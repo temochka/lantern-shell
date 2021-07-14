@@ -2,9 +2,10 @@ module Enclojure.Runtime exposing (..)
 
 import Dict
 import Enclojure.Extra.Maybe
-import Enclojure.HashMap as HashMap
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Types exposing (..)
+import Enclojure.ValueMap as ValueMap
+import Enclojure.ValueSet as ValueSet
 
 
 emptyEnv : Env
@@ -240,12 +241,17 @@ inspect value =
             ":" ++ name
 
         Map m ->
-            List.map (\( k, Located _ v ) -> inspect k ++ " " ++ inspect v) (HashMap.toList m)
+            List.map (\( k, Located _ v ) -> inspect k ++ " " ++ inspect v) (ValueMap.toList m)
                 |> String.join ", "
                 |> (\r -> "{" ++ r ++ "}")
 
         MapEntry ( k, v ) ->
             inspect (Vector [ Located fakeLoc k, v ])
+
+        Set set ->
+            List.map (\v -> inspect v) (ValueSet.toList set)
+                |> String.join ", "
+                |> (\r -> "#{" ++ r ++ "}")
 
         Symbol name ->
             name

@@ -1,12 +1,13 @@
 module Enclojure exposing (eval)
 
 import Enclojure.Extra.Maybe exposing (orElse)
-import Enclojure.HashMap as HashMap
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Arity(..), Env, Exception(..), HashMap, IO(..), Thunk(..), Value(..))
+import Enclojure.Types exposing (Arity(..), Env, Exception(..), IO(..), Thunk(..), Value(..))
+import Enclojure.ValueMap as ValueMap
+import Enclojure.ValueSet as ValueSet
 import Html exposing (a)
 import List exposing (map)
 
@@ -124,6 +125,9 @@ evalExpression mutableExpr mutableEnv mutableK =
                 Map m ->
                     evalMap (Located loc m) env k
 
+                Set s ->
+                    evalSet (Located loc s) env k
+
                 Symbol s ->
                     case resolveSymbol env s of
                         Ok v ->
@@ -190,12 +194,12 @@ evalExpression mutableExpr mutableEnv mutableK =
         )
 
 
-evalMap : Located Enclojure.Types.HashMap -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalMap : Located Enclojure.Types.ValueMap -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 evalMap (Located mapLoc map) env (Thunk k) =
     let
         thunk =
             map
-                |> HashMap.toList
+                |> ValueMap.toList
                 |> List.map (Located mapLoc)
                 |> List.foldl
                     (\e a ->
@@ -208,7 +212,7 @@ evalMap (Located mapLoc map) env (Thunk k) =
                                             (\(Located mapEntryLoc mapEntryV) mapEntryEnv ->
                                                 case mapEntryV of
                                                     MapEntry ( key, value ) ->
-                                                        ( Ok ( Located mapEntryLoc (Const (Map (HashMap.insert key value m))), mapEntryEnv ), Just (Thunk a) )
+                                                        ( Ok ( Located mapEntryLoc (Const (Map (ValueMap.insert key value m))), mapEntryEnv ), Just (Thunk a) )
 
                                                     _ ->
                                                         ( Err (Located loc (Exception "Interpreter error: impossible interpreter state! Map entry avluation yielded a non-map entry")), Just (Thunk a) )
@@ -221,12 +225,12 @@ evalMap (Located mapLoc map) env (Thunk k) =
                     k
                 |> Thunk
     in
-    ( Ok ( Located mapLoc (Const (Map HashMap.empty)), env )
+    ( Ok ( Located mapLoc (Const (Map ValueMap.empty)), env )
     , Just thunk
     )
 
 
-evalMapEntry : Located Enclojure.Types.HashMapEntry -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalMapEntry : Located Enclojure.Types.ValueMapEntry -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 evalMapEntry (Located loc ( key, value )) env k =
     evalExpression (Located Enclojure.Types.fakeLoc key)
         env
@@ -243,6 +247,37 @@ evalMapEntry (Located loc ( key, value )) env k =
                     )
             )
         )
+
+
+evalSet : Located Enclojure.Types.ValueSet -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+evalSet (Located setLoc set) env (Thunk k) =
+    let
+        thunk =
+            set
+                |> ValueSet.toList
+                |> List.map (Located setLoc)
+                |> List.foldl
+                    (\e a ->
+                        \(Located loc v) renv ->
+                            case v of
+                                Set s ->
+                                    evalExpression e
+                                        renv
+                                        (Thunk
+                                            (\(Located setEntryLoc setEntry) setEntryEnv ->
+                                                ( Ok ( Located setEntryLoc (Const (Set (ValueSet.insert setEntry s))), setEntryEnv ), Just (Thunk a) )
+                                            )
+                                        )
+
+                                _ ->
+                                    ( Err (Located loc (Exception "Interpreter error: impossible interpreter state! Set avluation yielded a non-set")), Just (Thunk a) )
+                    )
+                    k
+                |> Thunk
+    in
+    ( Ok ( Located setLoc (Const (Set ValueSet.empty)), env )
+    , Just thunk
+    )
 
 
 mapArgs : List (Located Value) -> List (Located Value) -> Result (Located Exception) (List ( String, Value ))

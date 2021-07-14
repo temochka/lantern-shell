@@ -2,6 +2,7 @@ module Enclojure.Types exposing (..)
 
 import Dict exposing (Dict)
 import Enclojure.Located exposing (Located)
+import Set
 
 
 fakeLoc : { start : ( number, number ), end : ( number, number ) }
@@ -35,11 +36,11 @@ type alias Callable =
     }
 
 
-type alias HashMapEntry =
+type alias ValueMapEntry =
     ( Value, Located Value )
 
 
-type alias HashMap =
+type alias ValueMap =
     { ints : Dict Int (Located Value)
     , floats : Dict Float (Located Value)
     , strings : Dict String (Located Value)
@@ -52,7 +53,26 @@ type alias HashMap =
     , mapEntries : List ( Value, Located Value )
     , lists : List ( Value, Located Value )
     , refs : List ( Value, Located Value )
+    , sets : List ( Value, Located Value )
     , vectors : List ( Value, Located Value )
+    }
+
+
+type alias ValueSet =
+    { ints : Set.Set Int
+    , floats : Set.Set Float
+    , strings : Set.Set String
+    , nil : Maybe Value
+    , bools : { true : Maybe Value, false : Maybe Value }
+    , keywords : Set.Set String
+    , symbols : Set.Set String
+    , fns : List Value
+    , maps : List Value
+    , mapEntries : List Value
+    , lists : List Value
+    , refs : List Value
+    , sets : List Value
+    , vectors : List Value
     }
 
 
@@ -67,8 +87,9 @@ type Value
     | Nil
     | Bool Basics.Bool
     | Keyword String
-    | Map HashMap
-    | MapEntry HashMapEntry
+    | Map ValueMap
+    | MapEntry ValueMapEntry
+    | Set ValueSet
     | Symbol String
 
 

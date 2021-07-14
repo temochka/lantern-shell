@@ -1,11 +1,11 @@
-module Enclojure.HashMap exposing (empty, fromList, get, insert, remove, toList)
+module Enclojure.ValueMap exposing (empty, fromList, get, insert, remove, toList)
 
 import Dict
 import Enclojure.Located exposing (Located(..))
 import Enclojure.Types exposing (..)
 
 
-empty : HashMap
+empty : ValueMap
 empty =
     { ints = Dict.empty
     , floats = Dict.empty
@@ -18,12 +18,13 @@ empty =
     , maps = []
     , mapEntries = []
     , lists = []
+    , sets = []
     , vectors = []
     , keywords = Dict.empty
     }
 
 
-insert : Value -> Located Value -> HashMap -> HashMap
+insert : Value -> Located Value -> ValueMap -> ValueMap
 insert k v map =
     case k of
         Int int ->
@@ -73,11 +74,14 @@ insert k v map =
         MapEntry _ ->
             { map | mapEntries = ( k, v ) :: map.mapEntries }
 
+        Set _ ->
+            { map | sets = ( k, v ) :: map.sets }
+
         Vector _ ->
             { map | vectors = ( k, v ) :: map.vectors }
 
 
-remove : Value -> HashMap -> HashMap
+remove : Value -> ValueMap -> ValueMap
 remove k map =
     case k of
         Int int ->
@@ -147,6 +151,13 @@ remove k map =
             in
             { map | mapEntries = newMapEntries }
 
+        Set _ ->
+            let
+                newSets =
+                    map.sets |> List.filter (Tuple.first >> (/=) k)
+            in
+            { map | sets = newSets }
+
         Vector _ ->
             let
                 newVectors =
@@ -169,7 +180,7 @@ linearFind f l =
                 linearFind f rest
 
 
-get : Value -> HashMap -> Maybe (Located Value)
+get : Value -> ValueMap -> Maybe (Located Value)
 get k map =
     case k of
         Int int ->
@@ -217,12 +228,16 @@ get k map =
             linearFind (Tuple.first >> (==) k) map.mapEntries
                 |> Maybe.map Tuple.second
 
+        Set _ ->
+            linearFind (Tuple.first >> (==) k) map.sets
+                |> Maybe.map Tuple.second
+
         Vector _ ->
             linearFind (Tuple.first >> (==) k) map.vectors
                 |> Maybe.map Tuple.second
 
 
-toList : HashMap -> List ( Value, Located Value )
+toList : ValueMap -> List ( Value, Located Value )
 toList map =
     let
         ints =
@@ -249,10 +264,10 @@ toList map =
         symbols =
             Dict.toList map.symbols |> List.map (Tuple.mapFirst Symbol)
     in
-    ints ++ floats ++ strings ++ nils ++ trues ++ falses ++ keywords ++ symbols ++ map.refs ++ map.fns ++ map.maps ++ map.mapEntries ++ map.lists ++ map.vectors
+    ints ++ floats ++ strings ++ nils ++ trues ++ falses ++ keywords ++ symbols ++ map.refs ++ map.fns ++ map.maps ++ map.mapEntries ++ map.lists ++ map.sets ++ map.vectors
 
 
-fromList : List HashMapEntry -> HashMap
+fromList : List ValueMapEntry -> ValueMap
 fromList entries =
     entries
         |> List.foldl (\( k, v ) a -> insert k v a) empty
