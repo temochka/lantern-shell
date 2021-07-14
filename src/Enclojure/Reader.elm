@@ -91,9 +91,16 @@ expressionsHelper revExprs =
         [ Parser.succeed (\expr -> Parser.Loop (expr :: revExprs))
             |= located expression
             |. spaces
+        , Parser.succeed (\_ -> Parser.Loop revExprs)
+            |= lineComment
         , Parser.succeed ()
             |> Parser.map (\_ -> Parser.Done (List.reverse revExprs))
         ]
+
+
+lineComment : Parser ()
+lineComment =
+    Parser.lineComment ";"
 
 
 expression : Parser Value
@@ -120,7 +127,7 @@ spaces : Parser ()
 spaces =
     Parser.oneOf
         [ Parser.spaces
-        , Parser.chompIf (\c -> c == ',' || c == ';')
+        , Parser.chompIf (\c -> c == ',')
         ]
 
 
