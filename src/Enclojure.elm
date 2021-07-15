@@ -10,6 +10,7 @@ import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (a)
 import List exposing (map)
+import Parser exposing (symbol)
 
 
 resolveSymbol : Env -> String -> Result Exception Value
@@ -49,11 +50,20 @@ resolveSymbol env symbol =
                 "<=" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThanOrEqual))
 
+                "filter" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.filter))
+
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
 
+                "map" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.map))
+
                 "not" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
+
+                "seq" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.seq))
 
                 "sleep" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
@@ -64,16 +74,6 @@ resolveSymbol env symbol =
                 _ ->
                     Err (Exception ("Unknown symbol " ++ symbol))
             )
-
-
-apply : Located Value -> Located Value -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
-apply ((Located fnLoc fnExpr) as fn) arg env k =
-    case fnExpr of
-        Fn _ callable ->
-            ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
-
-        _ ->
-            ( Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable."))), Just k )
 
 
 {-| Introduce a redundant closure to prevent closure shadowing via tail-call optimization
@@ -516,7 +516,7 @@ evalApply fnExpr (Located loc argExprs) env k =
                                                 )
                                             )
                                 )
-                                (\args argsEnv -> apply fn args argsEnv k)
+                                (\args argsEnv -> Lib.apply fn args argsEnv k)
                         )
                     )
                 )

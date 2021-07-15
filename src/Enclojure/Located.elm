@@ -1,4 +1,4 @@
-module Enclojure.Located exposing (Located(..), getValue, map, replace)
+module Enclojure.Located exposing (Located(..), fakeLoc, getValue, map, replace)
 
 
 type alias Position =
@@ -22,3 +22,8 @@ map f (Located pos a) =
 getValue : Located a -> a
 getValue (Located _ val) =
     val
+
+
+fakeLoc : a -> Located a
+fakeLoc v =
+    Located { start = ( 0, 0 ), end = ( 0, 0 ) } v
