@@ -14,13 +14,21 @@ type Exception
     = Exception String
 
 
+type alias Continuation =
+    Located Value -> Env -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+
+
 type Thunk
-    = Thunk (Located Value -> Env -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ))
+    = Thunk Continuation
+
+
+type alias Step =
+    ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 
 
 type Arity a
-    = Fixed (a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
-    | Variadic ({ args : a, rest : List Value } -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+    = Fixed (a -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+    | Variadic ({ args : a, rest : List Value } -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk ))
 
 
 type IO
@@ -81,7 +89,7 @@ type Value
     | Float Float
     | String String
     | Ref String (Located Value)
-    | Fn (Maybe String) ({ self : Value, k : Thunk } -> Thunk)
+    | Fn (Maybe String) ({ self : Value, k : Continuation } -> Thunk)
     | List (List (Located Value))
     | Vector (List (Located Value))
     | Nil

@@ -7,19 +7,21 @@ import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 
 
-pure : (a -> Result Exception IO) -> (a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+pure : (a -> Result Exception IO) -> (a -> Env -> Continuation -> Runtime.Step)
 pure fn =
-    \v env k -> ( fn v |> Result.map (\io -> ( io, env )), Just k )
+    \v env k -> ( fn v |> Result.map (\io -> ( io, env )), Just (Thunk k) )
 
 
-apply : Located Value -> Located Value -> Env -> Thunk -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+apply : Located Value -> Located Value -> Env -> Continuation -> Step
 apply ((Located fnLoc fnExpr) as fn) arg env k =
     case fnExpr of
         Fn _ callable ->
             ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
 
         _ ->
-            ( Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable."))), Just k )
+            ( Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable.")))
+            , Just (Thunk k)
+            )
 
 
 sleep : Callable
@@ -150,7 +152,12 @@ isGreaterThanOrEqual =
     compOp { intOp = (>=), floatOp = (>=), stringOp = (>=) }
 
 
-compOp : { intOp : Int -> Int -> Bool, floatOp : Float -> Float -> Bool, stringOp : String -> String -> Bool } -> Callable
+compOp :
+    { intOp : Int -> Int -> Bool
+    , floatOp : Float -> Float -> Bool
+    , stringOp : String -> String -> Bool
+    }
+    -> Callable
 compOp { intOp, floatOp, stringOp } =
     let
         arity1 _ =
@@ -295,7 +302,7 @@ seq =
     }
 
 
-fixedCall : Maybe (Arity a) -> a -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk )
+fixedCall : Maybe (Arity a) -> a -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk )
 fixedCall mArity =
     mArity
         |> Maybe.andThen
@@ -307,48 +314,56 @@ fixedCall mArity =
                     Variadic _ ->
                         Nothing
             )
-        |> Maybe.withDefault (\_ _ k -> ( Err (Exception "Interpreter error: undefined internal call arity"), Just k ))
+        |> Maybe.withDefault
+            (\_ _ k ->
+                ( Err (Exception "Interpreter error: undefined internal call arity")
+                , Just (Thunk k)
+                )
+            )
 
 
 map : Callable
 map =
     let
-        arity2 ( f, coll ) env1 (Thunk k) =
+        arity2 ( f, coll ) env1 k =
             fixedCall
                 seq.arity1
                 coll
                 env1
-                (Thunk
-                    (\(Located collLoc collSeq) env2 ->
-                        case collSeq of
-                            List originalColl ->
-                                ( Ok ( Located collLoc (Const (List [])), env2 )
-                                , originalColl
-                                    |> List.foldl
-                                        (\e a ->
-                                            \(Located locI vI) envI ->
-                                                case vI of
-                                                    List mappedColl ->
-                                                        apply (Located locI f)
-                                                            (Located.replace e (List [ e ]))
-                                                            envI
-                                                            (Thunk
-                                                                (\fRet fRetEnv ->
-                                                                    a (Located locI (List (fRet :: mappedColl))) fRetEnv
-                                                                )
-                                                            )
+                (\(Located collLoc collSeq) env2 ->
+                    case collSeq of
+                        List originalColl ->
+                            ( Ok ( Located collLoc (Const (List [])), env2 )
+                            , List.foldl
+                                (\e a ->
+                                    \(Located locI vI) envI ->
+                                        case vI of
+                                            List mappedColl ->
+                                                apply (Located locI f)
+                                                    (Located.replace e (List [ e ]))
+                                                    envI
+                                                    (\fRet fRetEnv ->
+                                                        a (Located locI (List (fRet :: mappedColl))) fRetEnv
+                                                    )
 
-                                                    _ ->
-                                                        ( Err (Located locI (Exception "Interpreter error: list evaluation yielded a non-list.")), Just (Thunk a) )
-                                        )
-                                        k
-                                    |> Thunk
-                                    |> Just
+                                            _ ->
+                                                ( "Interpreter error: list evaluation yielded a non-list."
+                                                    |> Exception
+                                                    |> Located locI
+                                                    |> Err
+                                                , Just (Thunk a)
+                                                )
                                 )
+                                k
+                                originalColl
+                                |> Thunk
+                                |> Just
+                            )
 
-                            _ ->
-                                ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list.")), Just (Thunk k) )
-                    )
+                        _ ->
+                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list."))
+                            , Just (Thunk k)
+                            )
                 )
     in
     { emptyCallable
@@ -359,46 +374,49 @@ map =
 filter : Callable
 filter =
     let
-        arity2 ( f, coll ) env1 (Thunk k) =
+        arity2 ( f, coll ) env1 k =
             fixedCall
                 seq.arity1
                 coll
                 env1
-                (Thunk
-                    (\(Located collLoc collSeq) env2 ->
-                        case collSeq of
-                            List originalColl ->
-                                ( Ok ( Located collLoc (Const (List [])), env2 )
-                                , originalColl
-                                    |> List.foldl
-                                        (\e a ->
-                                            \(Located locI vI) envI ->
-                                                case vI of
-                                                    List mappedColl ->
-                                                        apply (Located locI f)
-                                                            (Located.replace e (List [ e ]))
-                                                            envI
-                                                            (Thunk
-                                                                (\fRet fRetEnv ->
-                                                                    if Runtime.isTruthy (Located.getValue fRet) then
-                                                                        a (Located locI (List (e :: mappedColl))) fRetEnv
+                (\(Located collLoc collSeq) env2 ->
+                    case collSeq of
+                        List originalColl ->
+                            ( Ok ( Located collLoc (Const (List [])), env2 )
+                            , originalColl
+                                |> List.foldl
+                                    (\e a ->
+                                        \(Located locI vI) envI ->
+                                            case vI of
+                                                List mappedColl ->
+                                                    apply (Located locI f)
+                                                        (Located.replace e (List [ e ]))
+                                                        envI
+                                                        (\fRet fRetEnv ->
+                                                            if Runtime.isTruthy (Located.getValue fRet) then
+                                                                a (Located locI (List (e :: mappedColl))) fRetEnv
 
-                                                                    else
-                                                                        a (Located locI (List mappedColl)) fRetEnv
-                                                                )
-                                                            )
+                                                            else
+                                                                a (Located locI (List mappedColl)) fRetEnv
+                                                        )
 
-                                                    _ ->
-                                                        ( Err (Located locI (Exception "Interpreter error: list evaluation yielded a non-list.")), Just (Thunk a) )
-                                        )
-                                        k
-                                    |> Thunk
-                                    |> Just
-                                )
+                                                _ ->
+                                                    ( "Interpreter error: list evaluation yielded a non-list."
+                                                        |> Exception
+                                                        |> Located locI
+                                                        |> Err
+                                                    , Just (Thunk a)
+                                                    )
+                                    )
+                                    k
+                                |> Thunk
+                                |> Just
+                            )
 
-                            _ ->
-                                ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list.")), Just (Thunk k) )
-                    )
+                        _ ->
+                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list."))
+                            , Just (Thunk k)
+                            )
                 )
     in
     { emptyCallable

@@ -3,9 +3,24 @@ module Enclojure.Runtime exposing (..)
 import Dict
 import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (..)
+import Enclojure.Types
+    exposing
+        ( Arity(..)
+        , Callable
+        , Continuation
+        , Env
+        , Exception(..)
+        , IO
+        , Thunk(..)
+        , Value(..)
+        , fakeLoc
+        )
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
+
+
+type alias Step =
+    ( Result Exception ( IO, Env ), Maybe Thunk )
 
 
 emptyEnv : Env
@@ -39,7 +54,7 @@ emptyCallable =
     }
 
 
-extractVariadic : Maybe (Arity a) -> Maybe ({ args : a, rest : List Value } -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+extractVariadic : Maybe (Arity a) -> Maybe ({ args : a, rest : List Value } -> Env -> Continuation -> Step)
 extractVariadic arity =
     arity
         |> Maybe.andThen
@@ -53,7 +68,7 @@ extractVariadic arity =
             )
 
 
-dispatch : Callable -> List Value -> Env -> Thunk -> ( Result Exception ( IO, Env ), Maybe Thunk )
+dispatch : Callable -> List Value -> Env -> Continuation -> Step
 dispatch callable args env k =
     case args of
         [] ->
@@ -67,7 +82,7 @@ dispatch callable args env k =
                             Variadic fn ->
                                 fn { args = (), rest = [] } env k
                     )
-                |> Maybe.withDefault ( Err (Exception "Invalid arity 0"), Just k )
+                |> Maybe.withDefault ( Err (Exception "Invalid arity 0"), Just (Thunk k) )
 
         [ a0 ] ->
             extractVariadic callable.arity0
@@ -85,7 +100,7 @@ dispatch callable args env k =
                                             fn { args = a0, rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err (Exception "Invalid arity 1"), Just k )
+                |> Maybe.withDefault ( Err (Exception "Invalid arity 1"), Just (Thunk k) )
 
         [ a0, a1 ] ->
             extractVariadic callable.arity0
@@ -108,7 +123,7 @@ dispatch callable args env k =
                                             fn { args = ( a0, a1 ), rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err (Exception "Invalid arity 2"), Just k )
+                |> Maybe.withDefault ( Err (Exception "Invalid arity 2"), Just (Thunk k) )
 
         [ a0, a1, a2 ] ->
             extractVariadic callable.arity0
@@ -136,7 +151,7 @@ dispatch callable args env k =
                                             fn { args = ( a0, a1, a2 ), rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err (Exception "Invalid arity 3"), Just k )
+                |> Maybe.withDefault ( Err (Exception "Invalid arity 3"), Just (Thunk k) )
 
         a0 :: a1 :: a2 :: rest ->
             extractVariadic callable.arity0
@@ -156,10 +171,13 @@ dispatch callable args env k =
                         extractVariadic callable.arity3
                             |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest } env k)
                     )
-                |> Maybe.withDefault ( Err (Exception ("Invalid arity " ++ String.fromInt (List.length args))), Nothing )
+                |> Maybe.withDefault
+                    ( Err (Exception ("Invalid arity " ++ String.fromInt (List.length args)))
+                    , Nothing
+                    )
 
 
-toContinuation : Callable -> { self : Value, k : Thunk } -> Thunk
+toContinuation : Callable -> { self : Value, k : Continuation } -> Thunk
 toContinuation callable { k } =
     Thunk
         (\(Located pos arg) env ->
