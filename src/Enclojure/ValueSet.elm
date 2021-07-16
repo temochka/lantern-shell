@@ -1,4 +1,4 @@
-module Enclojure.ValueSet exposing (empty, fromList, insert, remove, toList)
+module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, remove, toList)
 
 import Enclojure.Types exposing (Value(..), ValueSet)
 import Set
@@ -21,6 +21,26 @@ empty =
     , keywords = Set.empty
     , sets = []
     }
+
+
+isEmpty : ValueSet -> Bool
+isEmpty m =
+    Set.isEmpty m.ints
+        && Set.isEmpty m.floats
+        && Set.isEmpty m.strings
+        && List.isEmpty m.refs
+        && m.nil
+        == Nothing
+        && m.bools
+        == { true = Nothing, false = Nothing }
+        && Set.isEmpty m.symbols
+        && List.isEmpty m.fns
+        && List.isEmpty m.maps
+        && List.isEmpty m.mapEntries
+        && List.isEmpty m.lists
+        && List.isEmpty m.sets
+        && List.isEmpty m.vectors
+        && Set.isEmpty m.keywords
 
 
 insert : Value -> ValueSet -> ValueSet

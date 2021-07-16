@@ -65,12 +65,24 @@ macroexpand i (Located loc value) =
                     expandAnd i (Located loc args)
                         |> Result.map Expanded
 
+                (Located _ (Symbol "defn")) :: args ->
+                    expandDefn i (Located loc args)
+                        |> Result.map Expanded
+
+                (Located _ (Symbol "if-let")) :: args ->
+                    expandIfLet i (Located loc args)
+                        |> Result.map Expanded
+
                 (Located _ (Symbol "or")) :: args ->
                     expandOr i (Located loc args)
                         |> Result.map Expanded
 
                 (Located _ (Symbol "when")) :: args ->
                     expandWhen i (Located loc args)
+                        |> Result.map Expanded
+
+                (Located _ (Symbol "when-let")) :: args ->
+                    expandWhenLet i (Located loc args)
                         |> Result.map Expanded
 
                 (Located _ (Symbol "when-not")) :: args ->
@@ -90,6 +102,79 @@ macroexpand i (Located loc value) =
 
         _ ->
             Ok (Returned ( i, Located loc value ))
+
+
+expandDefn : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandDefn i (Located loc args) =
+    case args of
+        (Located _ (Symbol name)) :: fnBody ->
+            Ok
+                ( i
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "def")
+                        , Located loc (Symbol name)
+                        , Located loc
+                            (List
+                                (Located loc (Symbol "fn")
+                                    :: Located loc (Symbol name)
+                                    :: fnBody
+                                )
+                            )
+                        ]
+                    )
+                )
+
+        _ ->
+            Err (Exception "Argument error: invalid arguments to defn")
+
+
+expandIfLet : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandIfLet i (Located loc args) =
+    case args of
+        (Located _ (Vector bindings)) :: branches ->
+            case bindings of
+                n :: v :: [] ->
+                    Ok
+                        ( i
+                        , Located loc
+                            (List
+                                [ Located loc (Symbol "let")
+                                , Located loc (Vector [ n, v ])
+                                , Located loc (List (Located loc (Symbol "if") :: n :: branches))
+                                ]
+                            )
+                        )
+
+                _ ->
+                    Err (Exception "Argument error: more than 2 elements in bindings array to if-let")
+
+        _ ->
+            Err (Exception "Argument error: invalid arguments to if-let")
+
+
+expandWhenLet : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandWhenLet i (Located loc args) =
+    case args of
+        (Located _ (Vector bindings)) :: do ->
+            case bindings of
+                n :: v :: [] ->
+                    Ok
+                        ( i
+                        , Located loc
+                            (List
+                                [ Located loc (Symbol "let")
+                                , Located loc (Vector [ n, v ])
+                                , Located loc (List (Located loc (Symbol "when") :: n :: do))
+                                ]
+                            )
+                        )
+
+                _ ->
+                    Err (Exception "Argument error: more than 2 elements in bindings array to if-let")
+
+        _ ->
+            Err (Exception "Argument error: invalid arguments to if-let")
 
 
 expandAnd : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )

@@ -50,8 +50,14 @@ resolveSymbol env symbol =
                 "<=" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThanOrEqual))
 
+                "cons" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.cons))
+
                 "filter" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.filter))
+
+                "first" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.first))
 
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
@@ -61,6 +67,9 @@ resolveSymbol env symbol =
 
                 "not" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
+
+                "rest" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rest_))
 
                 "seq" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.seq))

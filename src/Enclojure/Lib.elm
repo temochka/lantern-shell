@@ -1,4 +1,26 @@
-module Enclojure.Lib exposing (apply, div, filter, isEqual, isGreaterThan, isGreaterThanOrEqual, isLessThan, isLessThanOrEqual, isNotEqual, list, map, minus, mul, not_, plus, seq, sleep, str)
+module Enclojure.Lib exposing
+    ( apply
+    , cons
+    , div
+    , filter
+    , first
+    , isEqual
+    , isGreaterThan
+    , isGreaterThanOrEqual
+    , isLessThan
+    , isLessThanOrEqual
+    , isNotEqual
+    , list
+    , map
+    , minus
+    , mul
+    , not_
+    , plus
+    , rest_
+    , seq
+    , sleep
+    , str
+    )
 
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect)
@@ -282,17 +304,34 @@ seq =
     let
         arity1 coll =
             case coll of
+                List [] ->
+                    Ok Nil
+
                 List l ->
                     Ok (List l)
+
+                Vector [] ->
+                    Ok Nil
 
                 Vector l ->
                     Ok (List l)
 
                 Set s ->
-                    Ok (List (ValueSet.toList s |> List.map Located.fakeLoc))
+                    if ValueSet.isEmpty s then
+                        Ok Nil
+
+                    else
+                        Ok (List (ValueSet.toList s |> List.map Located.fakeLoc))
 
                 Map m ->
-                    Ok (List (ValueMap.toList m |> List.map (MapEntry >> Located.fakeLoc)))
+                    if ValueMap.isEmpty m then
+                        Ok Nil
+
+                    else
+                        Ok (List (ValueMap.toList m |> List.map (MapEntry >> Located.fakeLoc)))
+
+                Nil ->
+                    Ok (List [])
 
                 _ ->
                     Err (Exception (inspect coll ++ " is not sequable"))
@@ -360,6 +399,11 @@ map =
                                 |> Just
                             )
 
+                        Nil ->
+                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
+                            , Just (Thunk k)
+                            )
+
                         _ ->
                             ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list."))
                             , Just (Thunk k)
@@ -413,6 +457,11 @@ filter =
                                 |> Just
                             )
 
+                        Nil ->
+                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
+                            , Just (Thunk k)
+                            )
+
                         _ ->
                             ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list."))
                             , Just (Thunk k)
@@ -421,4 +470,97 @@ filter =
     in
     { emptyCallable
         | arity2 = Just (Fixed arity2)
+    }
+
+
+cons : Callable
+cons =
+    let
+        arity2 ( x, coll ) env1 k =
+            fixedCall
+                seq.arity1
+                coll
+                env1
+                (\(Located collLoc collSeq) env2 ->
+                    case collSeq of
+                        List l ->
+                            ( Ok ( Located collLoc (Const (List (Located.fakeLoc x :: l))), env2 ), Just (Thunk k) )
+
+                        Nil ->
+                            ( Ok ( Located.fakeLoc (Const (List [ Located.fakeLoc x ])), env2 )
+                            , Just (Thunk k)
+                            )
+
+                        _ ->
+                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"))
+                            , Just (Thunk k)
+                            )
+                )
+    in
+    { emptyCallable
+        | arity2 = Just (Fixed arity2)
+    }
+
+
+first : Callable
+first =
+    let
+        arity1 coll env1 k =
+            fixedCall
+                seq.arity1
+                coll
+                env1
+                (\(Located collLoc collSeq) env2 ->
+                    case collSeq of
+                        List (x :: _) ->
+                            ( Ok ( Located.map Const x, env2 ), Just (Thunk k) )
+
+                        List _ ->
+                            ( Ok ( Located collLoc (Const Nil), env2 ), Just (Thunk k) )
+
+                        Nil ->
+                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
+                            , Just (Thunk k)
+                            )
+
+                        _ ->
+                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"))
+                            , Just (Thunk k)
+                            )
+                )
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed arity1)
+    }
+
+
+rest_ : Callable
+rest_ =
+    let
+        arity1 coll env1 k =
+            fixedCall
+                seq.arity1
+                coll
+                env1
+                (\(Located collLoc collSeq) env2 ->
+                    case collSeq of
+                        List (_ :: rst) ->
+                            ( Ok ( Located collLoc (Const (List rst)), env2 ), Just (Thunk k) )
+
+                        List _ ->
+                            ( Ok ( Located collLoc (Const Nil), env2 ), Just (Thunk k) )
+
+                        Nil ->
+                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
+                            , Just (Thunk k)
+                            )
+
+                        _ ->
+                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"))
+                            , Just (Thunk k)
+                            )
+                )
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed arity1)
     }

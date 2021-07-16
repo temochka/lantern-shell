@@ -1,4 +1,4 @@
-module Enclojure.ValueMap exposing (empty, fromList, get, insert, remove, toList)
+module Enclojure.ValueMap exposing (empty, fromList, get, insert, isEmpty, remove, toList)
 
 import Dict
 import Enclojure.Located exposing (Located(..))
@@ -22,6 +22,26 @@ empty =
     , vectors = []
     , keywords = Dict.empty
     }
+
+
+isEmpty : ValueMap -> Bool
+isEmpty m =
+    Dict.isEmpty m.ints
+        && Dict.isEmpty m.floats
+        && Dict.isEmpty m.strings
+        && List.isEmpty m.refs
+        && m.nil
+        == Nothing
+        && m.bools
+        == { true = Nothing, false = Nothing }
+        && Dict.isEmpty m.symbols
+        && List.isEmpty m.fns
+        && List.isEmpty m.maps
+        && List.isEmpty m.mapEntries
+        && List.isEmpty m.lists
+        && List.isEmpty m.sets
+        && List.isEmpty m.vectors
+        && Dict.isEmpty m.keywords
 
 
 insert : Value -> Located Value -> ValueMap -> ValueMap
