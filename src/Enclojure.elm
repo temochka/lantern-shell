@@ -56,14 +56,17 @@ resolveSymbol env symbol =
                 "first" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.first))
 
+                "integer?" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
+
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
 
-                "mod" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mod))
-
                 "not" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
+
+                "number?" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isNumber))
 
                 "rem" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rem))
