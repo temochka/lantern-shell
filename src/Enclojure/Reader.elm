@@ -32,6 +32,7 @@ number =
         , octal = Nothing
         , binary = Nothing
         }
+        |> Parser.backtrackable
 
 
 isAllowedSymbolSpecialChar : Char -> Bool
@@ -235,7 +236,7 @@ parser =
     Parser.loop [] expressionsHelper
         |> Parser.andThen
             (\l ->
-                List.foldl (\e a -> a |> Result.andThen (\lr -> Macros.macroexpandAll e |> Result.map (\v -> v :: lr)))
+                List.foldr (\e a -> a |> Result.andThen (\lr -> Macros.macroexpandAll e |> Result.map (\v -> v :: lr)))
                     (Ok [])
                     l
                     |> (\r ->

@@ -2,7 +2,6 @@ module Enclojure.Lib exposing
     ( apply
     , cons
     , div
-    , filter
     , first
     , isEqual
     , isGreaterThan
@@ -11,11 +10,11 @@ module Enclojure.Lib exposing
     , isLessThanOrEqual
     , isNotEqual
     , list
-    , map
     , minus
     , mul
     , not_
     , plus
+    , prelude
     , rest_
     , seq
     , sleep
@@ -361,118 +360,6 @@ fixedCall mArity =
             )
 
 
-map : Callable
-map =
-    let
-        arity2 ( f, coll ) env1 k =
-            fixedCall
-                seq.arity1
-                coll
-                env1
-                (\(Located collLoc collSeq) env2 ->
-                    case collSeq of
-                        List originalColl ->
-                            ( Ok ( Located collLoc (Const (List [])), env2 )
-                            , List.foldl
-                                (\e a ->
-                                    \(Located locI vI) envI ->
-                                        case vI of
-                                            List mappedColl ->
-                                                apply (Located locI f)
-                                                    (Located.replace e (List [ e ]))
-                                                    envI
-                                                    (\fRet fRetEnv ->
-                                                        a (Located locI (List (fRet :: mappedColl))) fRetEnv
-                                                    )
-
-                                            _ ->
-                                                ( "Interpreter error: list evaluation yielded a non-list."
-                                                    |> Exception
-                                                    |> Located locI
-                                                    |> Err
-                                                , Just (Thunk a)
-                                                )
-                                )
-                                k
-                                originalColl
-                                |> Thunk
-                                |> Just
-                            )
-
-                        Nil ->
-                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
-                            , Just (Thunk k)
-                            )
-
-                        _ ->
-                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list."))
-                            , Just (Thunk k)
-                            )
-                )
-    in
-    { emptyCallable
-        | arity2 = Just (Fixed arity2)
-    }
-
-
-filter : Callable
-filter =
-    let
-        arity2 ( f, coll ) env1 k =
-            fixedCall
-                seq.arity1
-                coll
-                env1
-                (\(Located collLoc collSeq) env2 ->
-                    case collSeq of
-                        List originalColl ->
-                            ( Ok ( Located collLoc (Const (List [])), env2 )
-                            , originalColl
-                                |> List.foldl
-                                    (\e a ->
-                                        \(Located locI vI) envI ->
-                                            case vI of
-                                                List mappedColl ->
-                                                    apply (Located locI f)
-                                                        (Located.replace e (List [ e ]))
-                                                        envI
-                                                        (\fRet fRetEnv ->
-                                                            if Runtime.isTruthy (Located.getValue fRet) then
-                                                                a (Located locI (List (e :: mappedColl))) fRetEnv
-
-                                                            else
-                                                                a (Located locI (List mappedColl)) fRetEnv
-                                                        )
-
-                                                _ ->
-                                                    ( "Interpreter error: list evaluation yielded a non-list."
-                                                        |> Exception
-                                                        |> Located locI
-                                                        |> Err
-                                                    , Just (Thunk a)
-                                                    )
-                                    )
-                                    k
-                                |> Thunk
-                                |> Just
-                            )
-
-                        Nil ->
-                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
-                            , Just (Thunk k)
-                            )
-
-                        _ ->
-                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list."))
-                            , Just (Thunk k)
-                            )
-                )
-    in
-    { emptyCallable
-        | arity2 = Just (Fixed arity2)
-    }
-
-
 cons : Callable
 cons =
     let
@@ -564,3 +451,21 @@ rest_ =
     { emptyCallable
         | arity1 = Just (Fixed arity1)
     }
+
+
+prelude : String
+prelude =
+    """
+(defn map [f coll]
+  (if (seq coll)
+    (cons (f (first coll)) (map f (rest coll)))
+    (list)))
+
+(defn filter [pred coll]
+  (if (seq coll)
+    (let [el (first coll)]
+      (if (pred el)
+        (cons el (filter pred (rest coll)))
+        (filter pred (rest coll))))
+    (list)))
+"""

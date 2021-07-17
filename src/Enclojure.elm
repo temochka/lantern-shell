@@ -53,17 +53,11 @@ resolveSymbol env symbol =
                 "cons" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.cons))
 
-                "filter" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.filter))
-
                 "first" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.first))
 
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
-
-                "map" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.map))
 
                 "not" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
@@ -678,10 +672,18 @@ wrapInDo (Located loc vs) =
     Located loc (List (Located loc (Symbol "do") :: vs))
 
 
+prelude : Result (List Parser.DeadEnd) (List (Located Value))
+prelude =
+    Parser.parse Lib.prelude
+
+
 eval : String -> Step
 eval code =
     Parser.parse code
         |> Result.mapError (Debug.toString >> Exception)
+        |> Result.map2
+            (\a b -> a ++ b)
+            (prelude |> Result.mapError (always (Exception "Interpreter error: failed to load the prelude")))
         |> Result.andThen
             (\exprs ->
                 exprs
