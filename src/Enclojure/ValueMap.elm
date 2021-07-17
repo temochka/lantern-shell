@@ -47,10 +47,10 @@ isEmpty m =
 insert : Value -> Located Value -> ValueMap -> ValueMap
 insert k v map =
     case k of
-        Int int ->
+        Number (Int int) ->
             { map | ints = Dict.insert int v map.ints }
 
-        Float float ->
+        Number (Float float) ->
             { map | floats = Dict.insert float v map.floats }
 
         String string ->
@@ -104,10 +104,10 @@ insert k v map =
 remove : Value -> ValueMap -> ValueMap
 remove k map =
     case k of
-        Int int ->
+        Number (Int int) ->
             { map | ints = Dict.remove int map.ints }
 
-        Float float ->
+        Number (Float float) ->
             { map | floats = Dict.remove float map.floats }
 
         String string ->
@@ -203,10 +203,10 @@ linearFind f l =
 get : Value -> ValueMap -> Maybe (Located Value)
 get k map =
     case k of
-        Int int ->
+        Number (Int int) ->
             Dict.get int map.ints
 
-        Float float ->
+        Number (Float float) ->
             Dict.get float map.floats
 
         String string ->
@@ -261,10 +261,10 @@ toList : ValueMap -> List ( Value, Located Value )
 toList map =
     let
         ints =
-            Dict.toList map.ints |> List.map (Tuple.mapFirst Int)
+            Dict.toList map.ints |> List.map (Tuple.mapFirst (Int >> Number))
 
         floats =
-            Dict.toList map.floats |> List.map (Tuple.mapFirst Float)
+            Dict.toList map.floats |> List.map (Tuple.mapFirst (Float >> Number))
 
         strings =
             Dict.toList map.strings |> List.map (Tuple.mapFirst String)
@@ -284,7 +284,21 @@ toList map =
         symbols =
             Dict.toList map.symbols |> List.map (Tuple.mapFirst Symbol)
     in
-    ints ++ floats ++ strings ++ nils ++ trues ++ falses ++ keywords ++ symbols ++ map.refs ++ map.fns ++ map.maps ++ map.mapEntries ++ map.lists ++ map.sets ++ map.vectors
+    ints
+        ++ floats
+        ++ strings
+        ++ nils
+        ++ trues
+        ++ falses
+        ++ keywords
+        ++ symbols
+        ++ map.refs
+        ++ map.fns
+        ++ map.maps
+        ++ map.mapEntries
+        ++ map.lists
+        ++ map.sets
+        ++ map.vectors
 
 
 fromList : List ValueMapEntry -> ValueMap

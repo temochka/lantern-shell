@@ -26,8 +26,8 @@ parse code =
 number : Parser Value
 number =
     Parser.number
-        { int = Just Int
-        , float = Just Float
+        { int = Just (Int >> Number)
+        , float = Just (Float >> Number)
         , hex = Nothing
         , octal = Nothing
         , binary = Nothing

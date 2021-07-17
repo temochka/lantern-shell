@@ -50,8 +50,11 @@ sleep =
     let
         arity1 val =
             case val of
-                Int i ->
+                Number (Int i) ->
                     Ok (Sleep (toFloat i))
+
+                Number (Float i) ->
+                    Ok (Sleep i)
 
                 _ ->
                     Err (Exception "type error: sleep expects one integer argument")
@@ -81,76 +84,155 @@ list =
     { emptyCallable | arity0 = Just (Variadic (pure arity0)) }
 
 
+toNumbers : List Value -> Result Exception (List Number)
+toNumbers =
+    List.foldl
+        (\e a -> a |> Result.andThen (\l -> toNumber e |> Result.map (\n -> n :: l)))
+        (Ok [])
+        >> Result.map List.reverse
+
+
+flip : (a -> b -> c) -> (b -> a -> c)
+flip f =
+    \a b -> f b a
+
+
+varargOp : { arity0 : Maybe Number, arity1 : Maybe (Number -> Number), arity2 : Number -> Number -> Number } -> Callable
+varargOp { arity0, arity1, arity2 } =
+    let
+        wrappedArity2 { args, rest } =
+            let
+                ( argA, argB ) =
+                    args
+            in
+            Result.map3
+                (\a b ->
+                    List.foldr (flip arity2) (arity2 a b) >> Number
+                )
+                (toNumber argA)
+                (toNumber argB)
+                (toNumbers rest)
+    in
+    { emptyCallable
+        | arity0 = arity0 |> Maybe.map (Number >> Const >> Ok >> always >> pure >> Fixed)
+        , arity1 =
+            arity1
+                |> Maybe.map
+                    (\fn ->
+                        Fixed <| pure <| (toNumber >> Result.map (fn >> Number >> Const))
+                    )
+        , arity2 = (wrappedArity2 >> Result.map Const) |> pure |> Variadic |> Just
+    }
+
+
 plus : Callable
 plus =
-    numOp { identity = 0, intOp = (+), floatOp = (+) }
+    varargOp
+        { arity0 = Just (Int 0)
+        , arity1 = Just identity
+        , arity2 =
+            \numA numB ->
+                case ( numA, numB ) of
+                    ( Int a, Int b ) ->
+                        Int (a + b)
+
+                    ( Int a, Float b ) ->
+                        Float (toFloat a + b)
+
+                    ( Float a, Int b ) ->
+                        Float (a + toFloat b)
+
+                    ( Float a, Float b ) ->
+                        Float (a + b)
+        }
+
+
+negateNumber : Number -> Number
+negateNumber numX =
+    case numX of
+        Int x ->
+            Int (negate x)
+
+        Float x ->
+            Float (negate x)
 
 
 minus : Callable
 minus =
-    numOp { identity = 0, intOp = (-), floatOp = (-) }
+    varargOp
+        { arity0 = Nothing
+        , arity1 = Just negateNumber
+        , arity2 =
+            \numA numB ->
+                case ( numA, numB ) of
+                    ( Int a, Int b ) ->
+                        Int (a - b)
+
+                    ( Int a, Float b ) ->
+                        Float (toFloat a - b)
+
+                    ( Float a, Int b ) ->
+                        Float (a - toFloat b)
+
+                    ( Float a, Float b ) ->
+                        Float (a - b)
+        }
 
 
 mul : Callable
 mul =
-    numOp { identity = 1, intOp = (*), floatOp = (*) }
+    varargOp
+        { arity0 = Just (Int 1)
+        , arity1 = Just identity
+        , arity2 =
+            \numA numB ->
+                case ( numA, numB ) of
+                    ( Int a, Int b ) ->
+                        Int (a * b)
+
+                    ( Int a, Float b ) ->
+                        Float (toFloat a * b)
+
+                    ( Float a, Int b ) ->
+                        Float (a * toFloat b)
+
+                    ( Float a, Float b ) ->
+                        Float (a * b)
+        }
 
 
 div : Callable
 div =
-    numOp { identity = 1, intOp = (//), floatOp = (/) }
-
-
-numOp : { identity : Int, intOp : Int -> Int -> Int, floatOp : Float -> Float -> Float } -> Callable
-numOp { identity, intOp, floatOp } =
     let
-        arity0 _ =
-            Ok (Int identity)
+        op numA numB =
+            case ( numA, numB ) of
+                ( Int a, Int b ) ->
+                    Int (a // b)
 
-        arity1 val =
-            arity2 { args = ( Int identity, val ), rest = [] }
+                ( Int a, Float b ) ->
+                    Float (toFloat a / b)
 
-        arity2 { args, rest } =
-            let
-                result =
-                    case args of
-                        ( Float a, Float b ) ->
-                            Ok (Float (floatOp a b))
+                ( Float a, Int b ) ->
+                    Float (a / toFloat b)
 
-                        ( Int a, Int b ) ->
-                            Ok (Int (intOp a b))
-
-                        ( Float a, Int b ) ->
-                            Ok (Float (floatOp a (toFloat b)))
-
-                        ( Int a, Float b ) ->
-                            Ok (Float (floatOp (toFloat a) b))
-
-                        ( Int _, b ) ->
-                            Err (Exception (inspect b ++ " is not a number"))
-
-                        ( Float _, b ) ->
-                            Err (Exception (inspect b ++ " is not a number"))
-
-                        ( a, _ ) ->
-                            Err (Exception (inspect a ++ " is not a number"))
-            in
-            case rest of
-                [] ->
-                    result
-
-                nextVal1 :: nextRest ->
-                    result
-                        |> Result.andThen
-                            (\x ->
-                                arity2 { args = ( x, nextVal1 ), rest = nextRest }
-                            )
+                ( Float a, Float b ) ->
+                    Float (a / b)
     in
-    { emptyCallable
-        | arity0 = Just (Fixed (pure (arity0 >> Result.map Const)))
-        , arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (pure (arity2 >> Result.map Const)))
-    }
+    varargOp
+        { arity0 = Nothing
+        , arity1 = Just (op (Int 1))
+        , arity2 = op
+        }
+
+
+toNumber : Value -> Result Exception Number
+toNumber val =
+    case val of
+        Number n ->
+            Ok n
+
+        _ ->
+            Err <| Exception (inspect val ++ " is not a number")
 
 
 isLessThan : Callable
@@ -188,16 +270,16 @@ compOp { intOp, floatOp, stringOp } =
             let
                 result =
                     case args of
-                        ( Float a, Float b ) ->
+                        ( Number (Float a), Number (Float b) ) ->
                             Ok (floatOp a b)
 
-                        ( Float a, Int b ) ->
+                        ( Number (Float a), Number (Int b) ) ->
                             Ok (floatOp a (toFloat b))
 
-                        ( Int a, Float b ) ->
+                        ( Number (Int a), Number (Float b) ) ->
                             Ok (floatOp (toFloat a) b)
 
-                        ( Int a, Int b ) ->
+                        ( Number (Int a), Number (Int b) ) ->
                             Ok (intOp a b)
 
                         ( String a, String b ) ->

@@ -1,6 +1,6 @@
 module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, remove, toList)
 
-import Enclojure.Types exposing (Value(..), ValueSet)
+import Enclojure.Types exposing (Number(..), Value(..), ValueSet)
 import Set
 
 
@@ -46,10 +46,10 @@ isEmpty m =
 insert : Value -> ValueSet -> ValueSet
 insert v set =
     case v of
-        Int int ->
+        Number (Int int) ->
             { set | ints = Set.insert int set.ints }
 
-        Float float ->
+        Number (Float float) ->
             { set | floats = Set.insert float set.floats }
 
         String string ->
@@ -103,10 +103,10 @@ insert v set =
 remove : Value -> ValueSet -> ValueSet
 remove v set =
     case v of
-        Int int ->
+        Number (Int int) ->
             { set | ints = Set.remove int set.ints }
 
-        Float float ->
+        Number (Float float) ->
             { set | floats = Set.remove float set.floats }
 
         String string ->
@@ -195,10 +195,10 @@ toList : ValueSet -> List Value
 toList set =
     let
         ints =
-            Set.toList set.ints |> List.map Int
+            Set.toList set.ints |> List.map (Int >> Number)
 
         floats =
-            Set.toList set.floats |> List.map Float
+            Set.toList set.floats |> List.map (Float >> Number)
 
         strings =
             Set.toList set.strings |> List.map String
@@ -218,4 +218,18 @@ toList set =
         symbols =
             Set.toList set.symbols |> List.map Symbol
     in
-    ints ++ floats ++ strings ++ nils ++ trues ++ falses ++ keywords ++ symbols ++ set.refs ++ set.fns ++ set.maps ++ set.mapEntries ++ set.lists ++ set.sets ++ set.vectors
+    ints
+        ++ floats
+        ++ strings
+        ++ nils
+        ++ trues
+        ++ falses
+        ++ keywords
+        ++ symbols
+        ++ set.refs
+        ++ set.fns
+        ++ set.maps
+        ++ set.mapEntries
+        ++ set.lists
+        ++ set.sets
+        ++ set.vectors

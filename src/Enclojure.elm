@@ -5,7 +5,7 @@ import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Arity(..), Continuation, Env, Exception(..), IO(..), Step, Thunk(..), Value(..))
+import Enclojure.Types exposing (Arity(..), Continuation, Env, Exception(..), IO(..), Number(..), Step, Thunk(..), Value(..))
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (a)
@@ -121,11 +121,11 @@ evalExpression mutableExpr mutableEnv mutableK =
                 Keyword s ->
                     ( Ok ( Located loc (Const (Keyword s)), env ), Just (Thunk k) )
 
-                Float n ->
-                    ( Ok ( Located loc (Const (Float n)), env ), Just (Thunk k) )
+                Number (Float _) ->
+                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
 
-                Int n ->
-                    ( Ok ( Located loc (Const (Int n)), env ), Just (Thunk k) )
+                Number (Int _) ->
+                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
 
                 MapEntry _ ->
                     ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )

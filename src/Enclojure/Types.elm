@@ -84,9 +84,13 @@ type alias ValueSet =
     }
 
 
+type Number
+    = Float Float
+    | Int Int
+
+
 type Value
-    = Int Int
-    | Float Float
+    = Number Number
     | String String
     | Ref String (Located Value)
     | Fn (Maybe String) ({ self : Value, k : Continuation } -> Thunk)

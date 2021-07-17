@@ -11,6 +11,7 @@ import Enclojure.Types
         , Env
         , Exception(..)
         , IO
+        , Number(..)
         , Thunk(..)
         , Value(..)
         , fakeLoc
@@ -230,10 +231,10 @@ inspect value =
         String string ->
             "\"" ++ string ++ "\""
 
-        Int x ->
+        Number (Int x) ->
             String.fromInt x
 
-        Float x ->
+        Number (Float x) ->
             String.fromFloat x
 
         Fn name _ ->
