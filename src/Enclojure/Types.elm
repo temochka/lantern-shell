@@ -62,6 +62,7 @@ type alias ValueMap =
     , lists : List ( Value, Located Value )
     , refs : List ( Value, Located Value )
     , sets : List ( Value, Located Value )
+    , throwables : List ( Value, Located Value )
     , vectors : List ( Value, Located Value )
     }
 
@@ -80,6 +81,7 @@ type alias ValueSet =
     , lists : List Value
     , refs : List Value
     , sets : List Value
+    , throwables : List Value
     , vectors : List Value
     }
 
@@ -103,6 +105,7 @@ type Value
     | MapEntry ValueMapEntry
     | Set ValueSet
     | Symbol String
+    | Throwable Exception
 
 
 type alias Env =

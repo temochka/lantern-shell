@@ -20,6 +20,7 @@ empty =
     , vectors = []
     , keywords = Set.empty
     , sets = []
+    , throwables = []
     }
 
 
@@ -95,6 +96,9 @@ insert v set =
 
         Set _ ->
             { set | sets = v :: set.sets }
+
+        Throwable _ ->
+            { set | throwables = v :: set.throwables }
 
         Vector _ ->
             { set | vectors = v :: set.vectors }
@@ -177,6 +181,9 @@ remove v set =
             in
             { set | sets = newSets }
 
+        Throwable _ ->
+            set
+
         Vector _ ->
             let
                 newVectors =
@@ -232,4 +239,5 @@ toList set =
         ++ set.mapEntries
         ++ set.lists
         ++ set.sets
+        ++ set.throwables
         ++ set.vectors

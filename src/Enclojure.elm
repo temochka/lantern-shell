@@ -56,11 +56,17 @@ resolveSymbol env symbol =
                 "first" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.first))
 
+                "float?" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isFloat))
+
                 "integer?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
 
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
+
+                "Exception." ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.newException))
 
                 "not" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
@@ -82,6 +88,9 @@ resolveSymbol env symbol =
 
                 "str" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.str))
+
+                "throw" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.throw))
 
                 _ ->
                     Err (Exception ("Unknown symbol " ++ symbol))
@@ -179,6 +188,9 @@ evalExpression mutableExpr mutableEnv mutableK =
                         -- empty list ()
                         [] ->
                             ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+
+                Throwable _ ->
+                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
         )
 
 

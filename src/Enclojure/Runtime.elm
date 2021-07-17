@@ -275,6 +275,9 @@ inspect value =
         Symbol name ->
             name
 
+        Throwable (Exception str) ->
+            "Exception: " ++ str
+
 
 toString : Value -> String
 toString value =

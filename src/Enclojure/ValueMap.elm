@@ -19,6 +19,7 @@ empty =
     , mapEntries = []
     , lists = []
     , sets = []
+    , throwables = []
     , vectors = []
     , keywords = Dict.empty
     }
@@ -96,6 +97,9 @@ insert k v map =
 
         Set _ ->
             { map | sets = ( k, v ) :: map.sets }
+
+        Throwable _ ->
+            { map | throwables = ( k, v ) :: map.throwables }
 
         Vector _ ->
             { map | vectors = ( k, v ) :: map.vectors }
@@ -178,6 +182,9 @@ remove k map =
             in
             { map | sets = newSets }
 
+        Throwable _ ->
+            map
+
         Vector _ ->
             let
                 newVectors =
@@ -251,6 +258,9 @@ get k map =
         Set _ ->
             linearFind (Tuple.first >> (==) k) map.sets
                 |> Maybe.map Tuple.second
+
+        Throwable _ ->
+            Nothing
 
         Vector _ ->
             linearFind (Tuple.first >> (==) k) map.vectors

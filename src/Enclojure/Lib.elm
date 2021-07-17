@@ -4,6 +4,7 @@ module Enclojure.Lib exposing
     , div
     , first
     , isEqual
+    , isFloat
     , isGreaterThan
     , isGreaterThanOrEqual
     , isInteger
@@ -14,6 +15,7 @@ module Enclojure.Lib exposing
     , list
     , minus
     , mul
+    , newException
     , not_
     , plus
     , prelude
@@ -22,6 +24,7 @@ module Enclojure.Lib exposing
     , seq
     , sleep
     , str
+    , throw
     )
 
 import Enclojure.Located as Located exposing (Located(..))
@@ -575,6 +578,22 @@ isInteger =
     }
 
 
+isFloat : Callable
+isFloat =
+    let
+        arity1 v =
+            case v of
+                Number (Float _) ->
+                    Bool True
+
+                _ ->
+                    Bool False
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+    }
+
+
 rest_ : Callable
 rest_ =
     let
@@ -604,6 +623,38 @@ rest_ =
     in
     { emptyCallable
         | arity1 = Just (Fixed arity1)
+    }
+
+
+throw : Callable
+throw =
+    let
+        arity1 v =
+            case v of
+                Throwable e ->
+                    Err e
+
+                _ ->
+                    Err (Exception (inspect v ++ " is not throwable"))
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure arity1
+    }
+
+
+newException : Callable
+newException =
+    let
+        arity1 v =
+            case v of
+                String s ->
+                    Ok (Throwable (Exception s))
+
+                _ ->
+                    Err (Exception "exception message must be a string")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
     }
 
 
@@ -638,4 +689,14 @@ prelude =
     (if (or (zero? m) (= (pos? num) (pos? div)))
       m
       (+ m div))))
+
+(defn even?
+   [n] (if (integer? n)
+        (zero? (rem n 2))
+        (throw (Exception. (str "Argument must be an integer: " n)))))
+
+(defn odd?
+  [n] (not (even? n)))
+
+
 """

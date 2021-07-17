@@ -61,6 +61,8 @@ isAllowedSymbolSpecialChar c =
         == '%'
         || c
         == '?'
+        || c
+        == '.'
 
 
 symbolLike : Parser String
