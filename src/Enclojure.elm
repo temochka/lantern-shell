@@ -59,8 +59,14 @@ resolveSymbol env symbol =
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
 
+                "mod" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mod))
+
                 "not" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
+
+                "rem" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rem))
 
                 "rest" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rest_))

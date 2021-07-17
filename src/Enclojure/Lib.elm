@@ -11,10 +11,12 @@ module Enclojure.Lib exposing
     , isNotEqual
     , list
     , minus
+    , mod
     , mul
     , not_
     , plus
     , prelude
+    , rem
     , rest_
     , seq
     , sleep
@@ -131,20 +133,25 @@ plus =
         { arity0 = Just (Int 0)
         , arity1 = Just identity
         , arity2 =
-            \numA numB ->
-                case ( numA, numB ) of
-                    ( Int a, Int b ) ->
-                        Int (a + b)
-
-                    ( Int a, Float b ) ->
-                        Float (toFloat a + b)
-
-                    ( Float a, Int b ) ->
-                        Float (a + toFloat b)
-
-                    ( Float a, Float b ) ->
-                        Float (a + b)
+            addNumbers
         }
+
+
+addNumbers : Number -> Number -> Number
+addNumbers =
+    \numA numB ->
+        case ( numA, numB ) of
+            ( Int a, Int b ) ->
+                Int (a + b)
+
+            ( Int a, Float b ) ->
+                Float (toFloat a + b)
+
+            ( Float a, Int b ) ->
+                Float (a + toFloat b)
+
+            ( Float a, Float b ) ->
+                Float (a + b)
 
 
 negateNumber : Number -> Number
@@ -155,6 +162,26 @@ negateNumber numX =
 
         Float x ->
             Float (negate x)
+
+
+isPositiveNumber : Number -> Bool
+isPositiveNumber numX =
+    case numX of
+        Int x ->
+            x > 0
+
+        Float x ->
+            x > 0
+
+
+isZeroNumber : Number -> Bool
+isZeroNumber numX =
+    case numX of
+        Int x ->
+            x == 0
+
+        Float x ->
+            x == 0.0
 
 
 minus : Callable
@@ -223,6 +250,63 @@ div =
         , arity1 = Just (op (Int 1))
         , arity2 = op
         }
+
+
+remainderByFloat : Float -> Float -> Float
+remainderByFloat by x =
+    x - (toFloat (floor (x / by)) * by)
+
+
+remOp numA numB =
+    case ( numA, numB ) of
+        ( Int a, Int b ) ->
+            Int (remainderBy b a)
+
+        ( Int a, Float b ) ->
+            Float (remainderByFloat b (toFloat a))
+
+        ( Float a, Int b ) ->
+            Float (remainderByFloat (toFloat b) a)
+
+        ( Float a, Float b ) ->
+            Float (remainderByFloat b a)
+
+
+rem : Callable
+rem =
+    let
+        arity2 ( valA, valB ) =
+            Result.map2 remOp
+                (toNumber valA)
+                (toNumber valB)
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| pure <| (arity2 >> Result.map (Number >> Const))
+    }
+
+
+mod : Callable
+mod =
+    let
+        modOp num div_ =
+            let
+                m =
+                    remOp num div_
+            in
+            if isZeroNumber m || (isPositiveNumber num && isPositiveNumber div_) then
+                m
+
+            else
+                addNumbers m div_
+
+        arity2 ( valA, valB ) =
+            Result.map2 modOp
+                (toNumber valA)
+                (toNumber valB)
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| pure <| (arity2 >> Result.map (Number >> Const))
+    }
 
 
 toNumber : Value -> Result Exception Number
