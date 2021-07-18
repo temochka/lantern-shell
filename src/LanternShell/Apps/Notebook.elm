@@ -113,14 +113,14 @@ update msg model =
         Eval ->
             let
                 ( interpreter, cmd ) =
-                    trampoline (Enclojure.eval model.code) 1000
+                    trampoline (Enclojure.eval model.code) 10000
             in
             ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
 
         HandleIO ret ->
             let
                 ( interpreter, cmd ) =
-                    trampoline ret 1000
+                    trampoline ret 10000
             in
             ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
 

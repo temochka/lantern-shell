@@ -21,6 +21,7 @@ module Enclojure.Lib exposing
     , mul
     , newException
     , not_
+    , peek
     , plus
     , prelude
     , rem
@@ -552,6 +553,28 @@ first =
     }
 
 
+peek : Callable
+peek =
+    let
+        arity1 val =
+            case val of
+                List l ->
+                    Ok <| (List.head l |> Maybe.map Located.getValue |> Maybe.withDefault Nil)
+
+                Vector v ->
+                    Ok <| (Array.get (Array.length v - 1) v |> Maybe.map Located.getValue |> Maybe.withDefault Nil)
+
+                Nil ->
+                    Ok Nil
+
+                _ ->
+                    Err <| Exception ("Cannot use " ++ inspect val ++ " as a queue")
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
+    }
+
+
 isNumber : Callable
 isNumber =
     let
@@ -843,6 +866,23 @@ prelude =
 (defn complement [f]
   (fn [& args] (not (apply f args))))
 
+(defn identity [a] a)
+
+(defn comp [& fns]
+  (reduce
+    (fn [a e] (fn [& args] (a (apply e args))))
+    identity
+    fns))
+
+(defn last
+  [coll]
+  (if (next coll)
+    (last (rest coll))
+    (first coll)))
+
+(defn next [coll]
+  (seq (rest coll)))
+
 (defn map [f coll]
   (if (seq coll)
     (cons (f (first coll)) (map f (rest coll)))
@@ -895,8 +935,8 @@ prelude =
     (zero? (rem n 2))
     (throw (Exception. (str "Argument must be an integer: " n)))))
 
-(defn odd?
-  [n] (not (even? n)))
+(defn odd? [n]
+  (not (even? n)))
 
 (defn get-in
   ([m ks]

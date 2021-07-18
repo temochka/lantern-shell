@@ -87,6 +87,9 @@ resolveSymbol env symbol =
                 "number?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isNumber))
 
+                "peek" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.peek))
+
                 "rem" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rem))
 
