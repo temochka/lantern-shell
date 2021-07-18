@@ -72,7 +72,7 @@ type alias ValueSet =
     , floats : Set.Set Float
     , strings : Set.Set String
     , nil : Maybe Value
-    , bools : { true : Maybe Value, false : Maybe Value }
+    , bools : { true : Bool, false : Bool }
     , keywords : Set.Set String
     , symbols : Set.Set String
     , fns : List Value

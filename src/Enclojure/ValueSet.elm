@@ -1,4 +1,4 @@
-module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, remove, toList)
+module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, member, remove, toList)
 
 import Enclojure.Types exposing (Number(..), Value(..), ValueSet)
 import Set
@@ -11,7 +11,7 @@ empty =
     , strings = Set.empty
     , refs = []
     , nil = Nothing
-    , bools = { true = Nothing, false = Nothing }
+    , bools = { true = False, false = False }
     , symbols = Set.empty
     , fns = []
     , maps = []
@@ -33,7 +33,7 @@ isEmpty m =
         && m.nil
         == Nothing
         && m.bools
-        == { true = Nothing, false = Nothing }
+        == { true = False, false = False }
         && Set.isEmpty m.symbols
         && List.isEmpty m.fns
         && List.isEmpty m.maps
@@ -72,10 +72,10 @@ insert v set =
 
                 bools =
                     if bool then
-                        { oldBools | true = Just v }
+                        { oldBools | true = True }
 
                     else
-                        { oldBools | false = Just v }
+                        { oldBools | false = True }
             in
             { set | bools = bools }
 
@@ -140,10 +140,10 @@ remove v set =
 
                 bools =
                     if bool then
-                        { oldBools | true = Nothing }
+                        { oldBools | true = False }
 
                     else
-                        { oldBools | false = Nothing }
+                        { oldBools | false = False }
             in
             { set | bools = bools }
 
@@ -214,10 +214,18 @@ toList set =
             set.nil |> Maybe.map List.singleton |> Maybe.withDefault []
 
         trues =
-            set.bools.true |> Maybe.map List.singleton |> Maybe.withDefault []
+            if set.bools.true then
+                [ Bool True ]
+
+            else
+                []
 
         falses =
-            set.bools.false |> Maybe.map List.singleton |> Maybe.withDefault []
+            if set.bools.false then
+                [ Bool False ]
+
+            else
+                []
 
         keywords =
             Set.toList set.keywords |> List.map Keyword
@@ -241,3 +249,56 @@ toList set =
         ++ set.sets
         ++ set.throwables
         ++ set.vectors
+
+
+member : Value -> ValueSet -> Bool
+member v set =
+    case v of
+        Number (Int int) ->
+            Set.member int set.ints
+
+        Number (Float float) ->
+            Set.member float set.floats
+
+        String string ->
+            Set.member string set.strings
+
+        Ref _ _ ->
+            False
+
+        List _ ->
+            False
+
+        Nil ->
+            set.nil /= Nothing
+
+        Bool bool ->
+            if bool then
+                set.bools.true
+
+            else
+                set.bools.false
+
+        Keyword keyword ->
+            Set.member keyword set.keywords
+
+        Symbol symbol ->
+            Set.member symbol set.symbols
+
+        Fn _ _ ->
+            False
+
+        Map _ ->
+            False
+
+        MapEntry _ ->
+            False
+
+        Set _ ->
+            False
+
+        Throwable _ ->
+            False
+
+        Vector _ ->
+            False

@@ -4,6 +4,7 @@ module Enclojure.Lib exposing
     , cons
     , div
     , first
+    , get
     , isEqual
     , isFloat
     , isGreaterThan
@@ -706,6 +707,43 @@ apply_ =
     in
     { emptyCallable
         | arity2 = Just <| Variadic arity2
+    }
+
+
+get : Callable
+get =
+    let
+        arity2 ( mapVal, key ) =
+            arity3 ( mapVal, key, Nil )
+
+        arity3 ( mapVal, key, default ) =
+            (case mapVal of
+                Map m ->
+                    ValueMap.get key m |> Maybe.map Located.getValue
+
+                Vector l ->
+                    case key of
+                        Number (Int i) ->
+                            l |> List.drop i |> List.head |> Maybe.map Located.getValue
+
+                        _ ->
+                            Nothing
+
+                Set s ->
+                    if ValueSet.member key s then
+                        Just key
+
+                    else
+                        Nothing
+
+                _ ->
+                    Just Nil
+            )
+                |> Maybe.withDefault default
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| pure (arity2 >> Const >> Ok)
+        , arity3 = Just <| Fixed <| pure (arity3 >> Const >> Ok)
     }
 
 

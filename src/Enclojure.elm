@@ -62,6 +62,9 @@ resolveSymbol env symbol =
                 "float?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isFloat))
 
+                "get" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.get))
+
                 "integer?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
 
