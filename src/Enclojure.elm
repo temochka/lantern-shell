@@ -53,8 +53,14 @@ resolveSymbol env symbol =
                 "apply" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.apply_))
 
+                "assoc" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.assoc))
+
                 "cons" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.cons))
+
+                "dissoc" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.dissoc))
 
                 "first" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.first))

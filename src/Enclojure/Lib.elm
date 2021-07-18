@@ -1,7 +1,9 @@
 module Enclojure.Lib exposing
     ( apply
     , apply_
+    , assoc
     , cons
+    , dissoc
     , div
     , first
     , get
@@ -745,6 +747,68 @@ get =
         | arity2 = Just <| Fixed <| pure (arity2 >> Const >> Ok)
         , arity3 = Just <| Fixed <| pure (arity3 >> Const >> Ok)
     }
+
+
+listToPairs : List a -> Maybe (List ( a, a ))
+listToPairs l =
+    case l of
+        [] ->
+            Just []
+
+        a :: b :: rest ->
+            listToPairs rest |> Maybe.map ((::) ( a, b ))
+
+        _ ->
+            Nothing
+
+
+assoc : Callable
+assoc =
+    let
+        arity3 signature =
+            let
+                ( val, firstK, firstV ) =
+                    signature.args
+
+                kvs =
+                    listToPairs signature.rest
+                        |> Maybe.map ((::) ( firstK, firstV ))
+                        |> Result.fromMaybe (Exception "invalid number of key/value args to assoc")
+            in
+            case val of
+                Map m ->
+                    kvs
+                        |> Result.map (List.foldr (\( k, v ) a -> ValueMap.insert k (Located.fakeLoc v) a) m)
+                        |> Result.map Map
+
+                _ ->
+                    Err (Exception (inspect val ++ " is not associable"))
+    in
+    { emptyCallable | arity3 = Just <| Variadic <| pure (arity3 >> Result.map Const) }
+
+
+dissoc : Callable
+dissoc =
+    let
+        arity2 signature =
+            let
+                ( val, firstKey ) =
+                    signature.args
+
+                keys =
+                    firstKey :: signature.rest
+            in
+            case val of
+                Map m ->
+                    keys
+                        |> List.foldr (\k a -> ValueMap.remove k a) m
+                        |> Map
+                        |> Ok
+
+                _ ->
+                    Err (Exception (inspect val ++ " is not dissociable"))
+    in
+    { emptyCallable | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const) }
 
 
 prelude : String
