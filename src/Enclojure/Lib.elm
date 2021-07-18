@@ -802,6 +802,11 @@ assoc =
                         |> Result.map (List.foldr (\( k, v ) a -> Array.set k (Located.fakeLoc v) a) array)
                         |> Result.map Vector
 
+                Nil ->
+                    kvs
+                        |> Result.map (List.foldr (\( k, v ) a -> ValueMap.insert k (Located.fakeLoc v) a) ValueMap.empty)
+                        |> Result.map Map
+
                 _ ->
                     Err (Exception (inspect val ++ " is not associable"))
     in
@@ -871,6 +876,12 @@ prelude =
 (defn zero? [x]
   (= x 0))
 
+(defn inc [x]
+  (+ x 1))
+
+(defn dec [x]
+  (- x 1))
+
 (defn mod
   [num div]
   (let [m (rem num div)]
@@ -879,11 +890,34 @@ prelude =
       (+ m div))))
 
 (defn even?
-   [n] (if (integer? n)
-        (zero? (rem n 2))
-        (throw (Exception. (str "Argument must be an integer: " n)))))
+  [n]
+  (if (integer? n)
+    (zero? (rem n 2))
+    (throw (Exception. (str "Argument must be an integer: " n)))))
 
 (defn odd?
   [n] (not (even? n)))
+
+(defn get-in
+  ([m ks]
+   (reduce get m ks))
+  ([m ks not-found]
+   (reduce #(get %1 %2 not-found) m ks)))
+
+(defn assoc-in
+  ([m ks v]
+   (let [k (first ks)
+         ks (rest ks)]
+     (if (seq ks)
+       (assoc m k (assoc-in (get m k) ks v))
+       (assoc m k v)))))
+
+(defn update
+  ([m k f & args]
+   (assoc m k (apply f (get m k) args))))
+
+(defn update-in
+  ([m ks f & args]
+   (assoc-in m ks (apply f (get-in m ks) args))))
 
 """
