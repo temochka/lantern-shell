@@ -1,5 +1,6 @@
 module Enclojure exposing (eval)
 
+import Array exposing (Array)
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
@@ -206,37 +207,32 @@ evalExpression mutableExpr mutableEnv mutableK =
         )
 
 
-evalVector : Located (List (Located Value)) -> Env -> Continuation -> Step
-evalVector (Located loc v) env k =
-    case v of
-        x :: rest ->
-            evalExpression x
-                env
-                (\xret xenv ->
-                    evalExpression
-                        (Located loc (Vector rest))
-                        xenv
-                        (\(Located _ restRetVal) restEnv ->
-                            case restRetVal of
-                                Vector restRet ->
-                                    ( Ok ( Located loc (Const (Vector (xret :: restRet))), restEnv )
-                                    , Just (Thunk k)
+evalVector : Located (Array (Located Value)) -> Env -> Continuation -> Step
+evalVector (Located loc vecV) env k =
+    ( Ok ( Located loc (Const (Vector Array.empty)), env )
+    , vecV
+        |> Array.foldr
+            (\e a ->
+                \(Located _ v) envNow ->
+                    case v of
+                        Vector array ->
+                            evalExpression e
+                                envNow
+                                (\ret retEnv ->
+                                    ( Ok ( Located loc (Const (Vector (Array.push ret array))), retEnv )
+                                    , Just (Thunk a)
                                     )
+                                )
 
-                                _ ->
-                                    ( Err
-                                        (Located loc
-                                            (Exception
-                                                "Impossible interpreter state: list evaluation yielded a non-list"
-                                            )
-                                        )
-                                    , Just (Thunk k)
-                                    )
-                        )
-                )
-
-        [] ->
-            ( Ok ( Located loc (Const (Vector [])), env ), Just (Thunk k) )
+                        _ ->
+                            ( Err (Located loc (Exception "Interpreter error: vector evaluation yielded a non-vector"))
+                            , Just (Thunk a)
+                            )
+            )
+            k
+        |> Thunk
+        |> Just
+    )
 
 
 evalMap : Located Enclojure.Types.ValueMap -> Env -> Continuation -> Step
@@ -380,7 +376,7 @@ mapBindingsToBodies : List (Located Value) -> Result (Located Exception) (List (
 mapBindingsToBodies signatures =
     case signatures of
         (Located _ (List ((Located loc (Vector argBindings)) :: body))) :: rest ->
-            mapBindingsToBodies rest |> Result.map (\r -> ( argBindings, wrapInDo (Located loc body) ) :: r)
+            mapBindingsToBodies rest |> Result.map (\r -> ( Array.toList argBindings, wrapInDo (Located loc body) ) :: r)
 
         (Located loc _) :: _ ->
             Err (Located loc (Exception "Parsing error: malformed function arity"))
@@ -434,7 +430,7 @@ evalFn (Located loc exprs) fnEnv k =
                                                 |> Maybe.withDefault identity
                                            )
                                         |> Runtime.setLocalEnv "recur" fn.self
-                                        |> bindArgs args argBindings
+                                        |> bindArgs args (Array.toList argBindings)
                             in
                             case callEnvResult of
                                 Ok callEnv ->
@@ -530,6 +526,7 @@ evalLet (Located loc body) env k =
             ( Ok ( Located loc (Const Nil), env )
             , Just
                 (bindings
+                    |> Array.toList
                     |> parseBindings
                     |> Result.map
                         (List.foldr

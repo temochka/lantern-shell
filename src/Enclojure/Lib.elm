@@ -31,6 +31,7 @@ module Enclojure.Lib exposing
     , throw
     )
 
+import Array
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect)
 import Enclojure.Types exposing (..)
@@ -438,11 +439,12 @@ seq =
                 List l ->
                     Ok (List l)
 
-                Vector [] ->
-                    Ok Nil
-
                 Vector l ->
-                    Ok (List l)
+                    if Array.isEmpty l then
+                        Ok Nil
+
+                    else
+                        Ok (List (Array.toList l))
 
                 Set s ->
                     if ValueSet.isEmpty s then
@@ -726,7 +728,7 @@ get =
                 Vector l ->
                     case key of
                         Number (Int i) ->
-                            l |> List.drop i |> List.head |> Maybe.map Located.getValue
+                            l |> Array.get i |> Maybe.map Located.getValue
 
                         _ ->
                             Nothing
@@ -774,12 +776,31 @@ assoc =
                     listToPairs signature.rest
                         |> Maybe.map ((::) ( firstK, firstV ))
                         |> Result.fromMaybe (Exception "invalid number of key/value args to assoc")
+
+                keysToInt l =
+                    case l of
+                        [] ->
+                            Ok []
+
+                        ( k, v ) :: rest ->
+                            case k of
+                                Number (Int i) ->
+                                    keysToInt rest |> Result.map ((::) ( i, v ))
+
+                                _ ->
+                                    Err (Exception "Key must be integer")
             in
             case val of
                 Map m ->
                     kvs
                         |> Result.map (List.foldr (\( k, v ) a -> ValueMap.insert k (Located.fakeLoc v) a) m)
                         |> Result.map Map
+
+                Vector array ->
+                    kvs
+                        |> Result.andThen keysToInt
+                        |> Result.map (List.foldr (\( k, v ) a -> Array.set k (Located.fakeLoc v) a) array)
+                        |> Result.map Vector
 
                 _ ->
                     Err (Exception (inspect val ++ " is not associable"))

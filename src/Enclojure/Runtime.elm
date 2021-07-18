@@ -1,5 +1,6 @@
 module Enclojure.Runtime exposing (..)
 
+import Array
 import Dict
 import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
@@ -217,7 +218,7 @@ toSeq val =
             Ok <| List.map Located.getValue l
 
         Vector v ->
-            Ok <| List.map Located.getValue v
+            Ok <| List.map Located.getValue <| Array.toList v
 
         Set s ->
             Ok <| ValueSet.toList s
@@ -273,7 +274,7 @@ inspect value =
                 "false"
 
         Vector l ->
-            "[" ++ (List.map (Located.getValue >> inspect) l |> String.join " ") ++ "]"
+            "[" ++ (List.map (Located.getValue >> inspect) (Array.toList l) |> String.join " ") ++ "]"
 
         Keyword name ->
             ":" ++ name
@@ -284,7 +285,7 @@ inspect value =
                 |> (\r -> "{" ++ r ++ "}")
 
         MapEntry ( k, v ) ->
-            inspect (Vector [ Located fakeLoc k, v ])
+            inspect (Vector (Array.fromList [ Located fakeLoc k, v ]))
 
         Set set ->
             List.map (\v -> inspect v) (ValueSet.toList set)

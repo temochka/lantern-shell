@@ -1,5 +1,6 @@
 module Enclojure.Types exposing (..)
 
+import Array exposing (Array)
 import Dict exposing (Dict)
 import Enclojure.Located exposing (Located)
 import Set
@@ -97,7 +98,7 @@ type Value
     | Ref String (Located Value)
     | Fn (Maybe String) ({ self : Value, k : Continuation } -> Thunk)
     | List (List (Located Value))
-    | Vector (List (Located Value))
+    | Vector (Array (Located Value))
     | Nil
     | Bool Basics.Bool
     | Keyword String

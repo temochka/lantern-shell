@@ -1,5 +1,6 @@
 module Enclojure.Reader.Macros exposing (macroexpandAll)
 
+import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Types exposing (Exception(..), Value(..))
@@ -39,9 +40,9 @@ macroexpandAllInternal i v =
                                 |> Result.map (Tuple.mapSecond (List >> Located loc))
 
                         Vector l ->
-                            List.foldr
-                                (\e a -> a |> Result.andThen (\( ni, lr ) -> macroexpandAllInternal ni e |> Result.map (\( nni, r ) -> ( nni, r :: lr ))))
-                                (Ok ( nextI, [] ))
+                            Array.foldl
+                                (\e a -> a |> Result.andThen (\( ni, lr ) -> macroexpandAllInternal ni e |> Result.map (\( nni, r ) -> ( nni, Array.push r lr ))))
+                                (Ok ( nextI, Array.empty ))
                                 l
                                 |> Result.map (Tuple.mapSecond (Vector >> Located loc))
 
@@ -133,14 +134,14 @@ expandIfLet : Int -> Located (List (Located Value)) -> Result Exception ( Int, L
 expandIfLet i (Located loc args) =
     case args of
         (Located _ (Vector bindings)) :: branches ->
-            case bindings of
+            case Array.toList bindings of
                 n :: v :: [] ->
                     Ok
                         ( i
                         , Located loc
                             (List
                                 [ Located loc (Symbol "let")
-                                , Located loc (Vector [ n, v ])
+                                , Located loc (Vector (Array.fromList [ n, v ]))
                                 , Located loc (List (Located loc (Symbol "if") :: n :: branches))
                                 ]
                             )
@@ -157,14 +158,14 @@ expandWhenLet : Int -> Located (List (Located Value)) -> Result Exception ( Int,
 expandWhenLet i (Located loc args) =
     case args of
         (Located _ (Vector bindings)) :: do ->
-            case bindings of
+            case Array.toList bindings of
                 n :: v :: [] ->
                     Ok
                         ( i
                         , Located loc
                             (List
                                 [ Located loc (Symbol "let")
-                                , Located loc (Vector [ n, v ])
+                                , Located loc (Vector (Array.fromList [ n, v ]))
                                 , Located loc (List (Located loc (Symbol "when") :: n :: do))
                                 ]
                             )
@@ -190,7 +191,7 @@ expandAnd i (Located loc args) =
                 , Located loc
                     (List
                         [ Located loc (Symbol "let")
-                        , Located loc (Vector [ Located loc (Symbol id), Located loc form ])
+                        , Located loc (Vector (Array.fromList [ Located loc (Symbol id), Located loc form ]))
                         , Located loc
                             (List
                                 [ Located loc (Symbol "if")
@@ -220,7 +221,7 @@ expandOr i (Located loc args) =
                 , Located loc
                     (List
                         [ Located loc (Symbol "let")
-                        , Located loc (Vector [ Located loc (Symbol id), Located loc form ])
+                        , Located loc (Vector (Array.fromList [ Located loc (Symbol id), Located loc form ]))
                         , Located loc
                             (List
                                 [ Located loc (Symbol "if")
@@ -351,7 +352,7 @@ walk state f (Located loc val) =
 
         Vector l ->
             l
-                |> List.foldr (\e a -> a |> Result.andThen (\( aState, av ) -> walk aState f e |> Result.map (\( nState, v ) -> ( nState, v :: av )))) (Ok ( state, [] ))
+                |> Array.foldl (\e a -> a |> Result.andThen (\( aState, av ) -> walk aState f e |> Result.map (\( nState, v ) -> ( nState, Array.push v av )))) (Ok ( state, Array.empty ))
                 |> Result.map (\( s, r ) -> ( s, Located loc (Vector r) ))
 
         _ ->
@@ -368,7 +369,7 @@ expandLambda : Int -> Located (List (Located Value)) -> Result Exception ( Int, 
 expandLambda i (Located loc body) =
     case body of
         [] ->
-            Ok ( i, Located loc (List [ Located loc (Symbol "fn"), Located loc (Vector []), Located loc (List []) ]) )
+            Ok ( i, Located loc (List [ Located loc (Symbol "fn"), Located loc (Vector Array.empty), Located loc (List []) ]) )
 
         exprs ->
             case substituteLambdaArgs i exprs of
@@ -416,7 +417,7 @@ argsToValue (Located loc arguments) =
         variadic =
             arguments.variadic |> Maybe.map (Symbol >> Located loc >> List.singleton >> (++) [ Located loc (Symbol "&") ]) |> Maybe.withDefault []
     in
-    Vector (positional ++ variadic)
+    Vector (Array.fromList (positional ++ variadic))
 
 
 substituteLambdaArgsWalker : ( Int, Arguments ) -> Located Value -> Result (Located Exception) ( ( Int, Arguments ), Located Value )

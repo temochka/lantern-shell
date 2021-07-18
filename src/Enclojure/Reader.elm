@@ -1,5 +1,6 @@
 module Enclojure.Reader exposing (parse)
 
+import Array
 import Enclojure.Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
@@ -166,7 +167,7 @@ vector =
         , trailing = Parser.Optional
         , end = "]"
         }
-        |> Parser.map Vector
+        |> Parser.map (Array.fromList >> Vector)
 
 
 lambda : Parser Value
