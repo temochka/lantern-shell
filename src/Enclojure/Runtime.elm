@@ -210,6 +210,25 @@ isTruthy val =
             True
 
 
+toSeq : Value -> Result Exception (List Value)
+toSeq val =
+    case val of
+        List l ->
+            Ok <| List.map Located.getValue l
+
+        Vector v ->
+            Ok <| List.map Located.getValue v
+
+        Set s ->
+            Ok <| ValueSet.toList s
+
+        Map m ->
+            Ok <| List.map MapEntry (ValueMap.toList m)
+
+        _ ->
+            Err <| Exception (inspect val ++ " is not a sequence")
+
+
 inspectLocated : Located Value -> String
 inspectLocated (Located { start } value) =
     let

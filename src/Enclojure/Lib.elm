@@ -1,5 +1,6 @@
 module Enclojure.Lib exposing
     ( apply
+    , apply_
     , cons
     , div
     , first
@@ -658,9 +659,62 @@ newException =
     }
 
 
+
+-- ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+
+
+toRuntimeStep : Step -> Runtime.Step
+toRuntimeStep ( r, k ) =
+    ( r |> Result.mapError Located.getValue |> Result.map (Tuple.mapFirst Located.getValue), k )
+
+
+apply_ : Callable
+apply_ =
+    let
+        arity2 signature env k =
+            let
+                ( fn, firstArg ) =
+                    signature.args
+
+                args =
+                    firstArg :: signature.rest
+
+                numArgs =
+                    List.length args
+
+                posArgs =
+                    List.take (numArgs - 1) args
+
+                listArgsResult =
+                    args
+                        |> List.drop (numArgs - 1)
+                        |> List.head
+                        |> Result.fromMaybe (Exception "Interpreter error: arity2 function doesn't have a 2nd argument")
+                        |> Result.andThen Runtime.toSeq
+            in
+            case listArgsResult of
+                Ok listArgs ->
+                    apply
+                        (Located.fakeLoc fn)
+                        (Located.fakeLoc (List (List.map Located.fakeLoc (posArgs ++ listArgs))))
+                        env
+                        k
+                        |> toRuntimeStep
+
+                Err e ->
+                    ( Err e, Just (Thunk k) )
+    in
+    { emptyCallable
+        | arity2 = Just <| Variadic arity2
+    }
+
+
 prelude : String
 prelude =
     """
+(defn complement [f]
+  (fn [& args] (not (apply f args))))
+
 (defn map [f coll]
   (if (seq coll)
     (cons (f (first coll)) (map f (rest coll)))
@@ -673,6 +727,17 @@ prelude =
         (cons el (filter pred (rest coll)))
         (filter pred (rest coll))))
     (list)))
+
+(defn remove [pred coll]
+  (filter (complement pred) coll))
+
+(defn reduce
+  ([f coll]
+   (reduce f (f) coll))
+  ([f init coll]
+   (if (seq coll)
+     (reduce f (f init (first coll)) (rest coll))
+     init)))
 
 (defn pos? [x]
   (< 0 x))
@@ -697,6 +762,5 @@ prelude =
 
 (defn odd?
   [n] (not (even? n)))
-
 
 """

@@ -50,6 +50,9 @@ resolveSymbol env symbol =
                 "<=" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThanOrEqual))
 
+                "apply" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.apply_))
+
                 "cons" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.cons))
 
