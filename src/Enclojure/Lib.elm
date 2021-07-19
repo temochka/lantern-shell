@@ -532,30 +532,53 @@ conj =
                     signature.args
 
                 xs =
-                    x :: signature.rest |> List.map Located.fakeLoc
+                    x :: signature.rest
             in
             case coll of
                 List l ->
                     xs
+                        |> List.map Located.fakeLoc
                         |> List.foldl (::) l
                         |> List
                         |> Ok
 
                 Vector a ->
                     xs
+                        |> List.map Located.fakeLoc
                         |> List.foldr Array.push a
                         |> Vector
                         |> Ok
 
                 Nil ->
-                    Ok <| List (List.reverse xs)
+                    Ok <| List (xs |> List.map Located.fakeLoc |> List.reverse)
 
                 Set s ->
                     xs
-                        |> List.map Located.getValue
                         |> List.foldl ValueSet.insert s
                         |> Set
                         |> Ok
+
+                Map m ->
+                    xs
+                        |> List.foldl
+                            (\e a ->
+                                case e of
+                                    MapEntry ( k, v ) ->
+                                        a |> Result.map (ValueMap.insert k v)
+
+                                    Vector array ->
+                                        case Array.toList array of
+                                            [ k, v ] ->
+                                                a |> Result.map (ValueMap.insert (Located.getValue k) v)
+
+                                            _ ->
+                                                Err (Exception "Vector arg to map conj must be a pair")
+
+                                    _ ->
+                                        Err <| Exception (inspect e ++ " is not a valid map entry")
+                            )
+                            (Ok m)
+                        |> Result.map Map
 
                 _ ->
                     Err (Exception ("don't know how to conj to " ++ inspect coll))
@@ -926,6 +949,9 @@ prelude =
      (apply concat (rest colls))
      (reverse coll))))
 
+(defn into [to from]
+  (reduce conj to from))
+
 (defn map [f coll]
   (if (seq coll)
     (cons (f (first coll)) (map f (rest coll)))
@@ -947,6 +973,26 @@ prelude =
 (defn remove [pred coll]
   (filter (complement pred) coll))
 
+(defn drop [n coll]
+  (if (and (seq coll) (pos? n))
+    (drop (dec n) (rest coll))
+    (or (seq coll) (list))))
+
+(defn take [n coll]
+  (if (and (seq coll) (pos? n))
+    (cons (first coll) (take (dec n) (rest coll)))
+    (list)))
+
+(defn drop-while [pred coll]
+  (if (and (seq coll) (pred (first coll)))
+    (drop-while pred (rest coll))
+    (or (seq coll) (list))))
+
+(defn take-while [pred coll]
+  (if (and (seq coll) (pred (first coll)))
+    (cons (first coll) (take-while pred (rest coll)))
+    (list)))
+
 (defn reduce
   ([f coll]
    (reduce f (f) coll))
@@ -954,6 +1000,11 @@ prelude =
    (if (seq coll)
      (reduce f (f init (first coll)) (rest coll))
      init)))
+
+(defn repeat [n x]
+  (if (pos? n)
+    (cons x (repeat (dec n) x))
+    (list)))
 
 (defn pos? [x]
   (< 0 x))
