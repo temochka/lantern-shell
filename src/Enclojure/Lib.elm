@@ -2,6 +2,7 @@ module Enclojure.Lib exposing
     ( apply
     , apply_
     , assoc
+    , conj
     , cons
     , dissoc
     , div
@@ -519,6 +520,48 @@ cons =
     in
     { emptyCallable
         | arity2 = Just (Fixed arity2)
+    }
+
+
+conj : Callable
+conj =
+    let
+        arity2 signature =
+            let
+                ( coll, x ) =
+                    signature.args
+
+                xs =
+                    x :: signature.rest |> List.map Located.fakeLoc
+            in
+            case coll of
+                List l ->
+                    xs
+                        |> List.foldl (::) l
+                        |> List
+                        |> Ok
+
+                Vector a ->
+                    xs
+                        |> List.foldr Array.push a
+                        |> Vector
+                        |> Ok
+
+                Nil ->
+                    Ok <| List (List.reverse xs)
+
+                Set s ->
+                    xs
+                        |> List.map Located.getValue
+                        |> List.foldl ValueSet.insert s
+                        |> Set
+                        |> Ok
+
+                _ ->
+                    Err (Exception ("don't know how to conj to " ++ inspect coll))
+    in
+    { emptyCallable
+        | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const)
     }
 
 

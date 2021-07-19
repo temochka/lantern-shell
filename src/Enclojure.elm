@@ -57,6 +57,9 @@ resolveSymbol env symbol =
                 "assoc" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.assoc))
 
+                "conj" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.conj))
+
                 "cons" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.cons))
 
