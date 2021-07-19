@@ -38,6 +38,7 @@ import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect)
 import Enclojure.Types exposing (..)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
+import Html exposing (s)
 
 
 pure : (a -> Result Exception IO) -> (a -> Env -> Continuation -> Runtime.Step)
@@ -524,32 +525,21 @@ cons =
 first : Callable
 first =
     let
-        arity1 coll env1 k =
-            fixedCall
-                seq.arity1
-                coll
-                env1
-                (\(Located collLoc collSeq) env2 ->
-                    case collSeq of
-                        List (x :: _) ->
-                            ( Ok ( Located.map Const x, env2 ), Just (Thunk k) )
+        arity1 collVal =
+            collVal
+                |> Runtime.toSeq
+                |> Result.map
+                    (\s ->
+                        case s of
+                            x :: _ ->
+                                x
 
-                        List _ ->
-                            ( Ok ( Located collLoc (Const Nil), env2 ), Just (Thunk k) )
-
-                        Nil ->
-                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
-                            , Just (Thunk k)
-                            )
-
-                        _ ->
-                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"))
-                            , Just (Thunk k)
-                            )
-                )
+                            [] ->
+                                Nil
+                    )
     in
     { emptyCallable
-        | arity1 = Just (Fixed arity1)
+        | arity1 = Just (Fixed <| pure (arity1 >> Result.map Const))
     }
 
 
@@ -883,9 +873,24 @@ prelude =
 (defn next [coll]
   (seq (rest coll)))
 
+(defn reverse [coll]
+  (reduce (fn [a e] (cons e a)) (list) coll))
+
+(defn concat [& colls]
+  (when-let [coll (first colls)]
+    (reduce
+     (fn [a e] (cons e a))
+     (apply concat (rest colls))
+     (reverse coll))))
+
 (defn map [f coll]
   (if (seq coll)
     (cons (f (first coll)) (map f (rest coll)))
+    (list)))
+
+(defn mapcat [f coll]
+  (if (seq coll)
+    (concat (f (first coll)) (mapcat f (rest coll)))
     (list)))
 
 (defn filter [pred coll]

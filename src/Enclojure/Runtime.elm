@@ -226,6 +226,9 @@ toSeq val =
         Map m ->
             Ok <| List.map MapEntry (ValueMap.toList m)
 
+        Nil ->
+            Ok []
+
         _ ->
             Err <| Exception (inspect val ++ " is not a sequence")
 
