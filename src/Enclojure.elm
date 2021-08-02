@@ -1,6 +1,7 @@
-module Enclojure exposing (eval)
+module Enclojure exposing (eval, inputRequestToValue)
 
 import Array exposing (Array)
+import Dict exposing (Dict)
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Located as Located exposing (Located(..))
@@ -74,6 +75,9 @@ resolveSymbol env symbol =
 
                 "get" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.get))
+
+                "input" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.input))
 
                 "integer?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
@@ -711,6 +715,24 @@ wrapInDo (Located loc vs) =
 prelude : Result (List Parser.DeadEnd) (List (Located Value))
 prelude =
     Parser.parse Lib.prelude
+
+
+inputRequestToValue : Enclojure.Types.InputRequest -> Value
+inputRequestToValue inputRequest =
+    inputRequest
+        |> Dict.toList
+        |> List.map
+            (\( k, v ) ->
+                let
+                    value =
+                        case v of
+                            Enclojure.Types.TextInput s ->
+                                String s
+                in
+                ( Keyword k, Located.fakeLoc value )
+            )
+        |> ValueMap.fromList
+        |> Map
 
 
 eval : String -> Step

@@ -32,9 +32,18 @@ type Arity a
     | Variadic ({ args : a, rest : List Value } -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk ))
 
 
+type InputType
+    = TextInput String
+
+
+type alias InputRequest =
+    Dict String InputType
+
+
 type IO
     = Const Value
     | Sleep Float
+    | InputRequest InputRequest
 
 
 type alias Callable =

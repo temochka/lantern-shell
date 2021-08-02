@@ -1,13 +1,15 @@
 module LanternShell.Apps.Notebook exposing (Message, Model, init, lanternApp)
 
-import Dict
+import Dict exposing (Dict)
 import Element exposing (Element)
+import Element.Background
 import Element.Input
 import Enclojure
 import Enclojure.Located as Located exposing (Located)
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Env, Exception(..), IO(..), Thunk(..), Value(..))
+import Enclojure.Types exposing (Env, Exception(..), IO(..), InputRequest, InputType(..), Thunk(..), Value(..))
 import Keyboard.Key exposing (Key(..))
+import Lantern
 import Lantern.App
 import LanternUi
 import LanternUi.Input
@@ -21,63 +23,42 @@ type alias Context =
 
 
 type alias Model =
-    { code : String
-    , interpreter : Interpreter
+    { interpreter : Interpreter
+    , code : String
     }
 
 
 type Message
     = SetCode String
-    | Eval
+    | Run
+    | Stop
+    | UpdateInputRequest String InputType
     | HandleIO ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    | NoOp
 
 
 init : Model
 init =
-    { code = """[
-    (def foo 42)
-    foo
-    (+ 1 2)
-    (- 10 9 8)
-    (sleep 10)
-    (if true (* 2 2) (/ 2 2))
-    nil
-    (quote (a b c d))
-    (let [foo 43 bar (+ 1 1)]
-        (def userfn (fn userfn [] [foo bar 666]))
-        [foo bar])
-    (def three-arg-fn (fn [a b c] [a b c]))
-    (three-arg-fn 1 2 3)
-    (def var-arg-fn (fn var-arg-fn [a b & rest] [a b rest]))
-    (var-arg-fn 1 2 3 4 5 6)
-    (def recfn (fn [continue] (if continue (recur false) (quote done))))
-    (recfn true)
-    (userfn)
-    foo
-    (def multi-fn (fn ([] (multi-fn 666)) ([a & rest] [a rest])))
-    (multi-fn)
-    (multi-fn 1 2 3 4 5 6)
-    (and 1 true (quote foo) [] false)
-    {:foo "bar" :buz "yay"}
-    #{1 2 :foo 42.0}
-]
-    """
+    { code = """
+(def words (:words (input {:words :text})))
+"""
     , interpreter = Stopped
     }
 
 
 type Interpreter
     = Stopped
+    | Blocked
+    | Input InputRequest ( Env, Maybe Thunk )
     | Running
-    | Done Value Env
+    | Done ( Value, Env )
     | Panic (Located Exception)
-    | StackOverflow
 
 
 trampoline : ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( Interpreter, Cmd Message )
 trampoline ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
-        ( StackOverflow, Cmd.none )
+        ( Panic (Located.fakeLoc (Exception "Stack level too deep")), Cmd.none )
 
     else
         case result of
@@ -89,7 +70,7 @@ trampoline ( result, thunk ) maxdepth =
                                 trampoline (continuation (Located.replace io v) env) (maxdepth - 1)
 
                             Nothing ->
-                                ( Done v env, Cmd.none )
+                                ( Done ( v, env ), Cmd.none )
 
                     Sleep ms ->
                         ( Running
@@ -98,6 +79,11 @@ trampoline ( result, thunk ) maxdepth =
                                 (\_ ->
                                     HandleIO ( Ok ( Located.replace io (Const Nil), env ), thunk )
                                 )
+                        )
+
+                    InputRequest inputRequest ->
+                        ( Input inputRequest ( env, thunk )
+                        , Cmd.none
                         )
 
             Err exception ->
@@ -110,12 +96,15 @@ update msg model =
         SetCode code ->
             ( { model | code = code }, Cmd.none )
 
-        Eval ->
+        Run ->
             let
-                ( interpreter, cmd ) =
+                ( interpreter, retMsg ) =
                     trampoline (Enclojure.eval model.code) 10000
             in
-            ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
+            ( { model | interpreter = interpreter }, Cmd.map Lantern.App.Message retMsg )
+
+        Stop ->
+            ( { model | interpreter = Panic (Located.fakeLoc (Exception "Terminated")) }, Cmd.none )
 
         HandleIO ret ->
             let
@@ -123,6 +112,21 @@ update msg model =
                     trampoline ret 10000
             in
             ( { model | interpreter = interpreter }, cmd |> Cmd.map Lantern.App.Message )
+
+        UpdateInputRequest name v ->
+            case model.interpreter of
+                Input inputRequest args ->
+                    let
+                        updatedInputRequest =
+                            Dict.update name (Maybe.map (always v)) inputRequest
+                    in
+                    ( { model | interpreter = Input updatedInputRequest args }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+        NoOp ->
+            ( model, Cmd.none )
 
 
 inspectEnv : Env -> String
@@ -143,23 +147,101 @@ inspectInterpreter interpreter =
         Running ->
             "Running"
 
-        Done v env ->
-            "Done " ++ Runtime.inspect v ++ " " ++ inspectEnv env
+        Blocked ->
+            "Blocked"
 
-        StackOverflow ->
-            "Stack overflow"
+        Input _ _ ->
+            "Input"
+
+        Done ( v, env ) ->
+            "Done " ++ Runtime.inspect v ++ " " ++ inspectEnv env
 
         Panic e ->
             "Panic " ++ Debug.toString e
 
 
-view : Context -> Model -> Element (Lantern.App.Message Message)
-view { theme } model =
-    LanternUi.columnLayout
-        theme
+isRunning : Interpreter -> Bool
+isRunning interpreter =
+    case interpreter of
+        Running ->
+            True
+
+        Blocked ->
+            True
+
+        Panic _ ->
+            False
+
+        Input _ _ ->
+            True
+
+        Done _ ->
+            False
+
+        Stopped ->
+            False
+
+
+renderCell : Context -> Model -> Element (Lantern.App.Message Message)
+renderCell { theme } model =
+    let
+        overlay =
+            case model.interpreter of
+                Stopped ->
+                    Element.none
+
+                Done _ ->
+                    Element.none
+
+                Blocked ->
+                    Element.text "Blocked"
+
+                Panic _ ->
+                    Element.none
+
+                Input inputRequest ( env, thunk ) ->
+                    Element.column
+                        [ Element.width Element.fill
+                        , Element.height Element.fill
+                        , Element.Background.color theme.bgDefault
+                        ]
+                        ((inputRequest
+                            |> Dict.toList
+                            |> List.map
+                                (\( k, v ) ->
+                                    case v of
+                                        TextInput s ->
+                                            LanternUi.Input.text theme
+                                                []
+                                                { onChange = TextInput >> UpdateInputRequest k >> Lantern.App.Message
+                                                , text = s
+                                                , placeholder = Nothing
+                                                , label = Element.Input.labelAbove [] (Element.text k)
+                                                }
+                                )
+                         )
+                            ++ [ LanternUi.Input.button theme
+                                    []
+                                    { onPress = Just (Lantern.App.Message (HandleIO ( Ok ( Located.fakeLoc (Const (Enclojure.inputRequestToValue inputRequest)), env ), thunk )))
+                                    , label = Element.text "Submit"
+                                    }
+                               ]
+                        )
+
+                Running ->
+                    Element.text "Running"
+
+        ( label, action ) =
+            if isRunning model.interpreter then
+                ( "Stop", Stop )
+
+            else
+                ( "Run", Run )
+    in
+    Element.column
         []
         [ LanternUi.Input.multiline theme
-            []
+            [ Element.inFront overlay ]
             { onChange = SetCode >> Lantern.App.Message
             , text = model.code
             , placeholder = Nothing
@@ -168,9 +250,18 @@ view { theme } model =
             }
         , LanternUi.Input.button theme
             []
-            { onPress = Just (Lantern.App.Message Eval)
-            , label = Element.text "Eval"
+            { onPress = Just (Lantern.App.Message action)
+            , label = Element.text label
             }
+        ]
+
+
+view : Context -> Model -> Element (Lantern.App.Message Message)
+view context model =
+    LanternUi.columnLayout
+        context.theme
+        []
+        [ renderCell context model
         , Element.text ("Interpreter: " ++ inspectInterpreter model.interpreter)
         ]
 

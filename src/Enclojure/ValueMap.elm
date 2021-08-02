@@ -1,4 +1,4 @@
-module Enclojure.ValueMap exposing (empty, fromList, get, insert, isEmpty, remove, toList)
+module Enclojure.ValueMap exposing (empty, foldl, fromList, get, insert, isEmpty, remove, toList)
 
 import Dict
 import Enclojure.Located exposing (Located(..))
@@ -309,6 +309,11 @@ toList map =
         ++ map.lists
         ++ map.sets
         ++ map.vectors
+
+
+foldl : (Value -> Located Value -> a -> a) -> a -> ValueMap -> a
+foldl fn init map =
+    List.foldl (\( k, v ) a -> fn k v a) init (toList map)
 
 
 fromList : List ValueMapEntry -> ValueMap

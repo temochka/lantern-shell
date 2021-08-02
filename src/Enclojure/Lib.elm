@@ -8,6 +8,7 @@ module Enclojure.Lib exposing
     , div
     , first
     , get
+    , input
     , isEqual
     , isFloat
     , isGreaterThan
@@ -34,6 +35,7 @@ module Enclojure.Lib exposing
     )
 
 import Array
+import Dict
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect)
 import Enclojure.Types exposing (..)
@@ -72,6 +74,34 @@ sleep =
 
                 _ ->
                     Err (Exception "type error: sleep expects one integer argument")
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed (pure arity1))
+    }
+
+
+input : Callable
+input =
+    let
+        arity1 val =
+            case val of
+                Map inputRequest ->
+                    inputRequest
+                        |> ValueMap.foldl
+                            (\k (Located _ v) a ->
+                                case ( k, v ) of
+                                    ( Keyword name, Keyword "text" ) ->
+                                        a
+                                            |> Result.map (Dict.insert name (TextInput ""))
+
+                                    ( _, _ ) ->
+                                        Err (Exception "type error: invalid argument to input")
+                            )
+                            (Ok Dict.empty)
+                        |> Result.map InputRequest
+
+                _ ->
+                    Err (Exception "type error: input expects a map as its argument")
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
