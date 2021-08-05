@@ -7,9 +7,10 @@ import Element.Input
 import Enclojure
 import Enclojure.Located as Located exposing (Located)
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Env, Exception(..), IO(..), InputRequest, InputType(..), Thunk(..), Value(..))
+import Enclojure.Types exposing (Cell(..), Env, Exception(..), IO(..), InputCell(..), InputKey, TextFormat(..), Thunk(..), UI, Value(..))
+import Html
+import Html.Attributes
 import Keyboard.Key exposing (Key(..))
-import Lantern
 import Lantern.App
 import LanternUi
 import LanternUi.Input
@@ -32,7 +33,7 @@ type Message
     = SetCode String
     | Run
     | Stop
-    | UpdateInputRequest String InputType
+    | UpdateInputRequest InputKey InputCell
     | HandleIO ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
     | NoOp
 
@@ -40,7 +41,29 @@ type Message
 init : Model
 init =
     { code = """
-(def words (:words (input {:words :text})))
+(def words
+  (-> (ui [:v-stack
+           [:text "Words"]
+           [:text-input :words]])
+      (get :words)
+      string/split-lines))
+
+(defn make-card
+  [word]
+  (let [translation (ui [:h-stack
+                         [:v-stack
+                          [:text word]]
+                         [:v-stack
+                          [:text-input :translation]]])]
+    (assoc translation :word word)))
+
+(def cards
+  (->> words
+       (map make-card)))
+
+cards
+
+
 """
     , interpreter = Stopped
     }
@@ -49,7 +72,7 @@ init =
 type Interpreter
     = Stopped
     | Blocked
-    | Input InputRequest ( Env, Maybe Thunk )
+    | UI UI ( Env, Maybe Thunk )
     | Running
     | Done ( Value, Env )
     | Panic (Located Exception)
@@ -81,8 +104,8 @@ trampoline ( result, thunk ) maxdepth =
                                 )
                         )
 
-                    InputRequest inputRequest ->
-                        ( Input inputRequest ( env, thunk )
+                    ShowUI ui ->
+                        ( UI ui ( env, thunk )
                         , Cmd.none
                         )
 
@@ -115,12 +138,12 @@ update msg model =
 
         UpdateInputRequest name v ->
             case model.interpreter of
-                Input inputRequest args ->
+                UI ui args ->
                     let
-                        updatedInputRequest =
-                            Dict.update name (Maybe.map (always v)) inputRequest
+                        updatedInputs =
+                            Dict.update name (Maybe.map (always v)) ui.inputs
                     in
-                    ( { model | interpreter = Input updatedInputRequest args }, Cmd.none )
+                    ( { model | interpreter = UI { ui | inputs = updatedInputs } args }, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -150,8 +173,8 @@ inspectInterpreter interpreter =
         Blocked ->
             "Blocked"
 
-        Input _ _ ->
-            "Input"
+        UI _ _ ->
+            "UI"
 
         Done ( v, env ) ->
             "Done " ++ Runtime.inspect v ++ " " ++ inspectEnv env
@@ -172,7 +195,7 @@ isRunning interpreter =
         Panic _ ->
             False
 
-        Input _ _ ->
+        UI _ _ ->
             True
 
         Done _ ->
@@ -182,8 +205,68 @@ isRunning interpreter =
             False
 
 
+renderUI : Context -> UI -> Element (Lantern.App.Message Message)
+renderUI context { cell, inputs } =
+    case cell of
+        VStack cells ->
+            cells
+                |> List.map (\c -> renderUI context { cell = c, inputs = inputs })
+                |> Element.column [ Element.width Element.fill ]
+
+        HStack cells ->
+            cells
+                |> List.map (\c -> renderUI context { cell = c, inputs = inputs })
+                |> Element.row [ Element.width Element.fill ]
+
+        Input key ->
+            Dict.get key inputs
+                |> Maybe.map
+                    (\input ->
+                        case input of
+                            TextInput s ->
+                                LanternUi.Input.text
+                                    context.theme
+                                    []
+                                    { onChange = TextInput >> UpdateInputRequest key >> Lantern.App.Message
+                                    , placeholder = Nothing
+                                    , label = Element.Input.labelHidden ""
+                                    , text = s
+                                    }
+
+                            MaskedTextInput s ->
+                                LanternUi.Input.password
+                                    context.theme
+                                    []
+                                    { onChange = TextInput >> UpdateInputRequest key >> Lantern.App.Message
+                                    , placeholder = Nothing
+                                    , label = Element.Input.labelHidden ""
+                                    , text = s
+                                    , show = False
+                                    }
+                    )
+                |> Maybe.withDefault Element.none
+
+        Text textCells ->
+            textCells
+                |> List.map
+                    (\c ->
+                        case c of
+                            Plain t ->
+                                Element.text t
+                    )
+                |> Element.paragraph []
+
+
+codeEditor : Model -> Element (Lantern.App.Message Message)
+codeEditor model =
+    Html.node "code-editor"
+        [ Html.Attributes.attribute "value" model.code ]
+        []
+        |> Element.html
+
+
 renderCell : Context -> Model -> Element (Lantern.App.Message Message)
-renderCell { theme } model =
+renderCell context model =
     let
         overlay =
             case model.interpreter of
@@ -199,34 +282,19 @@ renderCell { theme } model =
                 Panic _ ->
                     Element.none
 
-                Input inputRequest ( env, thunk ) ->
+                UI ui ( env, thunk ) ->
                     Element.column
                         [ Element.width Element.fill
                         , Element.height Element.fill
-                        , Element.Background.color theme.bgDefault
+                        , Element.Background.color context.theme.bgDefault
                         ]
-                        ((inputRequest
-                            |> Dict.toList
-                            |> List.map
-                                (\( k, v ) ->
-                                    case v of
-                                        TextInput s ->
-                                            LanternUi.Input.text theme
-                                                []
-                                                { onChange = TextInput >> UpdateInputRequest k >> Lantern.App.Message
-                                                , text = s
-                                                , placeholder = Nothing
-                                                , label = Element.Input.labelAbove [] (Element.text k)
-                                                }
-                                )
-                         )
-                            ++ [ LanternUi.Input.button theme
-                                    []
-                                    { onPress = Just (Lantern.App.Message (HandleIO ( Ok ( Located.fakeLoc (Const (Enclojure.inputRequestToValue inputRequest)), env ), thunk )))
-                                    , label = Element.text "Submit"
-                                    }
-                               ]
-                        )
+                        [ renderUI context ui
+                        , LanternUi.Input.button context.theme
+                            []
+                            { onPress = Just (Lantern.App.Message (HandleIO ( Ok ( Located.fakeLoc (Const (Enclojure.uiToValue ui)), env ), thunk )))
+                            , label = Element.text "Submit"
+                            }
+                        ]
 
                 Running ->
                     Element.text "Running"
@@ -240,15 +308,10 @@ renderCell { theme } model =
     in
     Element.column
         []
-        [ LanternUi.Input.multiline theme
-            [ Element.inFront overlay ]
-            { onChange = SetCode >> Lantern.App.Message
-            , text = model.code
-            , placeholder = Nothing
-            , spellcheck = False
-            , label = Element.Input.labelHidden "Code"
-            }
-        , LanternUi.Input.button theme
+        [ Element.el
+            [ Element.width Element.fill, Element.inFront overlay ]
+            (codeEditor model)
+        , LanternUi.Input.button context.theme
             []
             { onPress = Just (Lantern.App.Message action)
             , label = Element.text label

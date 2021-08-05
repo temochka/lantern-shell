@@ -32,18 +32,36 @@ type Arity a
     | Variadic ({ args : a, rest : List Value } -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk ))
 
 
-type InputType
+type TextFormat
+    = Plain String
+
+
+type InputCell
     = TextInput String
+    | MaskedTextInput String
 
 
-type alias InputRequest =
-    Dict String InputType
+type alias InputKey =
+    String
+
+
+type Cell
+    = Input InputKey
+    | Text (List TextFormat)
+    | VStack (List Cell)
+    | HStack (List Cell)
+
+
+type alias UI =
+    { inputs : Dict InputKey InputCell
+    , cell : Cell
+    }
 
 
 type IO
     = Const Value
     | Sleep Float
-    | InputRequest InputRequest
+    | ShowUI UI
 
 
 type alias Callable =

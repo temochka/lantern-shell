@@ -1,6 +1,5 @@
 module Enclojure.Lib exposing
     ( apply
-    , apply_
     , assoc
     , conj
     , cons
@@ -8,7 +7,6 @@ module Enclojure.Lib exposing
     , div
     , first
     , get
-    , input
     , isEqual
     , isFloat
     , isGreaterThan
@@ -32,33 +30,17 @@ module Enclojure.Lib exposing
     , sleep
     , str
     , throw
+    , ui
     )
 
 import Array
 import Dict
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect)
+import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, pure)
 import Enclojure.Types exposing (..)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
-
-
-pure : (a -> Result Exception IO) -> (a -> Env -> Continuation -> Runtime.Step)
-pure fn =
-    \v env k -> ( fn v |> Result.map (\io -> ( io, env )), Just (Thunk k) )
-
-
-apply : Located Value -> Located Value -> Env -> Continuation -> Step
-apply ((Located fnLoc fnExpr) as fn) arg env k =
-    case fnExpr of
-        Fn _ callable ->
-            ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
-
-        _ ->
-            ( Err (Located fnLoc (Exception (Runtime.inspectLocated fn ++ " is not a valid callable.")))
-            , Just (Thunk k)
-            )
 
 
 sleep : Callable
@@ -80,28 +62,83 @@ sleep =
     }
 
 
-input : Callable
-input =
+ui : Callable
+ui =
     let
-        arity1 val =
+        toTextPart (Located _ val) =
             case val of
-                Map inputRequest ->
-                    inputRequest
-                        |> ValueMap.foldl
-                            (\k (Located _ v) a ->
-                                case ( k, v ) of
-                                    ( Keyword name, Keyword "text" ) ->
-                                        a
-                                            |> Result.map (Dict.insert name (TextInput ""))
-
-                                    ( _, _ ) ->
-                                        Err (Exception "type error: invalid argument to input")
-                            )
-                            (Ok Dict.empty)
-                        |> Result.map InputRequest
+                String s ->
+                    Ok (Plain s)
 
                 _ ->
-                    Err (Exception "type error: input expects a map as its argument")
+                    Err (Exception "text parts must be plain strings")
+
+        toUi inputs (Located _ val) =
+            case val of
+                Vector v ->
+                    case Array.toList v of
+                        (Located _ (Keyword "v-stack")) :: cells ->
+                            cells
+                                |> List.foldl
+                                    (\e acc ->
+                                        acc
+                                            |> Result.andThen
+                                                (\( accInputs, l ) ->
+                                                    toUi accInputs e
+                                                        |> Result.map
+                                                            (\( retInputs, retCell ) ->
+                                                                ( retInputs, retCell :: l )
+                                                            )
+                                                )
+                                    )
+                                    (Ok ( inputs, [] ))
+                                |> Result.map (Tuple.mapSecond (List.reverse >> VStack))
+
+                        (Located _ (Keyword "h-stack")) :: cells ->
+                            cells
+                                |> List.foldl
+                                    (\e acc ->
+                                        acc
+                                            |> Result.andThen
+                                                (\( accInputs, l ) ->
+                                                    toUi accInputs e
+                                                        |> Result.map
+                                                            (\( retInputs, retCell ) ->
+                                                                ( retInputs, retCell :: l )
+                                                            )
+                                                )
+                                    )
+                                    (Ok ( inputs, [] ))
+                                |> Result.map (Tuple.mapSecond (List.reverse >> HStack))
+
+                        (Located _ (Keyword "text")) :: parts ->
+                            parts
+                                |> List.foldl (\e a -> toTextPart e |> Result.map2 (flip (::)) a) (Ok [])
+                                |> Result.map (Text >> Tuple.pair inputs)
+
+                        (Located _ (Keyword "text-input")) :: args ->
+                            case args of
+                                [ Located _ (Keyword key) ] ->
+                                    Ok ( Dict.insert key (TextInput "") inputs, Input key )
+
+                                _ ->
+                                    Err (Exception "type error: invalid arguments to text-input cell")
+
+                        (Located _ (Keyword cellType)) :: _ ->
+                            Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type"))
+
+                        _ :: _ ->
+                            Err (Exception "type error: cell type must be a keyword")
+
+                        [] ->
+                            Err (Exception "type error: empty vector is not a valid cell")
+
+                _ ->
+                    Err (Exception "cell must be a vector")
+
+        arity1 val =
+            toUi Dict.empty (Located.fakeLoc val)
+                |> Result.map (\( inputs, cell ) -> ShowUI { cell = cell, inputs = inputs })
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
@@ -782,8 +819,8 @@ toRuntimeStep ( r, k ) =
     ( r |> Result.mapError Located.getValue |> Result.map (Tuple.mapFirst Located.getValue), k )
 
 
-apply_ : Callable
-apply_ =
+apply : Callable
+apply =
     let
         arity2 signature env k =
             let
@@ -808,7 +845,7 @@ apply_ =
             in
             case listArgsResult of
                 Ok listArgs ->
-                    apply
+                    Runtime.apply
                         (Located.fakeLoc fn)
                         (Located.fakeLoc (List (List.map Located.fakeLoc (posArgs ++ listArgs))))
                         env

@@ -4,14 +4,14 @@ import Array
 import Dict
 import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types
+import Enclojure.Types as Types
     exposing
         ( Arity(..)
         , Callable
         , Continuation
         , Env
         , Exception(..)
-        , IO
+        , IO(..)
         , Number(..)
         , Thunk(..)
         , Value(..)
@@ -310,3 +310,20 @@ toString value =
 
         _ ->
             inspect value
+
+
+pure : (a -> Result Exception IO) -> (a -> Env -> Continuation -> Step)
+pure fn =
+    \v env k -> ( fn v |> Result.map (\io -> ( io, env )), Just (Thunk k) )
+
+
+apply : Located Value -> Located Value -> Env -> Continuation -> Types.Step
+apply ((Located fnLoc fnExpr) as fn) arg env k =
+    case fnExpr of
+        Fn _ callable ->
+            ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
+
+        _ ->
+            ( Err (Located fnLoc (Exception (inspectLocated fn ++ " is not a valid callable.")))
+            , Just (Thunk k)
+            )

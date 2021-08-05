@@ -1,9 +1,10 @@
-module Enclojure exposing (eval, inputRequestToValue)
+module Enclojure exposing (eval, uiToValue)
 
 import Array exposing (Array)
-import Dict exposing (Dict)
+import Dict
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
+import Enclojure.Lib.String as LibString
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Parser
 import Enclojure.Runtime as Runtime
@@ -53,7 +54,7 @@ resolveSymbol env symbol =
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThanOrEqual))
 
                 "apply" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.apply_))
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.apply))
 
                 "assoc" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.assoc))
@@ -75,9 +76,6 @@ resolveSymbol env symbol =
 
                 "get" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.get))
-
-                "input" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.input))
 
                 "integer?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
@@ -112,8 +110,14 @@ resolveSymbol env symbol =
                 "str" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.str))
 
+                "string/split-lines" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation LibString.splitLines))
+
                 "throw" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.throw))
+
+                "ui" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.ui))
 
                 _ ->
                     Err (Exception ("Unknown symbol " ++ symbol))
@@ -598,7 +602,7 @@ evalApply fnExpr (Located loc argExprs) env k =
                                                 )
                                     )
                         )
-                        (\args argsEnv -> Lib.apply fn args argsEnv k)
+                        (\args argsEnv -> Runtime.apply fn args argsEnv k)
                     |> Thunk
                 )
             )
@@ -717,9 +721,9 @@ prelude =
     Parser.parse Lib.prelude
 
 
-inputRequestToValue : Enclojure.Types.InputRequest -> Value
-inputRequestToValue inputRequest =
-    inputRequest
+uiToValue : Enclojure.Types.UI -> Value
+uiToValue { inputs } =
+    inputs
         |> Dict.toList
         |> List.map
             (\( k, v ) ->
@@ -727,6 +731,9 @@ inputRequestToValue inputRequest =
                     value =
                         case v of
                             Enclojure.Types.TextInput s ->
+                                String s
+
+                            Enclojure.Types.MaskedTextInput s ->
                                 String s
                 in
                 ( Keyword k, Located.fakeLoc value )

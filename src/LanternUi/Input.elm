@@ -1,4 +1,4 @@
-module LanternUi.Input exposing (Language(..), button, code, multiline, text)
+module LanternUi.Input exposing (Language(..), button, code, multiline, password, text)
 
 import Element exposing (Element)
 import Element.Background
@@ -50,6 +50,23 @@ text :
     -> Element msg
 text theme extraAttrs mainAttrs =
     Element.Input.text
+        ([ inputWidth ] ++ extraAttrs)
+        mainAttrs
+
+
+password :
+    Theme
+    -> List (Element.Attribute msg)
+    ->
+        { onChange : String -> msg
+        , text : String
+        , placeholder : Maybe (Element.Input.Placeholder msg)
+        , label : Element.Input.Label msg
+        , show : Bool
+        }
+    -> Element msg
+password theme extraAttrs mainAttrs =
+    Element.Input.newPassword
         ([ inputWidth ] ++ extraAttrs)
         mainAttrs
 
