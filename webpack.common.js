@@ -21,12 +21,14 @@ module.exports = {
     path: path.resolve(__dirname, "dist", "public")
   },
   plugins: [
-    new CopyPlugin([
-      {
-        from: path.resolve(__dirname, "index.html"),
-        to: path.resolve(__dirname, "dist", "public")
-      }
-    ])
+    new CopyPlugin({
+      patterns: [
+        {
+          from: path.resolve(__dirname, "index.html"),
+          to: path.resolve(__dirname, "dist", "public")
+        }
+      ]
+    })
   ],
   resolve: {
     extensions: [".ts", ".js"],
