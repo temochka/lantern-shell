@@ -87,13 +87,11 @@ view { theme } model =
     LanternUi.columnLayout
         theme
         []
-        [ LanternUi.Input.multiline theme
+        [ LanternUi.Input.code theme
             []
             { onChange = Update >> Lantern.App.Message
-            , text = model.query
-            , placeholder = Nothing
-            , spellcheck = False
-            , label = Element.Input.labelHidden "Reader query"
+            , value = model.query
+            , language = LanternUi.Input.Sql
             }
         , Element.column []
             (model.arguments
