@@ -122,6 +122,7 @@ code theme extraAttrs mainAttrs =
             Html.node "code-editor"
                 [ Html.Attributes.attribute "initvalue" mainAttrs.value
                 , Html.Attributes.attribute "mode" mode
+                , Html.Attributes.style "width" "100%"
                 , onCodeMirrorChange mainAttrs.onChange
                 ]
                 []

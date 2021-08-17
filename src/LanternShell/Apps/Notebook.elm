@@ -257,14 +257,6 @@ renderUI context { cell, inputs } =
                 |> Element.paragraph []
 
 
-codeEditor : Model -> Element (Lantern.App.Message Message)
-codeEditor model =
-    Html.node "code-editor"
-        [ Html.Attributes.attribute "value" model.code ]
-        []
-        |> Element.html
-
-
 renderCell : Context -> Model -> Element (Lantern.App.Message Message)
 renderCell context model =
     let
@@ -307,10 +299,13 @@ renderCell context model =
                 ( "Run", Run )
     in
     Element.column
-        []
-        [ Element.el
-            [ Element.width Element.fill, Element.inFront overlay ]
-            (codeEditor model)
+        [ Element.width Element.fill ]
+        [ LanternUi.Input.code context.theme
+            [ Element.inFront overlay ]
+            { onChange = SetCode >> Lantern.App.Message
+            , value = model.code
+            , language = LanternUi.Input.Enclojure
+            }
         , LanternUi.Input.button context.theme
             []
             { onPress = Just (Lantern.App.Message action)
