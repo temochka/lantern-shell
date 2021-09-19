@@ -730,7 +730,7 @@ uiToValue { inputs } =
                 let
                     value =
                         case v of
-                            Enclojure.Types.TextInput s ->
+                            Enclojure.Types.TextInput _ s ->
                                 String s
 
                             Enclojure.Types.MaskedTextInput s ->

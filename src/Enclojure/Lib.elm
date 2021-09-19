@@ -73,7 +73,7 @@ ui =
                 _ ->
                     Err (Exception "text parts must be plain strings")
 
-        toUi inputs (Located _ val) =
+        toUi inputs (Located _ val) defaults =
             case val of
                 Vector v ->
                     case Array.toList v of
@@ -84,7 +84,7 @@ ui =
                                         acc
                                             |> Result.andThen
                                                 (\( accInputs, l ) ->
-                                                    toUi accInputs e
+                                                    toUi accInputs e defaults
                                                         |> Result.map
                                                             (\( retInputs, retCell ) ->
                                                                 ( retInputs, retCell :: l )
@@ -101,7 +101,7 @@ ui =
                                         acc
                                             |> Result.andThen
                                                 (\( accInputs, l ) ->
-                                                    toUi accInputs e
+                                                    toUi accInputs e defaults
                                                         |> Result.map
                                                             (\( retInputs, retCell ) ->
                                                                 ( retInputs, retCell :: l )
@@ -119,7 +119,16 @@ ui =
                         (Located _ (Keyword "text-input")) :: args ->
                             case args of
                                 [ Located _ (Keyword key) ] ->
-                                    Ok ( Dict.insert key (TextInput "") inputs, Input key )
+                                    let
+                                        value =
+                                            Dict.get key defaults |> Maybe.withDefault (String "")
+                                    in
+                                    case value of
+                                        String s ->
+                                            Ok ( Dict.insert key (TextInput { suggestions = [ "banana", "bahamas" ] } s) inputs, Input key )
+
+                                        _ ->
+                                            Err (Exception "type error: the default for text-input must be a string")
 
                                 _ ->
                                     Err (Exception "type error: invalid arguments to text-input cell")
@@ -137,11 +146,33 @@ ui =
                     Err (Exception "cell must be a vector")
 
         arity1 val =
-            toUi Dict.empty (Located.fakeLoc val)
+            toUi Dict.empty (Located.fakeLoc val) Dict.empty
                 |> Result.map (\( inputs, cell ) -> ShowUI { cell = cell, inputs = inputs })
+
+        arity2 ( uiVal, defaultsMap ) =
+            case defaultsMap of
+                Map m ->
+                    m
+                        |> ValueMap.toList
+                        |> List.foldl
+                            (\( keyValue, Located _ val ) a ->
+                                case keyValue of
+                                    Keyword key ->
+                                        Dict.insert key val a
+
+                                    _ ->
+                                        a
+                            )
+                            Dict.empty
+                        |> toUi Dict.empty (Located.fakeLoc uiVal)
+                        |> Result.map (\( inputs, cell ) -> ShowUI { cell = cell, inputs = inputs })
+
+                _ ->
+                    Err (Exception ("type error: expected a map of defaults, got " ++ inspect defaultsMap))
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
+        , arity2 = Just (Fixed (pure arity2))
     }
 
 

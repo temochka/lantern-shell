@@ -123,6 +123,7 @@ code theme extraAttrs mainAttrs =
                 [ Html.Attributes.attribute "initvalue" mainAttrs.value
                 , Html.Attributes.attribute "mode" mode
                 , Html.Attributes.style "width" "100%"
+                , Html.Attributes.style "height" "100%"
                 , onCodeMirrorChange mainAttrs.onChange
                 ]
                 []

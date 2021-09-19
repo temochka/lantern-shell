@@ -37,7 +37,7 @@ type TextFormat
 
 
 type InputCell
-    = TextInput String
+    = TextInput { suggestions : List String } String
     | MaskedTextInput String
 
 
