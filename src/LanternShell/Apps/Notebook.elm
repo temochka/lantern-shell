@@ -126,7 +126,15 @@ update msg model =
                 UI ({ fuzzySelects } as ui) args ->
                     let
                         updatedFuzzySelects =
-                            Dict.update id (Maybe.map (\state -> LanternUi.FuzzySelect.update selectMsg state)) fuzzySelects
+                            Dict.update id
+                                (Maybe.withDefault LanternUi.FuzzySelect.hidden
+                                    >> LanternUi.FuzzySelect.update selectMsg
+                                    >> Just
+                                )
+                                fuzzySelects
+
+                        _ =
+                            Debug.log "updatedFuzzySelects" updatedFuzzySelects
                     in
                     ( { model | interpreter = UI { ui | fuzzySelects = updatedFuzzySelects } args }, Cmd.none )
 
@@ -264,14 +272,14 @@ renderUI context uiModel =
                                 else
                                     LanternUi.FuzzySelect.fuzzySelect
                                         context.theme
-                                        { label = Element.Input.labelHidden ""
+                                        { label = Element.Input.labelLeft [] (Element.text "foo")
                                         , onQueryChange = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
                                         , onInternalMessage = FuzzySelectMessage key >> Lantern.App.Message
                                         , onOptionSelect = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
-                                        , options = []
+                                        , options = List.map2 Tuple.pair opts.suggestions opts.suggestions
                                         , placeholder = Nothing
                                         , query = s
-                                        , state = Dict.get key fuzzySelects |> Maybe.andThen identity
+                                        , state = Dict.get key fuzzySelects |> Maybe.withDefault LanternUi.FuzzySelect.hidden
                                         , id = Nothing
                                         }
 

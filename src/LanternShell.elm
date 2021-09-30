@@ -95,7 +95,7 @@ init _ url key =
             { lanternConnection = lanternConnection
             , windowManager = windowManager
             , processTable = ProcessTable.empty
-            , fuzzySelect = Nothing
+            , fuzzySelect = LanternUi.FuzzySelect.hidden
             , theme = initialTheme
             , liveQueriesCache = Dict.empty
             , appLauncherQuery = ""
@@ -257,7 +257,7 @@ update msg model =
             [ \_ ->
                 ( { model
                     | processTable = newProcessTable
-                    , fuzzySelect = Nothing
+                    , fuzzySelect = LanternUi.FuzzySelect.hidden
                     , appLauncherQuery = ""
                   }
                 , Cmd.map (wrapAppMessage pid) appCmd

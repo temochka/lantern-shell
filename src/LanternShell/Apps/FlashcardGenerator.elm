@@ -278,7 +278,7 @@ renderFlashCard theme ({ userTranslations, definition, translation } as options)
                                 fuzzySelectState
 
                             else
-                                Nothing
+                                LanternUi.FuzzySelect.hidden
                         }
                     , if List.isEmpty subsenses then
                         Element.none
@@ -403,7 +403,7 @@ init =
       , cache = Dict.empty
       , uiState = Config { apiCredentials = Nothing }
       , userTranslations = Dict.empty
-      , fuzzySelect = ( "", Nothing )
+      , fuzzySelect = ( "", LanternUi.FuzzySelect.hidden )
       }
     , Lantern.readerQuery
         (Lantern.Query.withArguments
