@@ -17,7 +17,6 @@ import Keyboard.Key exposing (Key(..))
 import Lantern.App
 import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
-import LanternShell.Apps.Spreadsheet exposing (Record)
 import LanternUi
 import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
