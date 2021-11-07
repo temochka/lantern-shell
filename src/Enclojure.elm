@@ -95,6 +95,9 @@ resolveSymbol env symbol =
                 "peek" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.peek))
 
+                "read-field" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.readField))
+
                 "rem" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rem))
 
@@ -742,8 +745,8 @@ uiToValue { inputs } =
         |> Map
 
 
-eval : String -> Step
-eval code =
+eval : Env -> String -> Step
+eval initEnv code =
     Parser.parse code
         |> Result.mapError (Debug.toString >> Exception)
         |> Result.map2
@@ -759,7 +762,7 @@ eval code =
         |> Result.map
             (\program ->
                 evalExpression program
-                    Runtime.emptyEnv
+                    initEnv
                     (\(Located pos v) env ->
                         ( Ok ( Located pos (Const v), env ), Nothing )
                     )

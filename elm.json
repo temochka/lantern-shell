@@ -16,6 +16,7 @@
       "elm/parser": "1.1.0",
       "elm/time": "1.0.0",
       "elm/url": "1.0.0",
+      "elm-community/list-extra": "8.5.1",
       "elm-explorations/markdown": "1.0.0",
       "mdgriffith/elm-ui": "1.1.6",
       "truqu/elm-base64": "2.0.4",

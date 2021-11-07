@@ -61,6 +61,7 @@ type alias UI =
 type IO
     = Const Value
     | Sleep Float
+    | ReadField String
     | ShowUI UI
 
 

@@ -24,6 +24,7 @@ module Enclojure.Lib exposing
     , peek
     , plus
     , prelude
+    , readField
     , rem
     , rest_
     , seq
@@ -59,6 +60,31 @@ sleep =
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
+    }
+
+
+readField : Callable
+readField =
+    let
+        arity1 key env k =
+            case key of
+                String cellName ->
+                    ( Ok ( ReadField cellName, env )
+                    , Just
+                        (Thunk
+                            (\v rEnv ->
+                                ( Ok ( Located.map Const v, rEnv ), Just (Thunk k) )
+                            )
+                        )
+                    )
+
+                _ ->
+                    ( Err (Exception "type error: read-field expects one string argument")
+                    , Just (Thunk k)
+                    )
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed arity1)
     }
 
 
