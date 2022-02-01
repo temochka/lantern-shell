@@ -7,6 +7,7 @@ module LanternShell.Apps exposing
     , lanternAppFor
     , launcherForId
     , notebook
+    , scripts
     )
 
 import Lantern
@@ -20,6 +21,7 @@ import LanternShell.Apps.Migrations as MigrationsApp
 import LanternShell.Apps.Notebook as NotebookApp
 import LanternShell.Apps.Notes as NotesApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
+import LanternShell.Apps.Scripts as ScriptsApp
 import LanternShell.Apps.WriterQuery as WriterQueryApp
 import LanternUi.Theme
 
@@ -40,6 +42,7 @@ type App
     | NotebookApp NotebookApp.Model
     | NotesApp NotesApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
+    | ScriptsApp ScriptsApp.Model
     | WriterQueryApp WriterQueryApp.Model
 
 
@@ -53,6 +56,7 @@ type Message
     | NotebookMsg NotebookApp.Message
     | NotesMsg NotesApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
+    | ScriptsMsg ScriptsApp.Message
     | WriterQueryMsg WriterQueryApp.Message
 
 
@@ -85,6 +89,9 @@ appId app =
 
         ReaderQueryApp _ ->
             "ReaderQuery"
+
+        ScriptsApp _ ->
+            "Scripts"
 
         WriterQueryApp _ ->
             "WriterQuery"
@@ -119,6 +126,9 @@ launcherForId id =
 
         "ReaderQuery" ->
             Just readerQuery
+
+        "Scripts" ->
+            Just scripts
 
         "WriterQuery" ->
             Just writerQuery
@@ -157,6 +167,9 @@ lanternAppFor app =
         ReaderQueryApp _ ->
             readerQuery
 
+        ScriptsApp _ ->
+            scripts
+
         WriterQueryApp _ ->
             writerQuery
 
@@ -170,6 +183,7 @@ all =
     , notebook
     , notes
     , readerQuery
+    , scripts
     , writerQuery
     , migrations
     , logViewer
@@ -408,6 +422,32 @@ readerQuery context =
         , context = \_ -> { theme = context.theme }
         }
         ReaderQueryApp.lanternApp
+
+
+scripts : Context msg -> Lantern.App.App () App Message
+scripts context =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    ScriptsMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    ScriptsApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = ScriptsApp
+        , wrapMsg = ScriptsMsg
+        , context = \_ -> { theme = context.theme }
+        }
+        ScriptsApp.lanternApp
 
 
 writerQuery : Context msg -> Lantern.App.App () App Message
