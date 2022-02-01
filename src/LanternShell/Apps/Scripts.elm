@@ -22,6 +22,7 @@ import LanternUi
 import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
 import LanternUi.Theme
+import List exposing (intersperse)
 import List.Extra
 import Process
 import Task
@@ -31,26 +32,38 @@ type alias Context =
     { theme : LanternUi.Theme.Theme }
 
 
-type alias NodeId =
-    Int
+type ConsoleEntry
+    = StatusOutput String
 
 
-type alias DocumentNodeContainer n =
-    { n | id : NodeId, parentId : NodeId }
-
-
-type ScriptResult
-    = ScriptRefreshPending
-    | ScriptRunning
-    | ScriptError String
-    | ScriptResult String
+type alias Console =
+    List ConsoleEntry
 
 
 type alias Model =
     { interpreter : Interpreter
     , scripts : List Script
     , scriptEditor : Script
+    , console : Console
     }
+
+
+println : String -> Console -> Console
+println string console =
+    StatusOutput string :: console
+
+
+scriptName : Script -> String
+scriptName { name } =
+    let
+        trimmedName =
+            String.trim name
+    in
+    if not <| String.isEmpty trimmedName then
+        String.trim name
+
+    else
+        "unnamed script"
 
 
 type Message
@@ -59,7 +72,7 @@ type Message
     | Stop
     | UpdateInputRequest InputKey InputCell
     | UpdateScripts (Result Lantern.Error (List Script))
-    | HandleIO NodeId ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    | HandleIO ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
     | SaveScript
@@ -75,6 +88,7 @@ init =
     ( { interpreter = Stopped
       , scripts = []
       , scriptEditor = { id = Nothing, code = "", name = "", input = "" }
+      , console = []
       }
     , Cmd.none
     )
@@ -93,10 +107,10 @@ type Interpreter
     | Panic (Located Exception)
 
 
-trampoline : NodeId -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( ScriptResult, Cmd Message )
-trampoline nodeId ( result, thunk ) maxdepth =
+trampoline : ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( Interpreter, Cmd Message )
+trampoline ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
-        ( ScriptError "Stack level too deep", Cmd.none )
+        ( Panic (Located.fakeLoc (Exception "Stack level too deep")), Cmd.none )
 
     else
         case result of
@@ -105,35 +119,30 @@ trampoline nodeId ( result, thunk ) maxdepth =
                     Const v ->
                         case thunk of
                             Just (Thunk continuation) ->
-                                trampoline nodeId (continuation (Located.replace io v) env) (maxdepth - 1)
+                                trampoline (continuation (Located.replace io v) env) (maxdepth - 1)
 
                             Nothing ->
-                                ( ScriptResult (Runtime.inspect v), Cmd.none )
+                                ( Done ( v, env ), Cmd.none )
 
                     Sleep ms ->
-                        ( ScriptRunning
+                        ( Running
                         , Process.sleep ms
                             |> Task.perform
                                 (\_ ->
-                                    HandleIO nodeId ( Ok ( Located.replace io (Const Nil), env ), thunk )
+                                    HandleIO ( Ok ( Located.replace io (Const Nil), env ), thunk )
                                 )
                         )
 
-                    ShowUI _ ->
-                        ( ScriptError "Not implemented"
+                    ShowUI ui ->
+                        ( UI { enclojureUi = ui, fuzzySelects = Dict.empty } ( env, thunk )
                         , Cmd.none
                         )
 
                     ReadField _ ->
-                        case thunk of
-                            Just (Thunk continuation) ->
-                                trampoline nodeId (continuation (Located.replace io (String "apple")) env) (maxdepth - 1)
+                        ( Panic (Located.fakeLoc (Exception "Not implemented")), Cmd.none )
 
-                            Nothing ->
-                                ( ScriptResult "\"apple\"", Cmd.none )
-
-            Err (Located _ (Exception err)) ->
-                ( ScriptError err, Cmd.none )
+            Err e ->
+                ( Panic e, Cmd.none )
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
@@ -177,17 +186,36 @@ update msg model =
             ( { model | scriptEditor = editor }, Cmd.none )
 
         Run ->
-            ( model, Cmd.none )
+            let
+                ( interpreter, retMsg ) =
+                    trampoline (Enclojure.eval Runtime.emptyEnv model.scriptEditor.code) 10000
+            in
+            ( { model
+                | interpreter = interpreter
+                , console =
+                    model.console
+                        |> println ("Starting " ++ scriptName model.scriptEditor)
+                        |> println ("Result" ++ Debug.toString interpreter)
+              }
+            , Cmd.map Lantern.App.Message retMsg
+            )
 
         Stop ->
             ( { model | interpreter = Panic (Located.fakeLoc (Exception "Terminated")) }, Cmd.none )
 
-        HandleIO scriptId ret ->
+        HandleIO ret ->
             let
-                ( scriptResult, cmd ) =
-                    trampoline scriptId ret 10000
+                ( interpreter, retMsg ) =
+                    trampoline ret 10000
             in
-            ( model, Cmd.none )
+            ( { model
+                | interpreter = interpreter
+                , console =
+                    model.console
+                        |> println ("Result" ++ Debug.toString interpreter)
+              }
+            , Cmd.map Lantern.App.Message retMsg
+            )
 
         UpdateInputRequest name v ->
             case model.interpreter of
@@ -462,6 +490,14 @@ view context model =
             else
                 LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message SaveScript }
 
+        runButton =
+            LanternUi.Input.button context.theme [] { label = Element.text "Run", onPress = Just <| Lantern.App.Message Run }
+
+        buttons =
+            Element.row
+                [ Element.width Element.fill ]
+                [ saveButton, runButton ]
+
         scriptEditor =
             Element.column
                 [ Element.width (Element.fillPortion 5) ]
@@ -478,13 +514,29 @@ view context model =
                     , value = model.scriptEditor.code
                     , language = LanternUi.Input.Enclojure
                     }
-                , saveButton
+                , buttons
                 ]
+
+        console =
+            model.console
+                |> List.map
+                    (\entry ->
+                        case entry of
+                            StatusOutput s ->
+                                Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
+                    )
+                |> Element.column
+                    [ Element.width Element.fill ]
     in
-    Element.row
-        [ Element.width Element.fill ]
-        [ scriptsPanel
-        , scriptEditor
+    LanternUi.columnLayout
+        context.theme
+        []
+        [ Element.row
+            [ Element.width Element.fill ]
+            [ scriptsPanel
+            , scriptEditor
+            ]
+        , console
         ]
 
 
