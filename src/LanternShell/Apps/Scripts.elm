@@ -46,6 +46,7 @@ type alias Model =
     , scripts : List Script
     , scriptEditor : Script
     , console : Console
+    , repl : String
     }
 
 
@@ -86,6 +87,8 @@ type Message
     | EditScript Script
     | UpdateName String
     | UpdateCode String
+    | UpdateRepl String
+    | Eval String
     | NoOp
 
 
@@ -95,6 +98,7 @@ init =
       , scripts = []
       , scriptEditor = { id = Nothing, code = "", name = "", input = "" }
       , console = []
+      , repl = ""
       }
     , Cmd.none
     )
@@ -180,6 +184,30 @@ update msg model =
                     { scriptEditor | code = code }
             in
             ( { model | scriptEditor = editor }, Cmd.none )
+
+        UpdateRepl code ->
+            ( { model | repl = code }, Cmd.none )
+
+        Eval code ->
+            case model.interpreter of
+                Done ( _, env ) ->
+                    let
+                        ( interpreter, retMsg ) =
+                            trampoline (Enclojure.eval env code) 10000
+                    in
+                    ( { model
+                        | interpreter = interpreter
+                        , console =
+                            model.console
+                                |> printLn "Evaluating from REPL"
+                                |> printStatus interpreter
+                        , repl = ""
+                      }
+                    , Cmd.map Lantern.App.Message retMsg
+                    )
+
+                _ ->
+                    ( { model | console = model.console |> printLn "Can't eval from REPL at this time" }, Cmd.none )
 
         UpdateName name ->
             let
@@ -499,23 +527,28 @@ view context model =
         runButton =
             LanternUi.Input.button context.theme [] { label = Element.text "Run", onPress = Just <| Lantern.App.Message Run }
 
+        evalButton =
+            LanternUi.Input.button context.theme [] { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.scriptEditor.code) }
+
         buttons =
             Element.row
                 [ Element.width Element.fill ]
-                [ saveButton, runButton ]
+                [ saveButton, runButton, evalButton ]
 
         scriptEditor =
             Element.column
-                [ Element.width (Element.fillPortion 5) ]
+                [ Element.width Element.fill ]
                 [ LanternUi.Input.text context.theme
                     [ Element.width Element.fill ]
                     { onChange = UpdateName >> Lantern.App.Message
                     , text = model.scriptEditor.name
-                    , placeholder = Just (Element.Input.placeholder [] (Element.text "Script name"))
-                    , label = Element.Input.labelHidden "Script name"
+                    , placeholder = Nothing
+                    , label = Element.Input.labelAbove [] (Element.text "Script name")
                     }
+                , Element.paragraph [] [ Element.text "Code" ]
                 , LanternUi.Input.code context.theme
-                    [ Element.width Element.fill ]
+                    [ Element.width Element.fill
+                    ]
                     { onChange = UpdateCode >> Lantern.App.Message
                     , value = model.scriptEditor.code
                     , language = LanternUi.Input.Enclojure
@@ -557,6 +590,29 @@ view context model =
                     )
                 |> Element.column
                     [ Element.width Element.fill ]
+
+        handleKeyPress event =
+            case ( event.keyCode, event.metaKey, event.altKey ) of
+                ( Keyboard.Key.Enter, True, False ) ->
+                    ( Eval model.repl |> Lantern.App.Message, True )
+
+                _ ->
+                    ( NoOp |> Lantern.App.Message, False )
+
+        repl =
+            Element.column [ Element.width Element.fill ]
+                [ Element.paragraph [] [ Element.text "REPL" ]
+                , LanternUi.Input.code context.theme
+                    [ Element.width Element.fill
+                    , Element.htmlAttribute (Html.Events.preventDefaultOn "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
+                    ]
+                    { onChange = UpdateRepl >> Lantern.App.Message
+                    , value = model.repl
+                    , language = LanternUi.Input.Enclojure
+                    }
+                , Element.paragraph [] [ Element.text "Console" ]
+                , console
+                ]
     in
     LanternUi.columnLayout
         context.theme
@@ -564,9 +620,8 @@ view context model =
         [ Element.row
             [ Element.width Element.fill ]
             [ scriptsPanel
-            , scriptEditor
+            , Element.column [ Element.width (Element.fillPortion 5) ] [ scriptEditor, repl ]
             ]
-        , console
         ]
 
 
