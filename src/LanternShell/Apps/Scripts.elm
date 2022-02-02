@@ -84,6 +84,7 @@ type Message
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
     | SaveScript
     | ScriptSaved (Result Lantern.Error Lantern.Query.WriterResult)
+    | NewScript
     | EditScript Script
     | UpdateName String
     | UpdateCode String
@@ -96,12 +97,17 @@ init : ( Model, Cmd (Lantern.App.Message Message) )
 init =
     ( { interpreter = Stopped
       , scripts = []
-      , scriptEditor = { id = Nothing, code = "", name = "", input = "" }
+      , scriptEditor = unsavedScript
       , console = []
       , repl = ""
       }
     , Cmd.none
     )
+
+
+unsavedScript : { id : Maybe Int, code : String, name : String, input : String }
+unsavedScript =
+    { id = Nothing, code = "", name = "", input = "" }
 
 
 type alias UiModel =
@@ -289,6 +295,9 @@ update msg model =
                         ]
             in
             ( model, Lantern.writerQuery query ScriptSaved |> Lantern.App.call )
+
+        NewScript ->
+            ( { model | scriptEditor = unsavedScript, interpreter = Stopped }, Cmd.none )
 
         ScriptSaved _ ->
             ( model, Cmd.none )
@@ -500,40 +509,79 @@ renderCell context model =
 view : Context -> Model -> Element (Lantern.App.Message Message)
 view context model =
     let
-        scriptsPanel =
-            model.scripts
-                |> List.map
-                    (\script ->
-                        Element.el
-                            [ Element.width Element.fill
-                            , Element.Events.onClick (Lantern.App.Message <| EditScript script)
-                            , if script.id == model.scriptEditor.id then
-                                Element.Background.color context.theme.bgActive
+        runButtonTitle =
+            case model.interpreter of
+                Stopped ->
+                    "Start"
 
-                              else
-                                LanternUi.noneAttribute
-                            ]
-                            (Element.text script.name)
-                    )
-                |> Element.column [ Element.width (Element.fillPortion 1) ]
-
-        saveButton =
-            if model.scriptEditor.id == Nothing then
-                LanternUi.Input.button context.theme [] { label = Element.text "Create", onPress = Just <| Lantern.App.Message CreateScript }
-
-            else
-                LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message SaveScript }
+                _ ->
+                    "Restart"
 
         runButton =
-            LanternUi.Input.button context.theme [] { label = Element.text "Run", onPress = Just <| Lantern.App.Message Run }
+            LanternUi.Input.button context.theme [] { label = Element.text runButtonTitle, onPress = Just <| Lantern.App.Message Run }
 
         evalButton =
             LanternUi.Input.button context.theme [] { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.scriptEditor.code) }
 
-        buttons =
+        currentScriptButtons =
             Element.row
                 [ Element.width Element.fill ]
                 [ saveButton, runButton, evalButton ]
+
+        newScriptButton =
+            Element.el
+                [ Element.width Element.fill ]
+                (LanternUi.Input.button context.theme [] { label = Element.text "New script", onPress = Just <| Lantern.App.Message NewScript })
+
+        allScripts =
+            List.append
+                (if model.scriptEditor.id == Nothing then
+                    [ model.scriptEditor ]
+
+                 else
+                    []
+                )
+                model.scripts
+
+        scriptsPanel =
+            allScripts
+                |> List.map
+                    (\script ->
+                        let
+                            isCurrent =
+                                script.id == model.scriptEditor.id
+                        in
+                        Element.row
+                            [ Element.width Element.fill
+                            , if isCurrent then
+                                Element.Background.color context.theme.bgHighlight
+
+                              else
+                                LanternUi.noneAttribute
+                            ]
+                            [ Element.el [ Element.Events.onClick (Lantern.App.Message <| EditScript script) ] (Element.text (scriptName script))
+                            , if isCurrent then
+                                currentScriptButtons
+
+                              else
+                                Element.none
+                            ]
+                    )
+                |> (::)
+                    (if model.scriptEditor.id == Nothing then
+                        Element.none
+
+                     else
+                        newScriptButton
+                    )
+                |> Element.column [ Element.width (Element.fillPortion 1), Element.alignTop ]
+
+        saveButton =
+            if model.scriptEditor.id == Nothing then
+                LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message CreateScript }
+
+            else
+                LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message SaveScript }
 
         scriptEditor =
             Element.column
@@ -553,43 +601,53 @@ view context model =
                     , value = model.scriptEditor.code
                     , language = LanternUi.Input.Enclojure
                     }
-                , buttons
                 ]
 
         console =
             model.console
-                |> List.map
-                    (\entry ->
-                        case entry of
-                            ConsoleString s ->
-                                Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
+                |> List.indexedMap
+                    (\i entry ->
+                        Element.el
+                            [ Element.width Element.fill
+                            , if i == 0 then
+                                Element.alpha 1.0
 
-                            ConsoleStatus interpreter ->
-                                case interpreter of
-                                    Stopped ->
-                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Stopped" ]
+                              else
+                                Element.alpha 0.6
+                            ]
+                            (case entry of
+                                ConsoleString s ->
+                                    Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
 
-                                    Blocked ->
-                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Waiting..." ]
+                                ConsoleStatus interpreter ->
+                                    case interpreter of
+                                        Stopped ->
+                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Stopped" ]
 
-                                    UI _ _ ->
-                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Some UI" ]
+                                        Blocked ->
+                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Waiting..." ]
 
-                                    Running ->
-                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Running..." ]
+                                        UI _ _ ->
+                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Some UI" ]
 
-                                    Done ( val, _ ) ->
-                                        Element.column
-                                            [ Element.width Element.fill ]
-                                            [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
-                                            , Element.el [ Element.width Element.fill ] (Element.text (Runtime.inspect val))
-                                            ]
+                                        Running ->
+                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Running..." ]
 
-                                    Panic e ->
-                                        Element.paragraph [ Element.width Element.fill ] [ Element.text (Runtime.inspectLocated (Located.map Throwable e)) ]
+                                        Done ( val, _ ) ->
+                                            Element.column
+                                                [ Element.width Element.fill ]
+                                                [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
+                                                , Element.el [ Element.width Element.fill ] (Element.text (Runtime.inspect val))
+                                                ]
+
+                                        Panic e ->
+                                            Element.paragraph [ Element.width Element.fill ] [ Element.text (Runtime.inspectLocated (Located.map Throwable e)) ]
+                            )
                     )
                 |> Element.column
-                    [ Element.width Element.fill ]
+                    [ Element.width Element.fill
+                    , Element.spacing 10
+                    ]
 
         handleKeyPress event =
             case ( event.keyCode, event.metaKey, event.altKey ) of
@@ -618,7 +676,7 @@ view context model =
         context.theme
         []
         [ Element.row
-            [ Element.width Element.fill ]
+            [ Element.width Element.fill, Element.spacing 20 ]
             [ scriptsPanel
             , Element.column [ Element.width (Element.fillPortion 5) ] [ scriptEditor, repl ]
             ]
