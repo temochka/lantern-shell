@@ -104,7 +104,7 @@ init _ url key =
     in
     launchers
         |> List.foldl
-            (\launcher ( model, cmd ) -> update (LaunchApp (launcher >> .init)) model |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ]))
+            (\launcher ( model, cmd ) -> update (LaunchApp (\x -> (launcher x).init Nothing)) model |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ]))
             ( starterModel
             , Cmd.none
             )
@@ -406,7 +406,7 @@ renderAppLauncher model =
         [ Element.el [ Element.Font.color model.theme.fontContrastInactive ] (Element.text ">")
         , LanternUi.FuzzySelect.fuzzySelect
             lightTheme
-            { options = LanternShell.Apps.all |> List.map (\app -> ( (app (appContext model)).name, app >> .init ))
+            { options = LanternShell.Apps.all |> List.map (\app -> ( (app (appContext model)).name, \x -> (app x).init Nothing ))
             , placeholder = Nothing
             , label = Element.Input.labelHidden "Launch app"
             , id = Just "lanternAppLauncher"

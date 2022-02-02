@@ -41,12 +41,22 @@ type alias Console =
     List ConsoleEntry
 
 
+type alias Flags =
+    { launchValueInspector : Value -> Cmd (Lantern.App.Message Message) }
+
+
+defaultFlags : Flags
+defaultFlags =
+    { launchValueInspector = \_ -> Cmd.none }
+
+
 type alias Model =
     { interpreter : Interpreter
     , scripts : List Script
     , scriptEditor : Script
     , console : Console
     , repl : String
+    , flags : Flags
     }
 
 
@@ -94,13 +104,14 @@ type Message
     | NoOp
 
 
-init : ( Model, Cmd (Lantern.App.Message Message) )
-init =
+init : Flags -> ( Model, Cmd (Lantern.App.Message Message) )
+init flags =
     ( { interpreter = Stopped
       , scripts = []
       , scriptEditor = unsavedScript
       , console = []
       , repl = ""
+      , flags = flags
       }
     , Cmd.none
     )
@@ -738,11 +749,11 @@ liveQueries _ =
     [ tablesQuery ]
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context Flags Model Message
 lanternApp =
     Lantern.App.app
         { name = "Scripts"
-        , init = init
+        , init = \mFlags -> mFlags |> Maybe.withDefault defaultFlags |> init
         , view = view
         , update = update
         , liveQueries = Just liveQueries

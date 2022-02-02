@@ -901,11 +901,11 @@ view context model =
         |> LanternUi.columnLayout context.theme []
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.app
         { name = "Notebook"
-        , init = init
+        , init = \_ -> init
         , view = view
         , update = update
         , liveQueries = Nothing

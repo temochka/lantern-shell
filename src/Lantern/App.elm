@@ -25,8 +25,8 @@ call cmd =
     Cmd.map LanternMessage cmd
 
 
-type alias App ctx model msg =
-    { init : ( model, Cmd (Message msg) )
+type alias App ctx flags model msg =
+    { init : Maybe flags -> ( model, Cmd (Message msg) )
     , view : ctx -> model -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : model -> List (LiveQuery msg)
@@ -46,10 +46,10 @@ liveApp :
     , liveQueries : model -> List (LiveQuery msg)
     , subscriptions : model -> Sub (Message msg)
     }
-    -> App ctx model msg
+    -> App ctx flags model msg
 liveApp def =
     { name = def.name
-    , init = ( def.init, Cmd.none )
+    , init = \_ -> ( def.init, Cmd.none )
     , view = def.view
     , update = def.update
     , liveQueries = def.liveQueries
@@ -59,7 +59,7 @@ liveApp def =
 
 app :
     { name : String
-    , init : ( model, Cmd (Message msg) )
+    , init : Maybe flags -> ( model, Cmd (Message msg) )
     , view :
         ctx
         -> model
@@ -68,7 +68,7 @@ app :
     , liveQueries : Maybe (model -> List (LiveQuery msg))
     , subscriptions : model -> Sub (Message msg)
     }
-    -> App ctx model msg
+    -> App ctx flags model msg
 app def =
     { name = def.name
     , init = def.init
@@ -88,10 +88,10 @@ simpleApp :
         -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     }
-    -> App ctx model msg
+    -> App ctx flags model msg
 simpleApp def =
     { name = def.name
-    , init = ( def.init, Cmd.none )
+    , init = \_ -> ( def.init, Cmd.none )
     , view = def.view
     , update = def.update
     , liveQueries = always []
@@ -104,11 +104,12 @@ mount :
     , wrapMsg : appMsg -> rootMsg
     , unwrapModel : rootModel -> Maybe appModel
     , wrapModel : appModel -> rootModel
+    , unwrapFlags : Maybe rootFlags -> Maybe appFlags
     , context : rootModel -> ctx
     }
-    -> App ctx appModel appMsg
-    -> App () rootModel rootMsg
-mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } mountedApp =
+    -> App ctx appFlags appModel appMsg
+    -> App () rootFlags rootModel rootMsg
+mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, unwrapFlags, context } mountedApp =
     let
         wrapResult ( appModel, appCmd ) =
             ( wrapModel appModel, Cmd.map (mapMessage wrapMsg) appCmd )
@@ -141,7 +142,7 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, context } mountedApp =
                 |> Maybe.withDefault Sub.none
     in
     { name = mountedApp.name
-    , init = mountedApp.init |> wrapResult
+    , init = \rootFlags -> mountedApp.init (unwrapFlags rootFlags) |> wrapResult
     , view = wrappedView
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries
