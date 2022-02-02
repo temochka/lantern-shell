@@ -33,7 +33,8 @@ type alias Context =
 
 
 type ConsoleEntry
-    = StatusOutput String
+    = ConsoleString String
+    | ConsoleStatus Interpreter
 
 
 type alias Console =
@@ -48,9 +49,14 @@ type alias Model =
     }
 
 
-println : String -> Console -> Console
-println string console =
-    StatusOutput string :: console
+printLn : String -> Console -> Console
+printLn string console =
+    ConsoleString string :: console
+
+
+printStatus : Interpreter -> Console -> Console
+printStatus interpreter console =
+    ConsoleStatus interpreter :: console
 
 
 scriptName : Script -> String
@@ -194,8 +200,8 @@ update msg model =
                 | interpreter = interpreter
                 , console =
                     model.console
-                        |> println ("Starting " ++ scriptName model.scriptEditor)
-                        |> println ("Result" ++ Debug.toString interpreter)
+                        |> printLn ("Starting " ++ scriptName model.scriptEditor)
+                        |> printStatus interpreter
               }
             , Cmd.map Lantern.App.Message retMsg
             )
@@ -212,7 +218,7 @@ update msg model =
                 | interpreter = interpreter
                 , console =
                     model.console
-                        |> println ("Result" ++ Debug.toString interpreter)
+                        |> printLn ("Result" ++ Debug.toString interpreter)
               }
             , Cmd.map Lantern.App.Message retMsg
             )
@@ -522,8 +528,32 @@ view context model =
                 |> List.map
                     (\entry ->
                         case entry of
-                            StatusOutput s ->
+                            ConsoleString s ->
                                 Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
+
+                            ConsoleStatus interpreter ->
+                                case interpreter of
+                                    Stopped ->
+                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Stopped" ]
+
+                                    Blocked ->
+                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Waiting..." ]
+
+                                    UI _ _ ->
+                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Some UI" ]
+
+                                    Running ->
+                                        Element.paragraph [ Element.width Element.fill ] [ Element.text "Running..." ]
+
+                                    Done ( val, _ ) ->
+                                        Element.column
+                                            [ Element.width Element.fill ]
+                                            [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
+                                            , Element.el [ Element.width Element.fill ] (Element.text (Runtime.inspect val))
+                                            ]
+
+                                    Panic e ->
+                                        Element.paragraph [ Element.width Element.fill ] [ Element.text (Runtime.inspectLocated (Located.map Throwable e)) ]
                     )
                 |> Element.column
                     [ Element.width Element.fill ]
