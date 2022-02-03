@@ -286,27 +286,32 @@ update msg model =
             ( { model | windowManager = newWindowManager }, Cmd.batch [ Cmd.map WindowManagerMessage cmd, Browser.Navigation.replaceUrl model.navigationKey newUrl ] )
 
         AppMessage pid proxiedMsg ->
-            [ \m ->
-                pid
-                    |> ProcessTable.lookup m.processTable
-                    |> Maybe.map ProcessTable.processApp
-                    |> Maybe.map
-                        (\appModel ->
-                            let
-                                lanternApp =
-                                    LanternShell.Apps.lanternAppFor appModel (appContext model)
+            case proxiedMsg of
+                LanternShell.Apps.LaunchAppMsg app ->
+                    update (LaunchApp (\_ -> app.init Nothing)) model
 
-                                ( newAppModel, cmd ) =
-                                    lanternApp.update proxiedMsg appModel
-                            in
-                            ( { m | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable }
-                            , Cmd.map (wrapAppMessage pid) cmd
-                            )
-                        )
-                    |> Maybe.withDefault ( m, Cmd.none )
-            , refreshLiveQueries pid
-            ]
-                |> threadModel model
+                _ ->
+                    [ \m ->
+                        pid
+                            |> ProcessTable.lookup m.processTable
+                            |> Maybe.map ProcessTable.processApp
+                            |> Maybe.map
+                                (\appModel ->
+                                    let
+                                        lanternApp =
+                                            LanternShell.Apps.lanternAppFor appModel (appContext model)
+
+                                        ( newAppModel, cmd ) =
+                                            lanternApp.update proxiedMsg appModel
+                                    in
+                                    ( { m | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable }
+                                    , Cmd.map (wrapAppMessage pid) cmd
+                                    )
+                                )
+                            |> Maybe.withDefault ( m, Cmd.none )
+                    , refreshLiveQueries pid
+                    ]
+                        |> threadModel model
 
         UpdateLauncherQuery query ->
             ( { model | appLauncherQuery = query }, Cmd.none )

@@ -22,8 +22,6 @@ import LanternUi
 import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
 import LanternUi.Theme
-import List exposing (intersperse)
-import List.Extra
 import Process
 import Task
 
@@ -41,22 +39,12 @@ type alias Console =
     List ConsoleEntry
 
 
-type alias Flags =
-    { launchValueInspector : Value -> Cmd (Lantern.App.Message Message) }
-
-
-defaultFlags : Flags
-defaultFlags =
-    { launchValueInspector = \_ -> Cmd.none }
-
-
 type alias Model =
     { interpreter : Interpreter
     , scripts : List Script
     , scriptEditor : Script
     , console : Console
     , repl : String
-    , flags : Flags
     }
 
 
@@ -90,6 +78,7 @@ type Message
     | UpdateInputRequest InputKey InputCell
     | UpdateScripts (Result Lantern.Error (List Script))
     | HandleIO ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    | InspectValue Value
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
     | SaveScript
@@ -104,14 +93,13 @@ type Message
     | NoOp
 
 
-init : Flags -> ( Model, Cmd (Lantern.App.Message Message) )
-init flags =
+init : ( Model, Cmd (Lantern.App.Message Message) )
+init =
     ( { interpreter = Stopped
       , scripts = []
       , scriptEditor = unsavedScript
       , console = []
       , repl = ""
-      , flags = flags
       }
     , Cmd.none
     )
@@ -362,6 +350,11 @@ update msg model =
                     { oldScriptEditor | input = input }
             in
             ( { model | scriptEditor = newScriptEditor }, Cmd.none )
+
+        -- Beware: the Apps namespace hijacks this message and launches the inspector
+        -- would be nice to make this more explicit but it'll take a lot of refactoring
+        InspectValue _ ->
+            ( model, Cmd.none )
 
         NoOp ->
             ( model, Cmd.none )
@@ -676,7 +669,15 @@ view context model =
                                             Element.column
                                                 [ Element.width Element.fill ]
                                                 [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
-                                                , Element.el [ Element.width Element.fill ] (Element.text (Runtime.inspect val))
+                                                , Element.row
+                                                    [ Element.width Element.fill ]
+                                                    [ Element.text (Runtime.inspect val)
+                                                    , LanternUi.Input.button context.theme
+                                                        []
+                                                        { onPress = Just (Lantern.App.Message <| InspectValue val)
+                                                        , label = Element.text "Inspect"
+                                                        }
+                                                    ]
                                                 ]
 
                                         Panic e ->
@@ -749,11 +750,11 @@ liveQueries _ =
     [ tablesQuery ]
 
 
-lanternApp : Lantern.App.App Context Flags Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.app
         { name = "Scripts"
-        , init = \mFlags -> mFlags |> Maybe.withDefault defaultFlags |> init
+        , init = \_ -> init
         , view = view
         , update = update
         , liveQueries = Just liveQueries

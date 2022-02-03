@@ -104,12 +104,12 @@ mount :
     , wrapMsg : appMsg -> rootMsg
     , unwrapModel : rootModel -> Maybe appModel
     , wrapModel : appModel -> rootModel
-    , unwrapFlags : Maybe rootFlags -> Maybe appFlags
+    , flags : Maybe appFlags
     , context : rootModel -> ctx
     }
     -> App ctx appFlags appModel appMsg
     -> App () rootFlags rootModel rootMsg
-mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, unwrapFlags, context } mountedApp =
+mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, flags, context } mountedApp =
     let
         wrapResult ( appModel, appCmd ) =
             ( wrapModel appModel, Cmd.map (mapMessage wrapMsg) appCmd )
@@ -142,7 +142,7 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, unwrapFlags, context } mount
                 |> Maybe.withDefault Sub.none
     in
     { name = mountedApp.name
-    , init = \rootFlags -> mountedApp.init (unwrapFlags rootFlags) |> wrapResult
+    , init = \_ -> mountedApp.init flags |> wrapResult
     , view = wrappedView
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries

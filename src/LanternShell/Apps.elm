@@ -1,7 +1,7 @@
 module LanternShell.Apps exposing
     ( App
     , Context
-    , Message
+    , Message(..)
     , all
     , appId
     , lanternAppFor
@@ -22,6 +22,7 @@ import LanternShell.Apps.Notebook as NotebookApp
 import LanternShell.Apps.Notes as NotesApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
 import LanternShell.Apps.Scripts as ScriptsApp
+import LanternShell.Apps.ValueInspector as ValueInspectorApp
 import LanternShell.Apps.WriterQuery as WriterQueryApp
 import LanternUi.Theme
 
@@ -43,6 +44,7 @@ type App
     | NotesApp NotesApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
     | ScriptsApp ScriptsApp.Model
+    | ValueInspectorApp ValueInspectorApp.Model
     | WriterQueryApp WriterQueryApp.Model
 
 
@@ -57,17 +59,9 @@ type Message
     | NotesMsg NotesApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
     | ScriptsMsg ScriptsApp.Message
+    | ValueInspectorMsg ValueInspectorApp.Message
     | WriterQueryMsg WriterQueryApp.Message
-
-
-type Flags
-    = ScriptsFlags ScriptsApp.Flags
-    | NoFlags
-
-
-unwrapFlags : Maybe a -> Maybe ()
-unwrapFlags f =
-    f |> Maybe.map (always ())
+    | LaunchAppMsg (Lantern.App.App () () App Message)
 
 
 appId : App -> String
@@ -103,11 +97,14 @@ appId app =
         ScriptsApp _ ->
             "Scripts"
 
+        ValueInspectorApp _ ->
+            "ValueInspector"
+
         WriterQueryApp _ ->
             "WriterQuery"
 
 
-launcherForId : String -> Maybe (Context msg -> Lantern.App.App () Flags App Message)
+launcherForId : String -> Maybe (Context msg -> Lantern.App.App () () App Message)
 launcherForId id =
     case id of
         "DatabaseExplorer" ->
@@ -143,11 +140,14 @@ launcherForId id =
         "WriterQuery" ->
             Just writerQuery
 
+        "ValueInspector" ->
+            Just (valueInspector Nothing)
+
         _ ->
             Nothing
 
 
-lanternAppFor : App -> (Context msg -> Lantern.App.App () Flags App Message)
+lanternAppFor : App -> (Context msg -> Lantern.App.App () () App Message)
 lanternAppFor app =
     case app of
         DatabaseExplorerApp _ ->
@@ -180,11 +180,14 @@ lanternAppFor app =
         ScriptsApp _ ->
             scripts
 
+        ValueInspectorApp _ ->
+            valueInspector Nothing
+
         WriterQueryApp _ ->
             writerQuery
 
 
-all : List (Context msg -> Lantern.App.App () Flags App Message)
+all : List (Context msg -> Lantern.App.App () () App Message)
 all =
     [ echo
     , databaseExplorer
@@ -194,13 +197,14 @@ all =
     , notes
     , readerQuery
     , scripts
+    , valueInspector Nothing
     , writerQuery
     , migrations
     , logViewer
     ]
 
 
-databaseExplorer : Context msg -> Lantern.App.App () Flags App Message
+databaseExplorer : Context msg -> Lantern.App.App () () App Message
 databaseExplorer context =
     Lantern.App.mount
         { unwrapMsg =
@@ -221,13 +225,13 @@ databaseExplorer context =
                         Nothing
         , wrapModel = DatabaseExplorerApp
         , wrapMsg = DatabaseExplorerMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         DatabaseExplorerApp.lanternApp
 
 
-echo : Context msg -> Lantern.App.App () Flags App Message
+echo : Context msg -> Lantern.App.App () () App Message
 echo context =
     Lantern.App.mount
         { unwrapMsg =
@@ -248,13 +252,13 @@ echo context =
                         Nothing
         , wrapModel = EchoApp
         , wrapMsg = EchoMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         EchoApp.lanternApp
 
 
-flashcardGenerator : Context msg -> Lantern.App.App () Flags App Message
+flashcardGenerator : Context msg -> Lantern.App.App () () App Message
 flashcardGenerator context =
     Lantern.App.mount
         { unwrapMsg =
@@ -275,13 +279,13 @@ flashcardGenerator context =
                         Nothing
         , wrapModel = FlashcardGeneratorApp
         , wrapMsg = FlashcardGeneratorMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         FlashcardGeneratorApp.lanternApp
 
 
-letterCubes : Context msg -> Lantern.App.App () Flags App Message
+letterCubes : Context msg -> Lantern.App.App () () App Message
 letterCubes context =
     Lantern.App.mount
         { unwrapMsg =
@@ -302,13 +306,13 @@ letterCubes context =
                         Nothing
         , wrapModel = LetterCubesApp
         , wrapMsg = LetterCubesMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         LetterCubesApp.lanternApp
 
 
-notes : Context msg -> Lantern.App.App () Flags App Message
+notes : Context msg -> Lantern.App.App () () App Message
 notes context =
     Lantern.App.mount
         { unwrapMsg =
@@ -329,13 +333,13 @@ notes context =
                         Nothing
         , wrapModel = NotesApp
         , wrapMsg = NotesMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         NotesApp.lanternApp
 
 
-logViewer : Context msg -> Lantern.App.App () Flags App Message
+logViewer : Context msg -> Lantern.App.App () () App Message
 logViewer context =
     Lantern.App.mount
         { unwrapMsg =
@@ -356,13 +360,13 @@ logViewer context =
                         Nothing
         , wrapModel = LogViewerApp
         , wrapMsg = LogViewerMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme, log = Lantern.log context.lanternConnection }
         }
         LogViewerApp.lanternApp
 
 
-migrations : Context msg -> Lantern.App.App () Flags App Message
+migrations : Context msg -> Lantern.App.App () () App Message
 migrations context =
     Lantern.App.mount
         { unwrapMsg =
@@ -383,13 +387,13 @@ migrations context =
                         Nothing
         , wrapModel = MigrationsApp
         , wrapMsg = MigrationsMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         MigrationsApp.lanternApp
 
 
-notebook : Context msg -> Lantern.App.App () Flags App Message
+notebook : Context msg -> Lantern.App.App () () App Message
 notebook context =
     Lantern.App.mount
         { unwrapMsg =
@@ -410,13 +414,13 @@ notebook context =
                         Nothing
         , wrapModel = NotebookApp
         , wrapMsg = NotebookMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         NotebookApp.lanternApp
 
 
-readerQuery : Context msg -> Lantern.App.App () Flags App Message
+readerQuery : Context msg -> Lantern.App.App () () App Message
 readerQuery context =
     Lantern.App.mount
         { unwrapMsg =
@@ -437,13 +441,13 @@ readerQuery context =
                         Nothing
         , wrapModel = ReaderQueryApp
         , wrapMsg = ReaderQueryMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         ReaderQueryApp.lanternApp
 
 
-scripts : Context msg -> Lantern.App.App () Flags App Message
+scripts : Context msg -> Lantern.App.App () () App Message
 scripts context =
     Lantern.App.mount
         { unwrapMsg =
@@ -463,21 +467,21 @@ scripts context =
                     _ ->
                         Nothing
         , wrapModel = ScriptsApp
-        , wrapMsg = ScriptsMsg
-        , unwrapFlags =
-            \mFlags ->
-                case mFlags of
-                    Just (ScriptsFlags f) ->
-                        Just f
+        , wrapMsg =
+            \msg ->
+                case msg of
+                    ScriptsApp.InspectValue v ->
+                        LaunchAppMsg (valueInspector (Just { value = v }) context)
 
-                    _ ->
-                        Just { launchValueInspector = \_ -> Cmd.none }
+                    otherMsg ->
+                        ScriptsMsg otherMsg
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         ScriptsApp.lanternApp
 
 
-writerQuery : Context msg -> Lantern.App.App () Flags App Message
+writerQuery : Context msg -> Lantern.App.App () () App Message
 writerQuery context =
     Lantern.App.mount
         { unwrapMsg =
@@ -498,7 +502,34 @@ writerQuery context =
                         Nothing
         , wrapModel = WriterQueryApp
         , wrapMsg = WriterQueryMsg
-        , unwrapFlags = unwrapFlags
+        , flags = Nothing
         , context = \_ -> { theme = context.theme }
         }
         WriterQueryApp.lanternApp
+
+
+valueInspector : Maybe ValueInspectorApp.Flags -> Context msg -> Lantern.App.App () () App Message
+valueInspector flags context =
+    Lantern.App.mount
+        { unwrapMsg =
+            \wrappedMsg ->
+                case wrappedMsg of
+                    ValueInspectorMsg unwrappedMsg ->
+                        Just unwrappedMsg
+
+                    _ ->
+                        Nothing
+        , unwrapModel =
+            \wrappedModel ->
+                case wrappedModel of
+                    ValueInspectorApp unwrappedModel ->
+                        Just unwrappedModel
+
+                    _ ->
+                        Nothing
+        , wrapModel = ValueInspectorApp
+        , wrapMsg = ValueInspectorMsg
+        , flags = flags
+        , context = \_ -> { theme = context.theme }
+        }
+        ValueInspectorApp.lanternApp
