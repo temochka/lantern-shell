@@ -55,7 +55,9 @@ printLn string console =
 
 printStatus : Interpreter -> Console -> Console
 printStatus interpreter console =
-    ConsoleStatus interpreter :: console
+    activeUi interpreter
+        |> Maybe.map (always console)
+        |> Maybe.withDefault (ConsoleStatus interpreter :: console)
 
 
 scriptName : Script -> String
@@ -271,12 +273,15 @@ update msg model =
                 UI ({ enclojureUi } as ui) args ->
                     let
                         updatedInputs =
-                            Dict.update name (Maybe.map (always v)) ui.enclojureUi.inputs
+                            Dict.insert name v ui.enclojureUi.inputs
 
                         updatedUi =
                             { enclojureUi | inputs = updatedInputs }
+
+                        updatedModel =
+                            { model | interpreter = UI { ui | enclojureUi = updatedUi } args }
                     in
-                    ( { model | interpreter = UI { ui | enclojureUi = updatedUi } args }, Cmd.none )
+                    ( updatedModel, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -286,11 +291,7 @@ update msg model =
                 Ok scripts ->
                     ( { model | scripts = scripts }, Cmd.none )
 
-                Err error ->
-                    let
-                        _ =
-                            Debug.log "error" error
-                    in
+                Err _ ->
                     ( model, Cmd.none )
 
         SaveScript ->
@@ -423,14 +424,14 @@ renderUI context uiModel =
                                         []
                                         { onChange = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
                                         , placeholder = Nothing
-                                        , label = Element.Input.labelHidden ""
+                                        , label = Element.Input.labelHidden key
                                         , text = s
                                         }
 
                                 else
                                     LanternUi.FuzzySelect.fuzzySelect
                                         context.theme
-                                        { label = Element.Input.labelLeft [] (Element.text "foo")
+                                        { label = Element.Input.labelHidden ""
                                         , onQueryChange = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
                                         , onInternalMessage = FuzzySelectMessage key >> Lantern.App.Message
                                         , onOptionSelect = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
@@ -465,69 +466,14 @@ renderUI context uiModel =
                 |> Element.paragraph []
 
 
-renderCell : Context -> Model -> Element (Lantern.App.Message Message)
-renderCell context model =
-    let
-        overlayLayout el =
-            Element.el
-                [ Element.height Element.fill
-                , Element.width Element.fill
-                , Element.Background.color context.theme.bgDefault
-                , Element.htmlAttribute (Html.Attributes.style "z-index" "10")
-                , Element.padding 10
-                ]
-                el
+activeUi : Interpreter -> Maybe Interpreter
+activeUi interpreter =
+    case interpreter of
+        UI _ _ ->
+            Just interpreter
 
-        overlay =
-            case model.interpreter of
-                Stopped ->
-                    Element.none
-
-                Done _ ->
-                    Element.none
-
-                Blocked ->
-                    overlayLayout <| Element.text "Blocked"
-
-                Panic _ ->
-                    Element.none
-
-                UI ui ( env, thunk ) ->
-                    overlayLayout <|
-                        Element.column
-                            [ Element.width Element.fill ]
-                            [ renderUI context ui
-                            , LanternUi.Input.button context.theme
-                                []
-                                { onPress = Nothing
-                                , label = Element.text "Submit"
-                                }
-                            ]
-
-                Running ->
-                    overlayLayout <| Element.text "Running"
-
-        ( label, action ) =
-            if isRunning model.interpreter then
-                ( "Stop", Stop )
-
-            else
-                ( "Run", Run )
-    in
-    Element.column
-        [ Element.width Element.fill ]
-        [ LanternUi.Input.code context.theme
-            [ Element.inFront overlay, Element.width Element.fill, Element.height (Element.px 600) ]
-            { onChange = Debug.todo
-            , value = ""
-            , language = LanternUi.Input.Enclojure
-            }
-        , LanternUi.Input.button context.theme
-            []
-            { onPress = Just (Lantern.App.Message action)
-            , label = Element.text label
-            }
-        ]
+        _ ->
+            Nothing
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)
@@ -635,8 +581,11 @@ view context model =
                     }
                 ]
 
+        consoleWithActiveUi =
+            activeUi model.interpreter |> Maybe.map (\ui -> ConsoleStatus ui :: model.console) |> Maybe.withDefault model.console
+
         console =
-            model.console
+            consoleWithActiveUi
                 |> List.indexedMap
                     (\i entry ->
                         Element.el
@@ -659,8 +608,10 @@ view context model =
                                         Blocked ->
                                             Element.paragraph [ Element.width Element.fill ] [ Element.text "Waiting..." ]
 
-                                        UI _ _ ->
-                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Some UI" ]
+                                        UI ui _ ->
+                                            Element.column
+                                                [ Element.width Element.fill ]
+                                                [ renderUI context ui ]
 
                                         Running ->
                                             Element.paragraph [ Element.width Element.fill ] [ Element.text "Running..." ]
