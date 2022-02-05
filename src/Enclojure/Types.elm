@@ -39,6 +39,7 @@ type TextFormat
 type InputCell
     = TextInput { suggestions : List String } String
     | MaskedTextInput String
+    | Button { title : String }
 
 
 type alias InputKey =

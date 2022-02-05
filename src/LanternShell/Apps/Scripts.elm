@@ -22,6 +22,7 @@ import LanternUi
 import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
 import LanternUi.Theme
+import List exposing (intersperse)
 import Process
 import Task
 
@@ -58,6 +59,13 @@ printStatus interpreter console =
     activeUi interpreter
         |> Maybe.map (always console)
         |> Maybe.withDefault (ConsoleStatus interpreter :: console)
+
+
+printUi : Interpreter -> Console -> Console
+printUi interpreter console =
+    activeUi interpreter
+        |> Maybe.map (always (ConsoleStatus interpreter :: console))
+        |> Maybe.withDefault console
 
 
 scriptName : Script -> String
@@ -263,25 +271,44 @@ update msg model =
                 | interpreter = interpreter
                 , console =
                     model.console
-                        |> printLn ("Result" ++ Debug.toString interpreter)
+                        |> printStatus interpreter
               }
             , Cmd.map Lantern.App.Message retMsg
             )
 
         UpdateInputRequest name v ->
             case model.interpreter of
-                UI ({ enclojureUi } as ui) args ->
-                    let
-                        updatedInputs =
-                            Dict.insert name v ui.enclojureUi.inputs
+                UI ({ enclojureUi } as ui) ( env, thunk ) ->
+                    case v of
+                        Button _ ->
+                            let
+                                exitCode =
+                                    Located.fakeLoc <| Keyword name
 
-                        updatedUi =
-                            { enclojureUi | inputs = updatedInputs }
+                                state =
+                                    Located.fakeLoc <| Enclojure.uiToValue enclojureUi
 
-                        updatedModel =
-                            { model | interpreter = UI { ui | enclojureUi = updatedUi } args }
-                    in
-                    ( updatedModel, Cmd.none )
+                                console =
+                                    printUi model.interpreter model.console
+                            in
+                            ( { model | interpreter = Running, console = console }
+                            , Task.perform
+                                identity
+                                (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.fakeLoc (Const (List [ exitCode, state ])), env ), thunk )))
+                            )
+
+                        _ ->
+                            let
+                                updatedInputs =
+                                    Dict.insert name v ui.enclojureUi.inputs
+
+                                updatedUi =
+                                    { enclojureUi | inputs = updatedInputs }
+
+                                updatedModel =
+                                    { model | interpreter = UI { ui | enclojureUi = updatedUi } ( env, thunk ) }
+                            in
+                            ( updatedModel, Cmd.none )
 
                 _ ->
                     ( model, Cmd.none )
@@ -451,6 +478,14 @@ renderUI context uiModel =
                                     , label = Element.Input.labelHidden ""
                                     , text = s
                                     , show = False
+                                    }
+
+                            Button { title } ->
+                                LanternUi.Input.button
+                                    context.theme
+                                    []
+                                    { onPress = Just (UpdateInputRequest key input |> Lantern.App.Message)
+                                    , label = Element.text title
                                     }
                     )
                 |> Maybe.withDefault Element.none

@@ -479,9 +479,6 @@ update msg model =
                             )
                         |> Dict.insert fieldNodeId fieldNode
                         |> Dict.insert valueNodeId valueNode
-
-                _ =
-                    Debug.log "nodes" nodes
             in
             ( { modelPostSave
                 | nodes = nodes
@@ -654,6 +651,9 @@ renderUI context uiModel =
                                     , text = s
                                     , show = False
                                     }
+
+                            _ ->
+                                Element.none
                     )
                 |> Maybe.withDefault Element.none
 

@@ -159,6 +159,29 @@ ui =
                                 _ ->
                                     Err (Exception "type error: invalid arguments to text-input cell")
 
+                        (Located _ (Keyword "button")) :: args ->
+                            case args of
+                                (Located _ (Keyword key)) :: restArgs ->
+                                    let
+                                        options =
+                                            case restArgs of
+                                                (Located _ (Map m)) :: _ ->
+                                                    m
+
+                                                _ ->
+                                                    ValueMap.empty
+
+                                        title =
+                                            ValueMap.get (Keyword "title") options
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.withDefault key
+                                    in
+                                    Ok ( Dict.insert key (Button { title = title }) inputs, Input key )
+
+                                _ ->
+                                    Err (Exception "type error: invalid arguments to button cell")
+
                         (Located _ (Keyword cellType)) :: _ ->
                             Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type"))
 

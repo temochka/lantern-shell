@@ -728,18 +728,21 @@ uiToValue : Enclojure.Types.UI -> Value
 uiToValue { inputs } =
     inputs
         |> Dict.toList
-        |> List.map
+        |> List.filterMap
             (\( k, v ) ->
                 let
                     value =
                         case v of
                             Enclojure.Types.TextInput _ s ->
-                                String s
+                                Just <| String s
 
                             Enclojure.Types.MaskedTextInput s ->
-                                String s
+                                Just <| String s
+
+                            Enclojure.Types.Button _ ->
+                                Nothing
                 in
-                ( Keyword k, Located.fakeLoc value )
+                value |> Maybe.map Located.fakeLoc |> Maybe.map (Tuple.pair (Keyword k))
             )
         |> ValueMap.fromList
         |> Map

@@ -327,3 +327,13 @@ apply ((Located fnLoc fnExpr) as fn) arg env k =
             ( Err (Located fnLoc (Exception (inspectLocated fn ++ " is not a valid callable.")))
             , Just (Thunk k)
             )
+
+
+tryString : Value -> Maybe String
+tryString value =
+    case value of
+        String s ->
+            Just s
+
+        _ ->
+            Nothing
