@@ -337,3 +337,40 @@ tryString value =
 
         _ ->
             Nothing
+
+
+tryMap : Value -> Maybe Types.ValueMap
+tryMap value =
+    case value of
+        Map s ->
+            Just s
+
+        _ ->
+            Nothing
+
+
+trySequenceOf : (Value -> Maybe a) -> Value -> Maybe (List a)
+trySequenceOf extract value =
+    let
+        extractAll sequence =
+            sequence
+                |> List.foldr
+                    (\e a ->
+                        a
+                            |> Maybe.andThen
+                                (\acc ->
+                                    extract (Located.getValue e)
+                                        |> Maybe.map (\extracted -> extracted :: acc)
+                                )
+                    )
+                    (Just [])
+    in
+    case value of
+        List l ->
+            extractAll l
+
+        Vector v ->
+            v |> Array.toList |> extractAll
+
+        _ ->
+            Nothing

@@ -144,14 +144,28 @@ ui =
 
                         (Located _ (Keyword "text-input")) :: args ->
                             case args of
-                                [ Located _ (Keyword key) ] ->
+                                (Located _ (Keyword key)) :: restArgs ->
                                     let
                                         value =
                                             Dict.get key defaults |> Maybe.withDefault (String "")
+
+                                        options =
+                                            restArgs
+                                                |> List.head
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryMap
+                                                |> Maybe.withDefault ValueMap.empty
+
+                                        suggestions =
+                                            options
+                                                |> ValueMap.get (Keyword "suggestions")
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen (Runtime.trySequenceOf Runtime.tryString)
+                                                |> Maybe.withDefault []
                                     in
                                     case value of
                                         String s ->
-                                            Ok ( Dict.insert key (TextInput { suggestions = [ "banana", "bahamas" ] } s) inputs, Input key )
+                                            Ok ( Dict.insert key (TextInput { suggestions = suggestions } s) inputs, Input key )
 
                                         _ ->
                                             Err (Exception "type error: the default for text-input must be a string")
