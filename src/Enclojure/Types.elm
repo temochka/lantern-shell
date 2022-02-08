@@ -3,6 +3,7 @@ module Enclojure.Types exposing (..)
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Enclojure.Located exposing (Located)
+import Http
 import Set
 
 
@@ -59,8 +60,17 @@ type alias UI =
     }
 
 
+type alias HttpRequest =
+    { method : String
+    , headers : List ( String, String )
+    , url : String
+    , body : Maybe String
+    }
+
+
 type IO
     = Const Value
+    | Http HttpRequest
     | Sleep Float
     | ReadField String
     | ShowUI UI

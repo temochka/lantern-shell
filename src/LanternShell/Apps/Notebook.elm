@@ -170,6 +170,11 @@ trampoline nodeId ( result, thunk ) maxdepth =
                         , Cmd.none
                         )
 
+                    Http _ ->
+                        ( ScriptError "Not implemented"
+                        , Cmd.none
+                        )
+
                     ReadField _ ->
                         case thunk of
                             Just (Thunk continuation) ->

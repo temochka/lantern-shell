@@ -339,6 +339,16 @@ tryString value =
             Nothing
 
 
+tryKeyword : Value -> Maybe String
+tryKeyword value =
+    case value of
+        Keyword s ->
+            Just s
+
+        _ ->
+            Nothing
+
+
 tryMap : Value -> Maybe Types.ValueMap
 tryMap value =
     case value of
@@ -371,6 +381,32 @@ trySequenceOf extract value =
 
         Vector v ->
             v |> Array.toList |> extractAll
+
+        _ ->
+            Nothing
+
+
+tryDictOf : (Value -> Maybe comparable) -> (Value -> Maybe b) -> Value -> Maybe (Dict.Dict comparable b)
+tryDictOf extractKey extractValue value =
+    let
+        extractAll kvSequence =
+            kvSequence
+                |> List.foldr
+                    (\( key, val ) a ->
+                        a
+                            |> Maybe.andThen
+                                (\acc ->
+                                    Maybe.map2
+                                        (\extractedKey extractedVal -> ( extractedKey, extractedVal ) :: acc)
+                                        (extractKey key)
+                                        (extractValue (Located.getValue val))
+                                )
+                    )
+                    (Just [])
+    in
+    case value of
+        Map m ->
+            m |> ValueMap.toList |> extractAll |> Maybe.map Dict.fromList
 
         _ ->
             Nothing

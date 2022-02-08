@@ -9,13 +9,16 @@ import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
 import Enclojure.Types exposing (Cell(..), Env, Exception(..), IO(..), InputCell(..), InputKey, TextFormat(..), Thunk(..), UI, Value(..))
+import Enclojure.ValueMap
 import Html.Attributes
 import Html.Events
+import Http
 import Json.Decode
 import Keyboard.Event
 import Keyboard.Key exposing (Key(..))
 import Lantern
 import Lantern.App
+import Lantern.Http
 import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
 import LanternUi
@@ -133,7 +136,22 @@ type Interpreter
     | Panic (Located Exception)
 
 
-trampoline : ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( Interpreter, Cmd Message )
+responseToValue : Lantern.Http.Response -> Value
+responseToValue response =
+    Map <|
+        Enclojure.ValueMap.fromList
+            [ ( Keyword "status", Located.fakeLoc <| Number (Enclojure.Types.Int response.status) )
+            , ( Keyword "headers"
+              , Located.fakeLoc <|
+                    Map (response.headers |> List.map (\( k, v ) -> ( String k, Located.fakeLoc (String v) )) |> Enclojure.ValueMap.fromList)
+              )
+            , ( Keyword "body"
+              , response.body |> Maybe.map String |> Maybe.withDefault Nil |> Located.fakeLoc
+              )
+            ]
+
+
+trampoline : ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( Interpreter, Cmd (Lantern.App.Message Message) )
 trampoline ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
         ( Panic (Located.fakeLoc (Exception "Stack level too deep")), Cmd.none )
@@ -150,12 +168,26 @@ trampoline ( result, thunk ) maxdepth =
                             Nothing ->
                                 ( Done ( v, env ), Cmd.none )
 
+                    Http request ->
+                        ( Running
+                        , Lantern.httpRequest
+                            { method = request.method
+                            , headers = request.headers
+                            , url = request.url
+                            , body = request.body
+                            , expect =
+                                \response ->
+                                    HandleIO ( Ok ( Located.replace io (Const (responseToValue response)), env ), thunk )
+                            }
+                            |> Lantern.App.call
+                        )
+
                     Sleep ms ->
                         ( Running
                         , Process.sleep ms
                             |> Task.perform
                                 (\_ ->
-                                    HandleIO ( Ok ( Located.replace io (Const Nil), env ), thunk )
+                                    Lantern.App.Message <| HandleIO ( Ok ( Located.replace io (Const Nil), env ), thunk )
                                 )
                         )
 
@@ -224,7 +256,7 @@ update msg model =
                                 |> printStatus interpreter
                         , repl = ""
                       }
-                    , Cmd.map Lantern.App.Message retMsg
+                    , retMsg
                     )
 
                 _ ->
@@ -256,7 +288,7 @@ update msg model =
                         |> printLn ("Starting " ++ scriptName model.scriptEditor)
                         |> printStatus interpreter
               }
-            , Cmd.map Lantern.App.Message retMsg
+            , retMsg
             )
 
         Stop ->
@@ -273,7 +305,7 @@ update msg model =
                     model.console
                         |> printStatus interpreter
               }
-            , Cmd.map Lantern.App.Message retMsg
+            , retMsg
             )
 
         UpdateInputRequest name v ->
@@ -655,7 +687,7 @@ view context model =
                                             Element.column
                                                 [ Element.width Element.fill ]
                                                 [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
-                                                , Element.row
+                                                , Element.paragraph
                                                     [ Element.width Element.fill ]
                                                     [ Element.text (Runtime.inspect val)
                                                     , LanternUi.Input.button context.theme

@@ -77,6 +77,15 @@ resolveSymbol env symbol =
                 "get" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.get))
 
+                "json/encode" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.jsonEncode))
+
+                "json/decode" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.jsonDecode))
+
+                "http/request" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.http))
+
                 "integer?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
 

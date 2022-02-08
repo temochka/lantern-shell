@@ -7,6 +7,7 @@ module Enclojure.Lib exposing
     , div
     , first
     , get
+    , http
     , isEqual
     , isFloat
     , isGreaterThan
@@ -16,6 +17,8 @@ module Enclojure.Lib exposing
     , isLessThanOrEqual
     , isNotEqual
     , isNumber
+    , jsonDecode
+    , jsonEncode
     , list
     , minus
     , mul
@@ -36,6 +39,7 @@ module Enclojure.Lib exposing
 
 import Array
 import Dict
+import Enclojure.Json
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, pure)
 import Enclojure.Types exposing (..)
@@ -60,6 +64,99 @@ sleep =
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
+    }
+
+
+decodeHttpRequest : Value -> Result Exception HttpRequest
+decodeHttpRequest value =
+    value
+        |> Runtime.tryMap
+        |> Result.fromMaybe (Exception "type error: request must be a map")
+        |> Result.andThen
+            (\requestMap ->
+                let
+                    urlResult =
+                        requestMap |> ValueMap.get (Keyword "url") |> Maybe.map Located.getValue |> Maybe.andThen Runtime.tryString |> Result.fromMaybe (Exception "type error: :url must be a string")
+
+                    headers =
+                        requestMap
+                            |> ValueMap.get (Keyword "headers")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.andThen (Runtime.tryDictOf Runtime.tryString Runtime.tryString)
+                            |> Maybe.map Dict.toList
+                            |> Maybe.withDefault []
+
+                    methodResult =
+                        requestMap |> ValueMap.get (Keyword "method") |> Maybe.map Located.getValue |> Maybe.andThen Runtime.tryKeyword |> Result.fromMaybe (Exception "type error: method must be a keyword")
+
+                    bodyResult =
+                        requestMap
+                            |> ValueMap.get (Keyword "body")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.andThen
+                                (\bodyValue ->
+                                    case bodyValue of
+                                        String s ->
+                                            Just (Just s)
+
+                                        Nil ->
+                                            Just Nothing
+
+                                        _ ->
+                                            Nothing
+                                )
+                            |> Result.fromMaybe (Exception "type error: body must be nil or string")
+                in
+                Result.map3
+                    (\url method body ->
+                        { method = String.toUpper method
+                        , headers = headers
+                        , url = url
+                        , body = body
+                        }
+                    )
+                    urlResult
+                    methodResult
+                    bodyResult
+            )
+
+
+http : Callable
+http =
+    let
+        arity1 request env k =
+            case decodeHttpRequest request of
+                Ok req ->
+                    ( Ok ( Http req, env ), Just (Thunk (\v rEnv -> ( Ok ( Located.map Const v, rEnv ), Just (Thunk k) ))) )
+
+                Err exception ->
+                    ( Err exception, Just (Thunk k) )
+    in
+    { emptyCallable | arity1 = Just (Fixed arity1) }
+
+
+jsonEncode : Callable
+jsonEncode =
+    let
+        arity1 v =
+            Enclojure.Json.encodeToString v |> String
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+    }
+
+
+jsonDecode : Callable
+jsonDecode =
+    let
+        arity1 v =
+            Runtime.tryString v
+                |> Result.fromMaybe (Exception "type error: json/decode expects a string")
+                |> Result.andThen Enclojure.Json.decodeFromString
+                |> Result.map Const
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure arity1
     }
 
 
