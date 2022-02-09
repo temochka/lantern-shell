@@ -25,7 +25,6 @@ import LanternUi
 import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
 import LanternUi.Theme
-import List exposing (intersperse)
 import Process
 import Task
 
@@ -36,7 +35,10 @@ type alias Context =
 
 type ConsoleEntry
     = ConsoleString String
-    | ConsoleStatus Interpreter
+    | UiTrace UiModel
+    | Breakpoint ( ( Located IO, Env ), Maybe Thunk )
+    | Success Value
+    | Failure Exception
 
 
 type alias Console =
@@ -57,18 +59,27 @@ printLn string console =
     ConsoleString string :: console
 
 
-printStatus : Interpreter -> Console -> Console
-printStatus interpreter console =
-    activeUi interpreter
-        |> Maybe.map (always console)
-        |> Maybe.withDefault (ConsoleStatus interpreter :: console)
+printResult : Interpreter -> Console -> Console
+printResult interpreter console =
+    case interpreter of
+        Done ( value, _ ) ->
+            Success value :: console
+
+        UI model _ ->
+            UiTrace model :: console
+
+        Panic (Located _ exception) ->
+            Failure exception :: console
+
+        _ ->
+            console
 
 
-printUi : Interpreter -> Console -> Console
-printUi interpreter console =
-    activeUi interpreter
-        |> Maybe.map (always (ConsoleStatus interpreter :: console))
-        |> Maybe.withDefault console
+recordBreakpoint : ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Console -> Console
+recordBreakpoint ( ret, thunk ) console =
+    ret
+        |> Result.map (\val -> Breakpoint ( val, thunk ) :: console)
+        |> Result.withDefault console
 
 
 scriptName : Script -> String
@@ -91,6 +102,7 @@ type Message
     | UpdateInputRequest InputKey InputCell
     | UpdateScripts (Result Lantern.Error (List Script))
     | HandleIO ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    | Rewind ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
     | InspectValue Value
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
@@ -253,7 +265,7 @@ update msg model =
                         , console =
                             model.console
                                 |> printLn "Evaluating from REPL"
-                                |> printStatus interpreter
+                                |> printResult interpreter
                         , repl = ""
                       }
                     , retMsg
@@ -286,7 +298,7 @@ update msg model =
                 , console =
                     model.console
                         |> printLn ("Starting " ++ scriptName model.scriptEditor)
-                        |> printStatus interpreter
+                        |> printResult interpreter
               }
             , retMsg
             )
@@ -303,10 +315,14 @@ update msg model =
                 | interpreter = interpreter
                 , console =
                     model.console
-                        |> printStatus interpreter
+                        |> recordBreakpoint ret
+                        |> printResult interpreter
               }
             , retMsg
             )
+
+        Rewind ret ->
+            update (HandleIO ret) { model | interpreter = Running }
 
         UpdateInputRequest name v ->
             case model.interpreter of
@@ -321,7 +337,7 @@ update msg model =
                                     Located.fakeLoc <| Enclojure.uiToValue enclojureUi
 
                                 console =
-                                    printUi model.interpreter model.console
+                                    printResult model.interpreter model.console
                             in
                             ( { model | interpreter = Running, console = console }
                             , Task.perform
@@ -533,11 +549,11 @@ renderUI context uiModel =
                 |> Element.paragraph []
 
 
-activeUi : Interpreter -> Maybe Interpreter
+activeUi : Interpreter -> Maybe UiModel
 activeUi interpreter =
     case interpreter of
-        UI _ _ ->
-            Just interpreter
+        UI model _ ->
+            Just model
 
         _ ->
             Nothing
@@ -649,7 +665,7 @@ view context model =
                 ]
 
         consoleWithActiveUi =
-            activeUi model.interpreter |> Maybe.map (\ui -> ConsoleStatus ui :: model.console) |> Maybe.withDefault model.console
+            activeUi model.interpreter |> Maybe.map (\ui -> UiTrace ui :: model.console) |> Maybe.withDefault model.console
 
         console =
             consoleWithActiveUi
@@ -667,39 +683,56 @@ view context model =
                                 ConsoleString s ->
                                     Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
 
-                                ConsoleStatus interpreter ->
-                                    case interpreter of
-                                        Stopped ->
-                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Stopped" ]
+                                Breakpoint ( ( Located loc io, env ), thunk ) ->
+                                    let
+                                        newEnv =
+                                            case model.interpreter of
+                                                Done ( _, cEnv ) ->
+                                                    { cEnv | local = env.local }
 
-                                        Blocked ->
-                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Waiting..." ]
+                                                _ ->
+                                                    env
 
-                                        UI ui _ ->
-                                            Element.column
-                                                [ Element.width Element.fill ]
-                                                [ renderUI context ui ]
+                                        rewindButton =
+                                            LanternUi.Input.button context.theme
+                                                []
+                                                { onPress = Just (Lantern.App.Message <| Rewind ( Ok ( Located loc io, newEnv ), thunk ))
+                                                , label = Element.text "Rewind"
+                                                }
+                                    in
+                                    Element.column
+                                        [ Element.width Element.fill ]
+                                        [ Element.paragraph [] [ Element.text "Value breakpoint", rewindButton ]
+                                        , case io of
+                                            Const v ->
+                                                Element.text (Runtime.inspect v)
 
-                                        Running ->
-                                            Element.paragraph [ Element.width Element.fill ] [ Element.text "Running..." ]
+                                            _ ->
+                                                Element.none
+                                        ]
 
-                                        Done ( val, _ ) ->
-                                            Element.column
-                                                [ Element.width Element.fill ]
-                                                [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
-                                                , Element.paragraph
-                                                    [ Element.width Element.fill ]
-                                                    [ Element.text (Runtime.inspect val)
-                                                    , LanternUi.Input.button context.theme
-                                                        []
-                                                        { onPress = Just (Lantern.App.Message <| InspectValue val)
-                                                        , label = Element.text "Inspect"
-                                                        }
-                                                    ]
-                                                ]
+                                Success val ->
+                                    Element.column
+                                        [ Element.width Element.fill ]
+                                        [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
+                                        , Element.paragraph
+                                            [ Element.width Element.fill ]
+                                            [ Element.text (Runtime.inspect val)
+                                            , LanternUi.Input.button context.theme
+                                                []
+                                                { onPress = Just (Lantern.App.Message <| InspectValue val)
+                                                , label = Element.text "Inspect"
+                                                }
+                                            ]
+                                        ]
 
-                                        Panic e ->
-                                            Element.paragraph [ Element.width Element.fill ] [ Element.text (Runtime.inspectLocated (Located.map Throwable e)) ]
+                                Failure e ->
+                                    Element.text <| Runtime.inspect (Throwable e)
+
+                                UiTrace ui ->
+                                    Element.column
+                                        [ Element.width Element.fill ]
+                                        [ renderUI context ui ]
                             )
                     )
                 |> Element.column

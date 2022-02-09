@@ -93,8 +93,8 @@ decodeHttpRequest value =
                         requestMap
                             |> ValueMap.get (Keyword "body")
                             |> Maybe.map Located.getValue
-                            |> Maybe.andThen
-                                (\bodyValue ->
+                            |> Maybe.withDefault Nil
+                            |> (\bodyValue ->
                                     case bodyValue of
                                         String s ->
                                             Just (Just s)
@@ -104,7 +104,7 @@ decodeHttpRequest value =
 
                                         _ ->
                                             Nothing
-                                )
+                               )
                             |> Result.fromMaybe (Exception "type error: body must be nil or string")
                 in
                 Result.map3

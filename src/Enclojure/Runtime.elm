@@ -317,11 +317,43 @@ pure fn =
     \v env k -> ( fn v |> Result.map (\io -> ( io, env )), Just (Thunk k) )
 
 
+getFn : String -> Callable
+getFn key =
+    let
+        arity1 mapVal =
+            arity2 ( mapVal, Nil )
+
+        arity2 ( mapVal, default ) =
+            (case mapVal of
+                Map m ->
+                    ValueMap.get (Keyword key) m |> Maybe.map Located.getValue
+
+                Set s ->
+                    if ValueSet.member (Keyword key) s then
+                        Just (Keyword key)
+
+                    else
+                        Nothing
+
+                _ ->
+                    Just Nil
+            )
+                |> Maybe.withDefault default
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+        , arity2 = Just <| Fixed <| pure (arity2 >> Const >> Ok)
+    }
+
+
 apply : Located Value -> Located Value -> Env -> Continuation -> Types.Step
 apply ((Located fnLoc fnExpr) as fn) arg env k =
     case fnExpr of
         Fn _ callable ->
             ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
+
+        Keyword key ->
+            ( Ok ( Located.map Const arg, env ), Just (toContinuation (getFn key) { self = fnExpr, k = k }) )
 
         _ ->
             ( Err (Located fnLoc (Exception (inspectLocated fn ++ " is not a valid callable.")))
