@@ -30,6 +30,7 @@ module Enclojure.Lib exposing
     , readField
     , rem
     , rest_
+    , savepoint
     , seq
     , sleep
     , str
@@ -61,6 +62,17 @@ sleep =
 
                 _ ->
                     Err (Exception "type error: sleep expects one integer argument")
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed (pure arity1))
+    }
+
+
+savepoint : Callable
+savepoint =
+    let
+        arity1 val =
+            Ok (Savepoint val)
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))

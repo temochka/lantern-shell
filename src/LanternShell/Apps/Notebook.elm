@@ -165,6 +165,11 @@ trampoline nodeId ( result, thunk ) maxdepth =
                                 )
                         )
 
+                    Savepoint _ ->
+                        ( ScriptError "Not implemented"
+                        , Cmd.none
+                        )
+
                     ShowUI _ ->
                         ( ScriptError "Not implemented"
                         , Cmd.none

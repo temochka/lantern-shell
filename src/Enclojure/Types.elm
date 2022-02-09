@@ -70,6 +70,7 @@ type alias HttpRequest =
 
 type IO
     = Const Value
+    | Savepoint Value
     | Http HttpRequest
     | Sleep Float
     | ReadField String

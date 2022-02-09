@@ -36,7 +36,7 @@ type alias Context =
 type ConsoleEntry
     = ConsoleString String
     | UiTrace UiModel
-    | Breakpoint ( ( Located IO, Env ), Maybe Thunk )
+    | Savepoint_ ( ( Located IO, Env ), Maybe Thunk )
     | Success Value
     | Failure ( Located Exception, Env )
 
@@ -75,10 +75,10 @@ printResult interpreter console =
             console
 
 
-recordBreakpoint : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Console -> Console
-recordBreakpoint ( ret, thunk ) console =
+recordSavepoint : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Console -> Console
+recordSavepoint ( ret, thunk ) console =
     ret
-        |> Result.map (\val -> Breakpoint ( val, thunk ) :: console)
+        |> Result.map (\val -> Savepoint_ ( val, thunk ) :: console)
         |> Result.withDefault console
 
 
@@ -179,6 +179,11 @@ trampoline ( result, thunk ) maxdepth =
 
                             Nothing ->
                                 ( Done ( v, env ), Cmd.none )
+
+                    Savepoint v ->
+                        ( Running
+                        , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.replace io (Const v), env ), thunk )))
+                        )
 
                     Http request ->
                         ( Running
@@ -315,7 +320,6 @@ update msg model =
                 | interpreter = interpreter
                 , console =
                     model.console
-                        |> recordBreakpoint ret
                         |> printResult interpreter
               }
             , retMsg
@@ -695,7 +699,7 @@ view context model =
                                 ConsoleString s ->
                                     Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
 
-                                Breakpoint ( ( Located loc io, env ), thunk ) ->
+                                Savepoint_ ( ( Located loc io, env ), thunk ) ->
                                     let
                                         newEnv =
                                             case model.interpreter of
@@ -717,7 +721,7 @@ view context model =
                                     in
                                     Element.column
                                         [ Element.width Element.fill ]
-                                        [ Element.paragraph [] [ Element.text "Value breakpoint", rewindButton ]
+                                        [ Element.paragraph [] [ Element.text "Savepoint", rewindButton ]
                                         , case io of
                                             Const v ->
                                                 valueRow v
