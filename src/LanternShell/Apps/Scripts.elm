@@ -698,7 +698,7 @@ viewEditor context model =
 
         toolbar =
             Element.row
-                [ Element.width Element.fill ]
+                [ Element.width Element.fill, Element.spacing 10 ]
                 [ saveButton, runButton, evalButton ]
 
         scriptEditor =
@@ -829,11 +829,9 @@ viewEditor context model =
     in
     LanternUi.columnLayout
         context.theme
-        []
-        [ Element.row
-            [ Element.width Element.fill, Element.spacing 20 ]
-            [ Element.column [ Element.width (Element.fillPortion 5) ] [ scriptEditor, repl ]
-            ]
+        [ Element.width Element.fill, Element.spacing 20 ]
+        [ toolbar
+        , Element.column [ Element.width (Element.fillPortion 5) ] [ scriptEditor, repl ]
         ]
 
 
