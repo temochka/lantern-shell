@@ -671,6 +671,18 @@ view context model =
             consoleWithActiveUi
                 |> List.indexedMap
                     (\i entry ->
+                        let
+                            valueRow val =
+                                Element.paragraph
+                                    [ Element.width Element.fill ]
+                                    [ Element.text (Runtime.inspect val)
+                                    , LanternUi.Input.button context.theme
+                                        []
+                                        { onPress = Just (Lantern.App.Message <| InspectValue val)
+                                        , label = Element.text "Inspect"
+                                        }
+                                    ]
+                        in
                         Element.el
                             [ Element.width Element.fill
                             , if i == 0 then
@@ -690,6 +702,9 @@ view context model =
                                                 Done ( _, cEnv ) ->
                                                     { cEnv | local = env.local }
 
+                                                Panic ( _, cEnv ) ->
+                                                    { cEnv | local = env.local }
+
                                                 _ ->
                                                     env
 
@@ -705,7 +720,7 @@ view context model =
                                         [ Element.paragraph [] [ Element.text "Value breakpoint", rewindButton ]
                                         , case io of
                                             Const v ->
-                                                Element.text (Runtime.inspect v)
+                                                valueRow v
 
                                             _ ->
                                                 Element.none
@@ -715,15 +730,7 @@ view context model =
                                     Element.column
                                         [ Element.width Element.fill ]
                                         [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
-                                        , Element.paragraph
-                                            [ Element.width Element.fill ]
-                                            [ Element.text (Runtime.inspect val)
-                                            , LanternUi.Input.button context.theme
-                                                []
-                                                { onPress = Just (Lantern.App.Message <| InspectValue val)
-                                                , label = Element.text "Inspect"
-                                                }
-                                            ]
+                                        , valueRow val
                                         ]
 
                                 Failure ( e, _ ) ->
