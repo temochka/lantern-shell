@@ -112,7 +112,6 @@ type Message
     | EditScript Script
     | UpdateName String
     | UpdateCode String
-    | UpdateScriptInput String
     | UpdateRepl String
     | Eval String
     | NoOp
@@ -271,12 +270,7 @@ update msg model =
                     (\env ->
                         let
                             ( interpreter, retMsg ) =
-                                trampoline
-                                    (Enclojure.eval
-                                        (env |> Runtime.setGlobalEnv "*input*" (String model.scriptEditor.input))
-                                        code
-                                    )
-                                    10000
+                                trampoline (Enclojure.eval env code) 10000
                         in
                         ( { model
                             | interpreter = interpreter
@@ -304,11 +298,7 @@ update msg model =
         Run ->
             let
                 ( interpreter, retMsg ) =
-                    trampoline
-                        (Enclojure.eval (Runtime.emptyEnv |> Runtime.setGlobalEnv "*input*" (String model.scriptEditor.input))
-                            model.scriptEditor.code
-                        )
-                        10000
+                    trampoline (Enclojure.eval Runtime.emptyEnv model.scriptEditor.code) 10000
             in
             ( { model
                 | interpreter = interpreter
@@ -441,16 +431,6 @@ update msg model =
         EditScript script ->
             ( { model | scriptEditor = script }, Cmd.none )
 
-        UpdateScriptInput input ->
-            let
-                oldScriptEditor =
-                    model.scriptEditor
-
-                newScriptEditor =
-                    { oldScriptEditor | input = input }
-            in
-            ( { model | scriptEditor = newScriptEditor }, Cmd.none )
-
         -- Beware: the Apps namespace hijacks this message and launches the inspector
         -- would be nice to make this more explicit but it'll take a lot of refactoring
         InspectValue _ ->
@@ -518,13 +498,14 @@ renderUI context uiModel =
                         case input of
                             TextInput opts s ->
                                 if List.isEmpty opts.suggestions then
-                                    LanternUi.Input.text
+                                    LanternUi.Input.multiline
                                         context.theme
                                         []
                                         { onChange = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
                                         , placeholder = Nothing
                                         , label = Element.Input.labelHidden key
                                         , text = s
+                                        , spellcheck = False
                                         }
 
                                 else
@@ -669,14 +650,6 @@ view context model =
                     , text = model.scriptEditor.name
                     , placeholder = Nothing
                     , label = Element.Input.labelAbove [] (Element.text "Script name")
-                    }
-                , LanternUi.Input.multiline context.theme
-                    [ Element.width Element.fill ]
-                    { onChange = UpdateScriptInput >> Lantern.App.Message
-                    , text = model.scriptEditor.input
-                    , placeholder = Nothing
-                    , label = Element.Input.labelAbove [] (Element.text "Script input (*input*)")
-                    , spellcheck = False
                     }
                 , Element.paragraph [] [ Element.text "Code" ]
                 , LanternUi.Input.code context.theme
