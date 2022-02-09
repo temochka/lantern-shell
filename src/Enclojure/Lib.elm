@@ -31,6 +31,7 @@ module Enclojure.Lib exposing
     , rem
     , rest_
     , savepoint
+    , second
     , seq
     , sleep
     , str
@@ -871,6 +872,27 @@ first =
                                 x
 
                             [] ->
+                                Nil
+                    )
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed <| pure (arity1 >> Result.map Const))
+    }
+
+
+second : Callable
+second =
+    let
+        arity1 collVal =
+            collVal
+                |> Runtime.toSeq
+                |> Result.map
+                    (\s ->
+                        case s of
+                            _ :: x :: _ ->
+                                x
+
+                            _ ->
                                 Nil
                     )
     in

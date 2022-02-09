@@ -119,6 +119,9 @@ resolveSymbol env symbol =
                 "<o>" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.savepoint))
 
+                "second" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.second))
+
                 "sleep" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
 
