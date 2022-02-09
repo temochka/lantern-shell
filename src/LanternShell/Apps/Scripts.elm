@@ -45,13 +45,21 @@ type alias Console =
     List ConsoleEntry
 
 
-type alias Model =
+type alias BrowserModel =
+    { scripts : List Script }
+
+
+type alias EditorModel =
     { interpreter : Interpreter
-    , scripts : List Script
     , scriptEditor : Script
     , console : Console
     , repl : String
     }
+
+
+type Model
+    = Browser BrowserModel
+    | Editor EditorModel
 
 
 printLn : String -> Console -> Console
@@ -119,12 +127,7 @@ type Message
 
 init : ( Model, Cmd (Lantern.App.Message Message) )
 init =
-    ( { interpreter = Stopped
-      , scripts = []
-      , scriptEditor = unsavedScript
-      , console = []
-      , repl = ""
-      }
+    ( Browser { scripts = [] }
     , Cmd.none
     )
 
@@ -219,225 +222,330 @@ trampoline ( result, thunk ) maxdepth =
             ( Panic e, Cmd.none )
 
 
-update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
-update msg model =
-    case msg of
-        FuzzySelectMessage id selectMsg ->
-            case model.interpreter of
-                UI ({ fuzzySelects } as ui) args ->
-                    let
-                        updatedFuzzySelects =
-                            Dict.update id
-                                (Maybe.withDefault LanternUi.FuzzySelect.hidden
-                                    >> LanternUi.FuzzySelect.update selectMsg
-                                    >> Just
-                                )
-                                fuzzySelects
-                    in
-                    ( { model | interpreter = UI { ui | fuzzySelects = updatedFuzzySelects } args }, Cmd.none )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        UpdateCode code ->
+updateBrowser :
+    Model
+    -> (BrowserModel -> ( BrowserModel, Cmd (Lantern.App.Message Message) ))
+    -> ( Model, Cmd (Lantern.App.Message Message) )
+updateBrowser model updateFn =
+    case model of
+        Browser m ->
             let
-                scriptEditor =
-                    model.scriptEditor
-
-                editor =
-                    { scriptEditor | code = code }
+                ( newM, cmd ) =
+                    updateFn m
             in
-            ( { model | scriptEditor = editor }, Cmd.none )
+            ( Browser newM, cmd )
 
-        UpdateRepl code ->
-            ( { model | repl = code }, Cmd.none )
-
-        Eval code ->
-            let
-                mEnv =
-                    case model.interpreter of
-                        Done ( _, env ) ->
-                            Just env
-
-                        Panic ( _, env ) ->
-                            Just env
-
-                        _ ->
-                            Nothing
-            in
-            mEnv
-                |> Maybe.map
-                    (\env ->
-                        let
-                            ( interpreter, retMsg ) =
-                                trampoline (Enclojure.eval env code) 10000
-                        in
-                        ( { model
-                            | interpreter = interpreter
-                            , console =
-                                model.console
-                                    |> printLn "Evaluating from REPL"
-                                    |> printResult interpreter
-                            , repl = ""
-                          }
-                        , retMsg
-                        )
-                    )
-                |> Maybe.withDefault ( { model | console = model.console |> printLn "Can't eval from REPL at this time" }, Cmd.none )
-
-        UpdateName name ->
-            let
-                scriptEditor =
-                    model.scriptEditor
-
-                editor =
-                    { scriptEditor | name = name }
-            in
-            ( { model | scriptEditor = editor }, Cmd.none )
-
-        Run ->
-            let
-                ( interpreter, retMsg ) =
-                    trampoline (Enclojure.eval Runtime.emptyEnv model.scriptEditor.code) 10000
-            in
-            ( { model
-                | interpreter = interpreter
-                , console =
-                    model.console
-                        |> printLn ("Starting " ++ scriptName model.scriptEditor)
-                        |> printResult interpreter
-              }
-            , retMsg
-            )
-
-        Stop ->
-            ( { model | interpreter = Panic ( Located.fakeLoc (Exception "Terminated"), Runtime.emptyEnv ) }, Cmd.none )
-
-        HandleIO ret ->
-            let
-                ( interpreter, retMsg ) =
-                    trampoline ret 10000
-            in
-            ( { model
-                | interpreter = interpreter
-                , console =
-                    model.console
-                        |> recordSavepoint ret
-                        |> printResult interpreter
-              }
-            , retMsg
-            )
-
-        Rewind ret ->
-            update (HandleIO ret) { model | interpreter = Running }
-
-        UpdateInputRequest name v ->
-            case model.interpreter of
-                UI ({ enclojureUi } as ui) ( env, thunk ) ->
-                    case v of
-                        Button _ ->
-                            let
-                                exitCode =
-                                    Located.fakeLoc <| Keyword name
-
-                                state =
-                                    Located.fakeLoc <| Enclojure.uiToValue enclojureUi
-
-                                console =
-                                    printResult model.interpreter model.console
-                            in
-                            ( { model | interpreter = Running, console = console }
-                            , Task.perform
-                                identity
-                                (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.fakeLoc (Const (List [ exitCode, state ])), env ), thunk )))
-                            )
-
-                        _ ->
-                            let
-                                updatedInputs =
-                                    Dict.insert name v ui.enclojureUi.inputs
-
-                                updatedUi =
-                                    { enclojureUi | inputs = updatedInputs }
-
-                                updatedModel =
-                                    { model | interpreter = UI { ui | enclojureUi = updatedUi } ( env, thunk ) }
-                            in
-                            ( updatedModel, Cmd.none )
-
-                _ ->
-                    ( model, Cmd.none )
-
-        UpdateScripts result ->
-            case result of
-                Ok scripts ->
-                    ( { model | scripts = scripts }, Cmd.none )
-
-                Err _ ->
-                    ( model, Cmd.none )
-
-        SaveScript ->
-            let
-                cmd =
-                    model.scriptEditor.id
-                        |> Maybe.map
-                            (\id ->
-                                Lantern.Query.withArguments
-                                    "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
-                                    [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
-                                    , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
-                                    , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
-                                    , ( "$id", id |> Lantern.Query.Int )
-                                    ]
-                            )
-                        |> Maybe.map (\query -> Lantern.writerQuery query ScriptSaved |> Lantern.App.call)
-                        |> Maybe.withDefault Cmd.none
-            in
-            ( model, cmd )
-
-        NewScript ->
-            ( { model | scriptEditor = unsavedScript, interpreter = Stopped }, Cmd.none )
-
-        ScriptSaved _ ->
+        _ ->
             ( model, Cmd.none )
 
-        CreateScript ->
+
+updateEditor :
+    Model
+    -> (EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) ))
+    -> ( Model, Cmd (Lantern.App.Message Message) )
+updateEditor model updateFn =
+    case model of
+        Editor m ->
             let
-                query =
-                    Lantern.Query.withArguments
-                        "INSERT INTO scripts (name, code, input, created_at, updated_at) VALUES ($name, $code, $input, datetime('now'), datetime('now'))"
-                        [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
-                        , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
-                        , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
-                        ]
+                ( newM, cmd ) =
+                    updateFn m
             in
-            ( model, Lantern.writerQuery query ScriptCreated |> Lantern.App.call )
+            ( Editor newM, cmd )
+
+        _ ->
+            ( model, Cmd.none )
+
+
+update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
+update msg appModel =
+    case msg of
+        FuzzySelectMessage id selectMsg ->
+            updateEditor appModel
+                (\model ->
+                    case model.interpreter of
+                        UI ({ fuzzySelects } as ui) args ->
+                            let
+                                updatedFuzzySelects =
+                                    Dict.update id
+                                        (Maybe.withDefault LanternUi.FuzzySelect.hidden
+                                            >> LanternUi.FuzzySelect.update selectMsg
+                                            >> Just
+                                        )
+                                        fuzzySelects
+                            in
+                            ( { model | interpreter = UI { ui | fuzzySelects = updatedFuzzySelects } args }
+                            , Cmd.none
+                            )
+
+                        _ ->
+                            ( model, Cmd.none )
+                )
+
+        UpdateCode code ->
+            updateEditor appModel
+                (\model ->
+                    let
+                        scriptEditor =
+                            model.scriptEditor
+
+                        editor =
+                            { scriptEditor | code = code }
+                    in
+                    ( { model | scriptEditor = editor }, Cmd.none )
+                )
+
+        UpdateRepl code ->
+            updateEditor appModel
+                (\model ->
+                    ( { model | repl = code }, Cmd.none )
+                )
+
+        Eval code ->
+            updateEditor appModel
+                (\model ->
+                    let
+                        mEnv =
+                            case model.interpreter of
+                                Done ( _, env ) ->
+                                    Just env
+
+                                Panic ( _, env ) ->
+                                    Just env
+
+                                _ ->
+                                    Nothing
+                    in
+                    mEnv
+                        |> Maybe.map
+                            (\env ->
+                                let
+                                    ( interpreter, retMsg ) =
+                                        trampoline (Enclojure.eval env code) 10000
+                                in
+                                ( { model
+                                    | interpreter = interpreter
+                                    , console =
+                                        model.console
+                                            |> printLn "Evaluating from REPL"
+                                            |> printResult interpreter
+                                    , repl = ""
+                                  }
+                                , retMsg
+                                )
+                            )
+                        |> Maybe.withDefault
+                            ( { model
+                                | console =
+                                    model.console
+                                        |> printLn "Can't eval from REPL at this time"
+                              }
+                            , Cmd.none
+                            )
+                )
+
+        UpdateName name ->
+            updateEditor appModel
+                (\model ->
+                    let
+                        scriptEditor =
+                            model.scriptEditor
+
+                        editor =
+                            { scriptEditor | name = name }
+                    in
+                    ( { model | scriptEditor = editor }, Cmd.none )
+                )
+
+        Run ->
+            updateEditor appModel
+                (\model ->
+                    let
+                        ( interpreter, retMsg ) =
+                            trampoline (Enclojure.eval Runtime.emptyEnv model.scriptEditor.code) 10000
+                    in
+                    ( { model
+                        | interpreter = interpreter
+                        , console =
+                            model.console
+                                |> printLn ("Starting " ++ scriptName model.scriptEditor)
+                                |> printResult interpreter
+                      }
+                    , retMsg
+                    )
+                )
+
+        Stop ->
+            updateEditor appModel
+                (\model ->
+                    ( { model
+                        | interpreter = Panic ( Located.fakeLoc (Exception "Terminated"), Runtime.emptyEnv )
+                      }
+                    , Cmd.none
+                    )
+                )
+
+        HandleIO ret ->
+            updateEditor appModel
+                (\model ->
+                    let
+                        ( interpreter, retMsg ) =
+                            trampoline ret 10000
+                    in
+                    ( { model
+                        | interpreter = interpreter
+                        , console =
+                            model.console
+                                |> recordSavepoint ret
+                                |> printResult interpreter
+                      }
+                    , retMsg
+                    )
+                )
+
+        Rewind ret ->
+            let
+                ( newAppModel, _ ) =
+                    updateEditor appModel (\model -> ( { model | interpreter = Running }, Cmd.none ))
+            in
+            update (HandleIO ret) newAppModel
+
+        UpdateInputRequest name v ->
+            updateEditor
+                appModel
+                (\model ->
+                    case model.interpreter of
+                        UI ({ enclojureUi } as ui) ( env, thunk ) ->
+                            case v of
+                                Button _ ->
+                                    let
+                                        exitCode =
+                                            Located.fakeLoc <| Keyword name
+
+                                        state =
+                                            Located.fakeLoc <| Enclojure.uiToValue enclojureUi
+
+                                        console =
+                                            printResult model.interpreter model.console
+                                    in
+                                    ( { model | interpreter = Running, console = console }
+                                    , Task.perform
+                                        identity
+                                        (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.fakeLoc (Const (List [ exitCode, state ])), env ), thunk )))
+                                    )
+
+                                _ ->
+                                    let
+                                        updatedInputs =
+                                            Dict.insert name v ui.enclojureUi.inputs
+
+                                        updatedUi =
+                                            { enclojureUi | inputs = updatedInputs }
+
+                                        updatedModel =
+                                            { model | interpreter = UI { ui | enclojureUi = updatedUi } ( env, thunk ) }
+                                    in
+                                    ( updatedModel, Cmd.none )
+
+                        _ ->
+                            ( model, Cmd.none )
+                )
+
+        UpdateScripts result ->
+            updateBrowser appModel
+                (\model ->
+                    case result of
+                        Ok scripts ->
+                            ( { model | scripts = scripts }, Cmd.none )
+
+                        Err _ ->
+                            ( model, Cmd.none )
+                )
+
+        SaveScript ->
+            updateEditor appModel
+                (\model ->
+                    let
+                        cmd =
+                            model.scriptEditor.id
+                                |> Maybe.map
+                                    (\id ->
+                                        Lantern.Query.withArguments
+                                            "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
+                                            [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
+                                            , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
+                                            , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
+                                            , ( "$id", id |> Lantern.Query.Int )
+                                            ]
+                                    )
+                                |> Maybe.map (\query -> Lantern.writerQuery query ScriptSaved |> Lantern.App.call)
+                                |> Maybe.withDefault Cmd.none
+                    in
+                    ( model, cmd )
+                )
+
+        NewScript ->
+            ( Editor
+                { interpreter = Stopped
+                , scriptEditor = unsavedScript
+                , console = []
+                , repl = ""
+                }
+            , Cmd.none
+            )
+
+        ScriptSaved _ ->
+            ( appModel, Cmd.none )
+
+        CreateScript ->
+            updateEditor appModel
+                (\model ->
+                    let
+                        query =
+                            Lantern.Query.withArguments
+                                "INSERT INTO scripts (name, code, input, created_at, updated_at) VALUES ($name, $code, $input, datetime('now'), datetime('now'))"
+                                [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
+                                , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
+                                , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
+                                ]
+                    in
+                    ( model, Lantern.writerQuery query ScriptCreated |> Lantern.App.call )
+                )
 
         ScriptCreated result ->
-            result
-                |> Result.map
-                    (\writerResult ->
-                        let
-                            editor =
-                                model.scriptEditor
+            updateEditor appModel
+                (\model ->
+                    result
+                        |> Result.map
+                            (\writerResult ->
+                                let
+                                    editor =
+                                        model.scriptEditor
 
-                            newEditor =
-                                { editor | id = Just writerResult.lastInsertRowId }
-                        in
-                        ( { model | scriptEditor = newEditor }, Cmd.none )
-                    )
-                |> Result.withDefault ( model, Cmd.none )
+                                    newEditor =
+                                        { editor | id = Just writerResult.lastInsertRowId }
+                                in
+                                ( { model | scriptEditor = newEditor }, Cmd.none )
+                            )
+                        |> Result.withDefault ( model, Cmd.none )
+                )
 
         EditScript script ->
-            ( { model | scriptEditor = script }, Cmd.none )
+            ( Editor
+                { interpreter = Stopped
+                , scriptEditor = script
+                , console = []
+                , repl = ""
+                }
+            , Cmd.none
+            )
 
         -- Beware: the Apps namespace hijacks this message and launches the inspector
         -- would be nice to make this more explicit but it'll take a lot of refactoring
         InspectValue _ ->
-            ( model, Cmd.none )
+            ( appModel, Cmd.none )
 
         NoOp ->
-            ( model, Cmd.none )
+            ( appModel, Cmd.none )
 
 
 inspectEnv : Env -> String
@@ -564,8 +672,8 @@ activeUi interpreter =
             Nothing
 
 
-view : Context -> Model -> Element (Lantern.App.Message Message)
-view context model =
+viewEditor : Context -> EditorModel -> Element (Lantern.App.Message Message)
+viewEditor context model =
     let
         runButtonTitle =
             case model.interpreter of
@@ -581,65 +689,17 @@ view context model =
         evalButton =
             LanternUi.Input.button context.theme [] { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.scriptEditor.code) }
 
-        currentScriptButtons =
-            Element.row
-                [ Element.width Element.fill ]
-                [ saveButton, runButton, evalButton ]
-
-        newScriptButton =
-            Element.el
-                [ Element.width Element.fill ]
-                (LanternUi.Input.button context.theme [] { label = Element.text "New script", onPress = Just <| Lantern.App.Message NewScript })
-
-        allScripts =
-            List.append
-                (if model.scriptEditor.id == Nothing then
-                    [ model.scriptEditor ]
-
-                 else
-                    []
-                )
-                model.scripts
-
-        scriptsPanel =
-            allScripts
-                |> List.map
-                    (\script ->
-                        let
-                            isCurrent =
-                                script.id == model.scriptEditor.id
-                        in
-                        Element.row
-                            [ Element.width Element.fill
-                            , if isCurrent then
-                                Element.Background.color context.theme.bgHighlight
-
-                              else
-                                LanternUi.noneAttribute
-                            ]
-                            [ Element.el [ Element.Events.onClick (Lantern.App.Message <| EditScript script) ] (Element.text (scriptName script))
-                            , if isCurrent then
-                                currentScriptButtons
-
-                              else
-                                Element.none
-                            ]
-                    )
-                |> (::)
-                    (if model.scriptEditor.id == Nothing then
-                        Element.none
-
-                     else
-                        newScriptButton
-                    )
-                |> Element.column [ Element.width (Element.fillPortion 1), Element.alignTop ]
-
         saveButton =
             if model.scriptEditor.id == Nothing then
                 LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message CreateScript }
 
             else
                 LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message SaveScript }
+
+        toolbar =
+            Element.row
+                [ Element.width Element.fill ]
+                [ saveButton, runButton, evalButton ]
 
         scriptEditor =
             Element.column
@@ -772,10 +832,43 @@ view context model =
         []
         [ Element.row
             [ Element.width Element.fill, Element.spacing 20 ]
-            [ scriptsPanel
-            , Element.column [ Element.width (Element.fillPortion 5) ] [ scriptEditor, repl ]
+            [ Element.column [ Element.width (Element.fillPortion 5) ] [ scriptEditor, repl ]
             ]
         ]
+
+
+viewBrowser : Context -> BrowserModel -> Element (Lantern.App.Message Message)
+viewBrowser context model =
+    let
+        newScriptButton =
+            Element.el
+                [ Element.width Element.fill ]
+                (LanternUi.Input.button context.theme [] { label = Element.text "New script", onPress = Just <| Lantern.App.Message NewScript })
+
+        scriptsPanel =
+            model.scripts
+                |> List.map
+                    (\script ->
+                        Element.row
+                            [ Element.width Element.fill
+                            ]
+                            [ Element.el [ Element.Events.onClick (Lantern.App.Message <| EditScript script) ] (Element.text (scriptName script))
+                            ]
+                    )
+                |> (::) newScriptButton
+                |> Element.column [ Element.width (Element.fillPortion 1), Element.alignTop ]
+    in
+    scriptsPanel
+
+
+view : Context -> Model -> Element (Lantern.App.Message Message)
+view context model =
+    case model of
+        Browser browser ->
+            viewBrowser context browser
+
+        Editor editor ->
+            viewEditor context editor
 
 
 type alias Script =
@@ -797,12 +890,17 @@ tableDecoder =
 
 
 liveQueries : Model -> List (LiveQuery Message)
-liveQueries _ =
-    let
-        tablesQuery =
-            Lantern.LiveQuery.prepare ( Lantern.Query.Query "SELECT id, input, name, code FROM scripts ORDER BY name" Dict.empty, tableDecoder ) UpdateScripts
-    in
-    [ tablesQuery ]
+liveQueries model =
+    case model of
+        Browser _ ->
+            let
+                tablesQuery =
+                    Lantern.LiveQuery.prepare ( Lantern.Query.Query "SELECT id, input, name, code FROM scripts ORDER BY name" Dict.empty, tableDecoder ) UpdateScripts
+            in
+            [ tablesQuery ]
+
+        Editor _ ->
+            []
 
 
 lanternApp : Lantern.App.App Context () Model Message
