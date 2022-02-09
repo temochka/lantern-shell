@@ -170,7 +170,7 @@ evalExpression mutableExpr mutableEnv mutableK =
                             ( Ok ( Located loc (Const v), env ), Just (Thunk k) )
 
                         Err e ->
-                            ( Err (Located loc e), Just (Thunk k) )
+                            ( Err ( Located loc e, env ), Just (Thunk k) )
 
                 String s ->
                     ( Ok ( Located loc (Const (String s)), env ), Just (Thunk k) )
@@ -251,7 +251,7 @@ evalVector (Located loc vecV) env k =
                                 )
 
                         _ ->
-                            ( Err (Located loc (Exception "Interpreter error: vector evaluation yielded a non-vector"))
+                            ( Err ( Located loc (Exception "Interpreter error: vector evaluation yielded a non-vector"), envNow )
                             , Just (Thunk a)
                             )
             )
@@ -288,6 +288,7 @@ evalMap (Located mapLoc map) env k =
                                             ( "Interpreter error: Map entry evaluation yielded a non-map entry"
                                                 |> Exception
                                                 |> Located loc
+                                                |> (\ex -> ( ex, mapEntryEnv ))
                                                 |> Err
                                             , Just (Thunk a)
                                             )
@@ -297,6 +298,7 @@ evalMap (Located mapLoc map) env k =
                             ( "Interpreter error: Map evaluation yielded a non-map"
                                 |> Exception
                                 |> Located loc
+                                |> (\ex -> ( ex, renv ))
                                 |> Err
                             , Just (Thunk a)
                             )
@@ -348,6 +350,7 @@ evalSet (Located setLoc set) env k =
                             ( "Interpreter error: Set evaluation yielded a non-set"
                                 |> Exception
                                 |> Located loc
+                                |> (\ex -> ( ex, renv ))
                                 |> Err
                             , Just (Thunk a)
                             )
@@ -465,7 +468,7 @@ evalFn (Located loc exprs) fnEnv k =
                                         (scrubLocalEnv callsiteEnv fn.k)
 
                                 Err e ->
-                                    ( Err e, Just (Thunk fn.k) )
+                                    ( Err ( e, fnEnv ), Just (Thunk fn.k) )
                         )
                             |> Thunk
                     )
@@ -512,7 +515,7 @@ evalFn (Located loc exprs) fnEnv k =
                                     (scrubLocalEnv callsiteEnv fn.k)
 
                             Err e ->
-                                ( Err e, Just (Thunk fn.k) )
+                                ( Err ( e, callsiteEnv ), Just (Thunk fn.k) )
                     )
                         |> Thunk
                 )
@@ -578,13 +581,13 @@ evalLet (Located loc body) env k =
                                     v
 
                                 Err e ->
-                                    Thunk (\_ _ -> ( Err e, Just (Thunk (scrubLocalEnv env k)) ))
+                                    Thunk (\_ errEnv -> ( Err ( e, errEnv ), Just (Thunk (scrubLocalEnv env k)) ))
                        )
                 )
             )
 
         _ ->
-            ( Err (Located loc (Exception "Syntax error: let expects a vector of bindings")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "Syntax error: let expects a vector of bindings"), env ), Just (Thunk k) )
 
 
 evalApply : Located Value -> Located (List (Located Value)) -> Env -> Continuation -> Step
@@ -609,6 +612,7 @@ evalApply fnExpr (Located loc argExprs) env k =
                                                 ( "Impossible interpreter state: list evaluation yielded a non-list"
                                                     |> Exception
                                                     |> Located loc
+                                                    |> (\ex -> ( ex, argEnv ))
                                                     |> Err
                                                 , Just (Thunk a)
                                                 )
@@ -631,13 +635,14 @@ evalQuote (Located loc exprs) env k =
 
         _ ->
             ( Err
-                (Located loc
+                ( Located loc
                     (Exception
                         ("Argument error: Wrong number of arguments ("
                             ++ String.fromInt (List.length exprs)
                             ++ ") passed to quote"
                         )
                     )
+                , env
                 )
             , Just (Thunk k)
             )
@@ -661,7 +666,7 @@ evalIf : Located (List (Located Value)) -> Env -> Continuation -> Step
 evalIf (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ :: _ ->
-            ( Err (Located loc (Exception "an if with too many forms")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "an if with too many forms"), env ), Just (Thunk k) )
 
         [ eIf, eThen, eElse ] ->
             evalExpression eIf
@@ -686,17 +691,17 @@ evalIf (Located loc args) env k =
                 )
 
         [ _ ] ->
-            ( Err (Located loc (Exception "an if without then")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "an if without then"), env ), Just (Thunk k) )
 
         [] ->
-            ( Err (Located loc (Exception "an empty if")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "an empty if"), env ), Just (Thunk k) )
 
 
 evalDef : Located (List (Located Value)) -> Env -> Continuation -> Step
 evalDef (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ ->
-            ( Err (Located loc (Exception "too many arguments to def")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "too many arguments to def"), env ), Just (Thunk k) )
 
         [ Located _ (Symbol name), e ] ->
             evalExpression e
@@ -711,16 +716,16 @@ evalDef (Located loc args) env k =
                 )
 
         [ _, _ ] ->
-            ( Err (Located loc (Exception "def accepts a symbol and an expression")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "def accepts a symbol and an expression"), env ), Just (Thunk k) )
 
         [ Located _ (Symbol name) ] ->
-            ( Err (Located loc (Exception ("empty def " ++ name))), Just (Thunk k) )
+            ( Err ( Located loc (Exception ("empty def " ++ name)), env ), Just (Thunk k) )
 
         [ _ ] ->
-            ( Err (Located loc (Exception "def expects a symbol as its first argument")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "def expects a symbol as its first argument"), env ), Just (Thunk k) )
 
         [] ->
-            ( Err (Located loc (Exception "no arguments to def")), Just (Thunk k) )
+            ( Err ( Located loc (Exception "no arguments to def"), env ), Just (Thunk k) )
 
 
 wrapInDo : Located (List (Located Value)) -> Located Value
@@ -785,7 +790,7 @@ eval initEnv code =
                         v
 
                     Err e ->
-                        ( Err (Located { start = ( 0, 0 ), end = ( 0, 0 ) } e)
+                        ( Err ( Located { start = ( 0, 0 ), end = ( 0, 0 ) } e, initEnv )
                         , Nothing
                         )
            )

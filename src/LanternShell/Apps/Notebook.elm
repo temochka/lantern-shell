@@ -80,7 +80,7 @@ type Message
     | AddFieldNode { parentId : NodeId, afterNodeId : NodeId }
     | UpdateEditorValue String
     | SaveEditor
-    | HandleIO NodeId ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    | HandleIO NodeId ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
     | NoOp
 
 
@@ -139,7 +139,7 @@ type Interpreter
     | Panic (Located Exception)
 
 
-trampoline : NodeId -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( ScriptResult, Cmd Message )
+trampoline : NodeId -> ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( ScriptResult, Cmd Message )
 trampoline nodeId ( result, thunk ) maxdepth =
     if maxdepth <= 0 then
         ( ScriptError "Stack level too deep", Cmd.none )
@@ -183,7 +183,7 @@ trampoline nodeId ( result, thunk ) maxdepth =
                             Nothing ->
                                 ( ScriptResult "\"apple\"", Cmd.none )
 
-            Err (Located _ (Exception err)) ->
+            Err ( Located _ (Exception err), _ ) ->
                 ( ScriptError err, Cmd.none )
 
 

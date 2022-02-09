@@ -38,7 +38,7 @@ type ConsoleEntry
     | UiTrace UiModel
     | Breakpoint ( ( Located IO, Env ), Maybe Thunk )
     | Success Value
-    | Failure Exception
+    | Failure ( Located Exception, Env )
 
 
 type alias Console =
@@ -68,14 +68,14 @@ printResult interpreter console =
         UI model _ ->
             UiTrace model :: console
 
-        Panic (Located _ exception) ->
-            Failure exception :: console
+        Panic e ->
+            Failure e :: console
 
         _ ->
             console
 
 
-recordBreakpoint : ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Console -> Console
+recordBreakpoint : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Console -> Console
 recordBreakpoint ( ret, thunk ) console =
     ret
         |> Result.map (\val -> Breakpoint ( val, thunk ) :: console)
@@ -101,8 +101,8 @@ type Message
     | Stop
     | UpdateInputRequest InputKey InputCell
     | UpdateScripts (Result Lantern.Error (List Script))
-    | HandleIO ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
-    | Rewind ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    | HandleIO ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
+    | Rewind ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
     | InspectValue Value
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
@@ -145,7 +145,7 @@ type Interpreter
     | UI UiModel ( Env, Maybe Thunk )
     | Running
     | Done ( Value, Env )
-    | Panic (Located Exception)
+    | Panic ( Located Exception, Env )
 
 
 responseToValue : Lantern.Http.Response -> Value
@@ -163,14 +163,14 @@ responseToValue response =
             ]
 
 
-trampoline : ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( Interpreter, Cmd (Lantern.App.Message Message) )
+trampoline : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( Interpreter, Cmd (Lantern.App.Message Message) )
 trampoline ( result, thunk ) maxdepth =
-    if maxdepth <= 0 then
-        ( Panic (Located.fakeLoc (Exception "Stack level too deep")), Cmd.none )
+    case result of
+        Ok ( io, env ) ->
+            if maxdepth <= 0 then
+                ( Panic ( Located.fakeLoc (Exception "Stack level too deep"), env ), Cmd.none )
 
-    else
-        case result of
-            Ok ( io, env ) ->
+            else
                 case Located.getValue io of
                     Const v ->
                         case thunk of
@@ -209,10 +209,10 @@ trampoline ( result, thunk ) maxdepth =
                         )
 
                     ReadField _ ->
-                        ( Panic (Located.fakeLoc (Exception "Not implemented")), Cmd.none )
+                        ( Panic ( Located.fakeLoc (Exception "Not implemented"), env ), Cmd.none )
 
-            Err e ->
-                ( Panic e, Cmd.none )
+        Err e ->
+            ( Panic e, Cmd.none )
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
@@ -304,7 +304,7 @@ update msg model =
             )
 
         Stop ->
-            ( { model | interpreter = Panic (Located.fakeLoc (Exception "Terminated")) }, Cmd.none )
+            ( { model | interpreter = Panic ( Located.fakeLoc (Exception "Terminated"), Runtime.emptyEnv ) }, Cmd.none )
 
         HandleIO ret ->
             let
@@ -726,8 +726,8 @@ view context model =
                                             ]
                                         ]
 
-                                Failure e ->
-                                    Element.text <| Runtime.inspect (Throwable e)
+                                Failure ( e, _ ) ->
+                                    Element.text <| Runtime.inspectLocated (Located.map Throwable e)
 
                                 UiTrace ui ->
                                     Element.column

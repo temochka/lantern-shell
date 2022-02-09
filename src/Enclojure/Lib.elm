@@ -130,7 +130,7 @@ http =
                     ( Ok ( Http req, env ), Just (Thunk (\v rEnv -> ( Ok ( Located.map Const v, rEnv ), Just (Thunk k) ))) )
 
                 Err exception ->
-                    ( Err exception, Just (Thunk k) )
+                    ( Err ( exception, env ), Just (Thunk k) )
     in
     { emptyCallable | arity1 = Just (Fixed arity1) }
 
@@ -176,7 +176,7 @@ readField =
                     )
 
                 _ ->
-                    ( Err (Exception "type error: read-field expects one string argument")
+                    ( Err ( Exception "type error: read-field expects one string argument", env )
                     , Just (Thunk k)
                     )
     in
@@ -732,7 +732,7 @@ seq =
     }
 
 
-fixedCall : Maybe (Arity a) -> a -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk )
+fixedCall : Maybe (Arity a) -> a -> Env -> Continuation -> ( Result ( Exception, Env ) ( IO, Env ), Maybe Thunk )
 fixedCall mArity =
     mArity
         |> Maybe.andThen
@@ -745,8 +745,8 @@ fixedCall mArity =
                         Nothing
             )
         |> Maybe.withDefault
-            (\_ _ k ->
-                ( Err (Exception "Interpreter error: undefined internal call arity")
+            (\_ env k ->
+                ( Err ( Exception "Interpreter error: undefined internal call arity", env )
                 , Just (Thunk k)
                 )
             )
@@ -771,7 +771,7 @@ cons =
                             )
 
                         _ ->
-                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"))
+                            ( Err ( Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"), env2 )
                             , Just (Thunk k)
                             )
                 )
@@ -959,7 +959,7 @@ rest_ =
                             )
 
                         _ ->
-                            ( Err (Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"))
+                            ( Err ( Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"), env2 )
                             , Just (Thunk k)
                             )
                 )
@@ -1007,7 +1007,7 @@ newException =
 
 toRuntimeStep : Step -> Runtime.Step
 toRuntimeStep ( r, k ) =
-    ( r |> Result.mapError Located.getValue |> Result.map (Tuple.mapFirst Located.getValue), k )
+    ( r |> Result.mapError (Tuple.mapFirst Located.getValue) |> Result.map (Tuple.mapFirst Located.getValue), k )
 
 
 apply : Callable
@@ -1044,7 +1044,7 @@ apply =
                         |> toRuntimeStep
 
                 Err e ->
-                    ( Err e, Just (Thunk k) )
+                    ( Err ( e, env ), Just (Thunk k) )
     in
     { emptyCallable
         | arity2 = Just <| Variadic arity2

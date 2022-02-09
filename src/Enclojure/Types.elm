@@ -17,7 +17,7 @@ type Exception
 
 
 type alias Continuation =
-    Located Value -> Env -> ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    Located Value -> Env -> ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
 
 
 type Thunk
@@ -25,12 +25,12 @@ type Thunk
 
 
 type alias Step =
-    ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
+    ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
 
 
 type Arity a
-    = Fixed (a -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk ))
-    | Variadic ({ args : a, rest : List Value } -> Env -> Continuation -> ( Result Exception ( IO, Env ), Maybe Thunk ))
+    = Fixed (a -> Env -> Continuation -> ( Result ( Exception, Env ) ( IO, Env ), Maybe Thunk ))
+    | Variadic ({ args : a, rest : List Value } -> Env -> Continuation -> ( Result ( Exception, Env ) ( IO, Env ), Maybe Thunk ))
 
 
 type TextFormat
