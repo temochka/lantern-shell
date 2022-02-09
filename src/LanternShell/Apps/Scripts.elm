@@ -254,30 +254,42 @@ update msg model =
             ( { model | repl = code }, Cmd.none )
 
         Eval code ->
-            case model.interpreter of
-                Done ( _, env ) ->
-                    let
-                        ( interpreter, retMsg ) =
-                            trampoline
-                                (Enclojure.eval
-                                    (env |> Runtime.setGlobalEnv "*input*" (String model.scriptEditor.input))
-                                    code
-                                )
-                                10000
-                    in
-                    ( { model
-                        | interpreter = interpreter
-                        , console =
-                            model.console
-                                |> printLn "Evaluating from REPL"
-                                |> printResult interpreter
-                        , repl = ""
-                      }
-                    , retMsg
-                    )
+            let
+                mEnv =
+                    case model.interpreter of
+                        Done ( _, env ) ->
+                            Just env
 
-                _ ->
-                    ( { model | console = model.console |> printLn "Can't eval from REPL at this time" }, Cmd.none )
+                        Panic ( _, env ) ->
+                            Just env
+
+                        _ ->
+                            Nothing
+            in
+            mEnv
+                |> Maybe.map
+                    (\env ->
+                        let
+                            ( interpreter, retMsg ) =
+                                trampoline
+                                    (Enclojure.eval
+                                        (env |> Runtime.setGlobalEnv "*input*" (String model.scriptEditor.input))
+                                        code
+                                    )
+                                    10000
+                        in
+                        ( { model
+                            | interpreter = interpreter
+                            , console =
+                                model.console
+                                    |> printLn "Evaluating from REPL"
+                                    |> printResult interpreter
+                            , repl = ""
+                          }
+                        , retMsg
+                        )
+                    )
+                |> Maybe.withDefault ( { model | console = model.console |> printLn "Can't eval from REPL at this time" }, Cmd.none )
 
         UpdateName name ->
             let
@@ -320,6 +332,7 @@ update msg model =
                 | interpreter = interpreter
                 , console =
                     model.console
+                        |> recordSavepoint ret
                         |> printResult interpreter
               }
             , retMsg
