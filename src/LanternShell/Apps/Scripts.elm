@@ -388,15 +388,22 @@ update msg model =
 
         SaveScript ->
             let
-                query =
-                    Lantern.Query.withArguments
-                        "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now')"
-                        [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
-                        , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
-                        , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
-                        ]
+                cmd =
+                    model.scriptEditor.id
+                        |> Maybe.map
+                            (\id ->
+                                Lantern.Query.withArguments
+                                    "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
+                                    [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
+                                    , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
+                                    , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
+                                    , ( "$id", id |> Lantern.Query.Int )
+                                    ]
+                            )
+                        |> Maybe.map (\query -> Lantern.writerQuery query ScriptSaved |> Lantern.App.call)
+                        |> Maybe.withDefault Cmd.none
             in
-            ( model, Lantern.writerQuery query ScriptSaved |> Lantern.App.call )
+            ( model, cmd )
 
         NewScript ->
             ( { model | scriptEditor = unsavedScript, interpreter = Stopped }, Cmd.none )
