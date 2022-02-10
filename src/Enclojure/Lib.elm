@@ -1343,6 +1343,15 @@ prelude =
        (assoc m k (assoc-in (get m k) ks v))
        (assoc m k v)))))
 
+(defn some
+  [pred coll]
+  (if (seq coll)
+    (let [x (first coll)
+          ret (pred x)]
+     (if ret
+       ret
+       (some pred (rest coll))))))
+
 (defn update
   ([m k f & args]
    (assoc m k (apply f (get m k) args))))
