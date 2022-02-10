@@ -132,7 +132,7 @@ view ctx model =
     in
     LanternUi.columnLayout
         ctx.theme
-        [ Element.height Element.fill, Element.width Element.fill ]
+        [ Element.height Element.fill, Element.width Element.fill, Element.scrollbarX ]
         [ renderValue ctx.theme Array.empty model.value
         , Element.row
             [ Element.alignBottom, Element.width Element.fill ]
