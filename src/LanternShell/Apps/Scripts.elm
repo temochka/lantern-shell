@@ -61,6 +61,11 @@ type Model
     | Editor EditorModel
 
 
+stackLimit : Int
+stackLimit =
+    100000
+
+
 printLn : String -> Console -> Console
 printLn string console =
     ConsoleString string :: console
@@ -336,7 +341,7 @@ update msg appModel =
                             (\env ->
                                 let
                                     ( interpreter, retMsg ) =
-                                        trampoline (Enclojure.eval env code) 10000
+                                        trampoline (Enclojure.eval env code) stackLimit
                                 in
                                 ( { model
                                     | interpreter = interpreter
@@ -377,7 +382,7 @@ update msg appModel =
                 (\model ->
                     let
                         ( interpreter, retMsg ) =
-                            trampoline (Enclojure.eval Runtime.emptyEnv model.scriptEditor.code) 10000
+                            trampoline (Enclojure.eval Runtime.emptyEnv model.scriptEditor.code) stackLimit
                     in
                     ( { model
                         | interpreter = interpreter
@@ -405,7 +410,7 @@ update msg appModel =
                 (\model ->
                     let
                         ( interpreter, retMsg ) =
-                            trampoline ret 10000
+                            trampoline ret stackLimit
                     in
                     ( { model
                         | interpreter = interpreter

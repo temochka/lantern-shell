@@ -226,6 +226,9 @@ toSeq val =
         Map m ->
             Ok <| List.map MapEntry (ValueMap.toList m)
 
+        String s ->
+            Ok <| List.map (String.fromChar >> String) (String.toList s)
+
         Nil ->
             Ok []
 
@@ -406,21 +409,15 @@ trySequenceOf extract value =
                         a
                             |> Maybe.andThen
                                 (\acc ->
-                                    extract (Located.getValue e)
+                                    extract e
                                         |> Maybe.map (\extracted -> extracted :: acc)
                                 )
                     )
                     (Just [])
     in
-    case value of
-        List l ->
-            extractAll l
-
-        Vector v ->
-            v |> Array.toList |> extractAll
-
-        _ ->
-            Nothing
+    toSeq value
+        |> Result.toMaybe
+        |> Maybe.andThen extractAll
 
 
 tryDictOf : (Value -> Maybe comparable) -> (Value -> Maybe b) -> Value -> Maybe (Dict.Dict comparable b)

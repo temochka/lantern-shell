@@ -128,6 +128,12 @@ resolveSymbol env symbol =
                 "str" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.str))
 
+                "string/join" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation LibString.join))
+
+                "string/length" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation LibString.length))
+
                 "string/split-lines" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation LibString.splitLines))
 

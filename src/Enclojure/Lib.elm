@@ -727,6 +727,13 @@ seq =
                     else
                         Ok (List (ValueSet.toList s |> List.map Located.fakeLoc))
 
+                String s ->
+                    if String.length s == 0 then
+                        Ok Nil
+
+                    else
+                        Ok (List (String.toList s |> List.map (String.fromChar >> String >> Located.fakeLoc)))
+
                 Map m ->
                     if ValueMap.isEmpty m then
                         Ok Nil
@@ -735,7 +742,7 @@ seq =
                         Ok (List (ValueMap.toList m |> List.map (MapEntry >> Located.fakeLoc)))
 
                 Nil ->
-                    Ok (List [])
+                    Ok Nil
 
                 _ ->
                     Err (Exception (inspect coll ++ " is not sequable"))
