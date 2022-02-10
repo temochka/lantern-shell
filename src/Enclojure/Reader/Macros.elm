@@ -4,6 +4,7 @@ import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Types exposing (Exception(..), Value(..))
+import Enclojure.ValueMap as ValueMap
 
 
 type Expansion a
@@ -45,6 +46,14 @@ macroexpandAllInternal i v =
                                 (Ok ( nextI, Array.empty ))
                                 l
                                 |> Result.map (Tuple.mapSecond (Vector >> Located loc))
+
+                        Map m ->
+                            m
+                                |> ValueMap.toList
+                                |> List.foldl
+                                    (\( mapKey, mapVal ) a -> a |> Result.andThen (\( ni, lr ) -> macroexpandAllInternal ni mapVal |> Result.map (\( nni, r ) -> ( nni, ( mapKey, r ) :: lr ))))
+                                    (Ok ( nextI, [] ))
+                                |> Result.map (Tuple.mapSecond (ValueMap.fromList >> Map >> Located loc))
 
                         _ ->
                             Ok ( nextI, Located loc val )
@@ -354,6 +363,20 @@ walk state f (Located loc val) =
             l
                 |> Array.foldl (\e a -> a |> Result.andThen (\( aState, av ) -> walk aState f e |> Result.map (\( nState, v ) -> ( nState, Array.push v av )))) (Ok ( state, Array.empty ))
                 |> Result.map (\( s, r ) -> ( s, Located loc (Vector r) ))
+
+        Map m ->
+            m
+                |> ValueMap.toList
+                |> List.foldr
+                    (\( mapKey, mapVal ) a ->
+                        a
+                            |> Result.andThen
+                                (\( aState, av ) ->
+                                    walk aState f mapVal |> Result.map (\( nState, v ) -> ( nState, ( mapKey, v ) :: av ))
+                                )
+                    )
+                    (Ok ( state, [] ))
+                |> Result.map (\( s, r ) -> ( s, Located loc (Map (ValueMap.fromList r)) ))
 
         _ ->
             f state (Located loc val)
