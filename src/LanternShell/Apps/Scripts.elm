@@ -3,16 +3,13 @@ module LanternShell.Apps.Scripts exposing (..)
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
-import Element.Events
 import Element.Input
 import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
 import Enclojure.Types exposing (Cell(..), Env, Exception(..), IO(..), InputCell(..), InputKey, TextFormat(..), Thunk(..), UI, Value(..))
 import Enclojure.ValueMap
-import Html.Attributes
 import Html.Events
-import Http
 import Json.Decode
 import Keyboard.Event
 import Keyboard.Key exposing (Key(..))
@@ -46,7 +43,9 @@ type alias Console =
 
 
 type alias BrowserModel =
-    { scripts : List Script }
+    { scripts : List Script
+    , query : String
+    }
 
 
 type alias EditorModel =
@@ -117,17 +116,19 @@ type Message
     | SaveScript
     | ScriptSaved (Result Lantern.Error Lantern.Query.WriterResult)
     | NewScript
+    | DeleteScript Script
     | EditScript Script
     | UpdateName String
     | UpdateCode String
     | UpdateRepl String
+    | UpdateBrowserQuery String
     | Eval String
     | NoOp
 
 
 init : ( Model, Cmd (Lantern.App.Message Message) )
 init =
-    ( Browser { scripts = [] }
+    ( Browser { scripts = [], query = "" }
     , Cmd.none
     )
 
@@ -259,6 +260,21 @@ updateEditor model updateFn =
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg appModel =
     case msg of
+        DeleteScript script ->
+            updateBrowser appModel
+                (\model ->
+                    script.id
+                        |> Maybe.map
+                            (\id ->
+                                Lantern.Query.withArguments
+                                    "DELETE FROM scripts WHERE id=$id"
+                                    [ ( "$id", id |> Lantern.Query.Int )
+                                    ]
+                            )
+                        |> Maybe.map (\query -> ( model, Lantern.writerQuery query ScriptSaved |> Lantern.App.call ))
+                        |> Maybe.withDefault ( model, Cmd.none )
+                )
+
         FuzzySelectMessage id selectMsg ->
             updateEditor appModel
                 (\model ->
@@ -546,6 +562,14 @@ update msg appModel =
 
         NoOp ->
             ( appModel, Cmd.none )
+
+        UpdateBrowserQuery query ->
+            updateBrowser appModel
+                (\model ->
+                    ( { model | query = query }
+                    , Cmd.none
+                    )
+                )
 
 
 inspectEnv : Env -> String
@@ -843,20 +867,54 @@ viewBrowser context model =
                 [ Element.width Element.fill ]
                 (LanternUi.Input.button context.theme [] { label = Element.text "New script", onPress = Just <| Lantern.App.Message NewScript })
 
-        scriptsPanel =
+        search =
+            LanternUi.Input.text
+                context.theme
+                []
+                { text = model.query
+                , onChange = UpdateBrowserQuery >> Lantern.App.Message
+                , placeholder = Just (Element.Input.placeholder [] (Element.text "Filter scripts"))
+                , label = Element.Input.labelHidden "Filter scripts"
+                }
+
+        toolbar =
+            Element.row
+                [ Element.spacing 10 ]
+                [ search
+                , newScriptButton
+                ]
+
+        filteredScripts =
             model.scripts
+                |> List.filter (\s -> String.isEmpty model.query || String.contains (String.toLower model.query) (String.toLower s.name))
+
+        scriptsList =
+            filteredScripts
                 |> List.map
                     (\script ->
                         Element.row
                             [ Element.width Element.fill
+                            , Element.spacing 20
                             ]
-                            [ Element.el [ Element.Events.onClick (Lantern.App.Message <| EditScript script) ] (Element.text (scriptName script))
+                            [ Element.Input.button [ Element.mouseOver [ Element.Background.color context.theme.bgHighlight ] ]
+                                { onPress = Just (Lantern.App.Message <| EditScript script)
+                                , label = Element.text (scriptName script)
+                                }
+                            , LanternUi.Input.button context.theme
+                                []
+                                { onPress = Just (Lantern.App.Message <| DeleteScript script)
+                                , label = Element.text "Delete"
+                                }
                             ]
                     )
-                |> (::) newScriptButton
-                |> Element.column [ Element.width (Element.fillPortion 1), Element.alignTop ]
+                |> Element.column [ Element.width (Element.fillPortion 1), Element.alignTop, Element.spacing 10 ]
     in
-    scriptsPanel
+    LanternUi.columnLayout
+        context.theme
+        []
+        [ toolbar
+        , scriptsList
+        ]
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)
