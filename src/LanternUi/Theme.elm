@@ -1,4 +1,4 @@
-module LanternUi.Theme exposing (Theme, lightTheme)
+module LanternUi.Theme exposing (Theme, solarizedDark)
 
 import Element
 
@@ -13,26 +13,101 @@ type alias Theme =
     , borderDefault : Element.Color
     , fontDefault : Element.Color
     , fontSecondary : Element.Color
+    , fontControl : Element.Color
     , fontContrast : Element.Color
     , fontContrastInactive : Element.Color
     , borderHighlight : Element.Color
-    , panelShadow : Element.Color
     }
 
 
-lightTheme : Theme
-lightTheme =
-    { bgDefault = Element.rgb255 0xF3 0xF3 0xF3
-    , bgContrast = Element.rgb255 0x2C 0x2C 0x2C
-    , bgPanel = Element.rgb255 0xFF 0xFF 0xFF
-    , bgHighlight = Element.rgb255 214 235 235
-    , bgActive = Element.rgb255 2 116 232
-    , bgInactive = Element.rgb255 146 195 227
-    , borderDefault = Element.rgb255 207 207 207
-    , fontDefault = Element.rgb255 0 0 0
-    , fontSecondary = Element.rgb255 128 128 128
-    , fontContrast = Element.rgb 255 255 255
-    , fontContrastInactive = Element.rgb255 128 128 128
-    , borderHighlight = Element.rgb255 153 202 235
-    , panelShadow = Element.rgb 0x00 0x00 0xFF
+brblack : Element.Color
+brblack =
+    Element.rgb255 0 43 54
+
+
+black : Element.Color
+black =
+    Element.rgb255 7 54 66
+
+
+brgreen : Element.Color
+brgreen =
+    Element.rgb255 88 110 117
+
+
+
+-- bryellow : Element.Color
+-- bryellow =
+--     Element.rgb255 101 123 131
+-- brblue : Element.Color
+-- brblue =
+--     Element.rgb255 131 148 150
+
+
+brcyan : Element.Color
+brcyan =
+    Element.rgb255 147 161 161
+
+
+white : Element.Color
+white =
+    Element.rgb255 238 232 213
+
+
+brwhite : Element.Color
+brwhite =
+    Element.rgb255 253 246 227
+
+
+
+-- yellow : Element.Color
+-- yellow =
+--     Element.rgb255 181 137 0
+-- brred : Element.Color
+-- brred =
+--     Element.rgb255 203 75 22
+-- red : Element.Color
+-- red =
+--     Element.rgb255 220 50 47
+-- magenta : Element.Color
+-- magenta =
+--     Element.rgb255 211 54 130
+
+
+brmagenta : Element.Color
+brmagenta =
+    Element.rgb255 108 113 196
+
+
+blue : Element.Color
+blue =
+    Element.rgb255 38 139 210
+
+
+cyan : Element.Color
+cyan =
+    Element.rgb255 42 161 152
+
+
+
+-- green : Element.Color
+-- green =
+--     Element.rgb255 133 153 0
+
+
+solarizedDark : Theme
+solarizedDark =
+    { bgDefault = black
+    , bgContrast = white
+    , bgPanel = brblack
+    , bgHighlight = cyan
+    , bgActive = blue
+    , bgInactive = brblack
+    , borderDefault = cyan
+    , fontDefault = brwhite
+    , fontSecondary = white
+    , fontControl = cyan
+    , fontContrast = brgreen
+    , fontContrastInactive = brcyan
+    , borderHighlight = brmagenta
     }

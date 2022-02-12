@@ -734,6 +734,7 @@ renderCell context model =
             { onChange = SetCode >> Lantern.App.Message
             , value = model.code
             , language = LanternUi.Input.Enclojure
+            , label = Nothing
             }
         , LanternUi.Input.button context.theme
             []
@@ -790,6 +791,7 @@ renderEditor ctx { editedNode, value } =
             { onChange = UpdateEditorValue >> Lantern.App.Message
             , language = LanternUi.Input.Enclojure
             , value = value
+            , label = Nothing
             }
 
     else

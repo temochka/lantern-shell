@@ -92,6 +92,7 @@ view { theme } model =
             { onChange = Update >> Lantern.App.Message
             , value = model.query
             , language = LanternUi.Input.Sql
+            , label = Nothing
             }
         , Element.column []
             (model.arguments

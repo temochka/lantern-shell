@@ -626,7 +626,7 @@ renderUI context uiModel =
         VStack cells ->
             cells
                 |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, inputs = inputs } })
-                |> Element.column [ Element.width Element.fill ]
+                |> Element.column [ Element.width Element.fill, Element.alignTop, Element.spacing 10 ]
 
         HStack cells ->
             cells
@@ -745,7 +745,7 @@ viewEditor context model =
 
         scriptEditor =
             Element.column
-                [ Element.width Element.fill ]
+                [ Element.width Element.fill, Element.spacing 20 ]
                 [ LanternUi.Input.text context.theme
                     [ Element.width Element.fill ]
                     { onChange = UpdateName >> Lantern.App.Message
@@ -753,13 +753,13 @@ viewEditor context model =
                     , placeholder = Nothing
                     , label = Element.Input.labelAbove [] (Element.text "Script name")
                     }
-                , Element.paragraph [] [ Element.text "Code" ]
                 , LanternUi.Input.code context.theme
                     [ Element.width Element.fill
                     ]
                     { onChange = UpdateCode >> Lantern.App.Message
                     , value = model.scriptEditor.code
                     , language = LanternUi.Input.Enclojure
+                    , label = Just <| Element.text "Code"
                     }
                 ]
 
@@ -858,15 +858,15 @@ viewEditor context model =
                     ( NoOp |> Lantern.App.Message, False )
 
         repl =
-            Element.column [ Element.width Element.fill ]
-                [ Element.paragraph [] [ Element.text "REPL" ]
-                , LanternUi.Input.code context.theme
+            Element.column [ Element.width Element.fill, Element.spacing 20 ]
+                [ LanternUi.Input.code context.theme
                     [ Element.width Element.fill
                     , Element.htmlAttribute (Html.Events.preventDefaultOn "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
                     ]
                     { onChange = UpdateRepl >> Lantern.App.Message
                     , value = model.repl
                     , language = LanternUi.Input.Enclojure
+                    , label = Just <| Element.text "REPL"
                     }
                 , Element.paragraph [] [ Element.text "Console" ]
                 , console
@@ -876,7 +876,7 @@ viewEditor context model =
         context.theme
         [ Element.width Element.fill, Element.spacing 20 ]
         [ toolbar
-        , Element.column [ Element.width (Element.fillPortion 5) ] [ scriptEditor, repl ]
+        , Element.column [ Element.width (Element.fillPortion 5), Element.spacing 20 ] [ scriptEditor, repl ]
         ]
 
 

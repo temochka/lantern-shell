@@ -12,6 +12,7 @@ import Html.Events
 import Json.Decode
 import Lantern.App
 import LanternUi
+import LanternUi.Input
 import LanternUi.Theme
 
 
@@ -136,7 +137,8 @@ view ctx model =
         [ renderValue ctx.theme Array.empty model.value
         , Element.row
             [ Element.alignBottom, Element.width Element.fill ]
-            [ Element.Input.text []
+            [ LanternUi.Input.text ctx.theme
+                [ Element.width Element.fill ]
                 { text = path
                 , onChange = \_ -> Lantern.App.Message Nop
                 , label = Element.Input.labelLeft [] (Element.text "Path")

@@ -88,7 +88,7 @@ customElements.define(
         indentUnit: this.tabSize || 2,
         mode: this.mode || "sql",
         value: this.initValue || "",
-        theme: "solarized light",
+        theme: "solarized dark",
         dragDrop: false,
         extraKeys: {
           Tab(cm) {
@@ -112,6 +112,8 @@ customElements.define(
       };
 
       this._instance.on("changes", runDispatch);
+      this._instance.getWrapperElement().style.fontFamily =
+        "SF Mono, Menlo, Andale Mono, Monaco, sans-serif";
     }
   }
 );

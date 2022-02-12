@@ -62,6 +62,7 @@ panel theme attributes { content, header } =
          , Element.clip
          , Element.Border.solid
          , Element.Border.width 1
+         , Element.Border.rounded 5
          , Element.Border.color theme.borderDefault
          , Element.Background.color theme.bgPanel
          , Element.spacing 10

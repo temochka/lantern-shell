@@ -19,7 +19,7 @@ import Lantern.LiveQuery exposing (LiveQuery(..))
 import LanternShell.Apps
 import LanternUi
 import LanternUi.FuzzySelect
-import LanternUi.Theme exposing (lightTheme)
+import LanternUi.Theme exposing (solarizedDark)
 import LanternUi.WindowManager
 import ProcessTable exposing (ProcessTable)
 import Task
@@ -82,7 +82,7 @@ init _ url key =
             Lantern.newConnection lanternRequestPort
 
         initialTheme =
-            LanternUi.Theme.lightTheme
+            LanternUi.Theme.solarizedDark
 
         ( windowManager, launchers ) =
             url
@@ -371,7 +371,7 @@ renderApp model { focused, id, tabindex } process =
 
         border =
             if focused then
-                [ Element.Border.shadow { offset = ( 0, 0 ), size = 2, blur = 0, color = model.theme.borderHighlight } ]
+                [ Element.Border.color model.theme.borderHighlight ]
 
             else
                 [ LanternUi.noneAttribute ]
@@ -407,10 +407,13 @@ tools model =
 renderAppLauncher : Model -> Element Msg
 renderAppLauncher model =
     Element.row
-        [ Element.width Element.fill, Element.spacing 10, Element.Background.color model.theme.bgContrast, Element.paddingXY 25 10 ]
+        [ Element.width Element.fill
+        , Element.spacing 10
+        , Element.paddingXY 25 10
+        ]
         [ Element.el [ Element.Font.color model.theme.fontContrastInactive ] (Element.text ">")
         , LanternUi.FuzzySelect.fuzzySelect
-            lightTheme
+            solarizedDark
             { options = LanternShell.Apps.all |> List.map (\app -> ( (app (appContext model)).name, \x -> (app x).init Nothing ))
             , placeholder = Nothing
             , label = Element.Input.labelHidden "Launch app"
@@ -430,8 +433,17 @@ view model =
     , body =
         [ LanternUi.columnLayout
             model.theme
-            []
-            [ renderAppLauncher model, Element.el [ Element.paddingXY 20 5, Element.width Element.fill, Element.height Element.fill ] (tools model) ]
+            [ Element.Font.color model.theme.fontDefault
+            , Element.Font.size 15
+            , Element.Font.family
+                [ Element.Font.typeface "SF Mono"
+                , Element.Font.typeface "Menlo"
+                , Element.Font.typeface "Andale Mono"
+                , Element.Font.typeface "Monaco"
+                , Element.Font.monospace
+                ]
+            ]
+            [ renderAppLauncher model, Element.el [ Element.paddingXY 20 0, Element.width Element.fill, Element.height Element.fill ] (tools model) ]
             |> Element.layout [ Element.width Element.fill, Element.Background.color model.theme.bgDefault ]
         ]
     }

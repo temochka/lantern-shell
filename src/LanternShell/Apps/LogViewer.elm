@@ -43,9 +43,6 @@ view { log, theme } _ =
                 [ Element.padding 5
                 , Element.width Element.fill
                 , Element.scrollbarX
-                , Element.Background.color theme.bgContrast
-                , Element.Font.color theme.fontContrast
-                , Element.Font.size 12
                 , Element.spacing 10
                 , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
                 ]

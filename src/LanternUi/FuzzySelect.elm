@@ -2,7 +2,9 @@ module LanternUi.FuzzySelect exposing (FuzzySelect, Message, fuzzySelect, hidden
 
 import Element exposing (Element)
 import Element.Background
+import Element.Border
 import Element.Events
+import Element.Font
 import Element.Input
 import Html.Attributes
 import Html.Events
@@ -138,6 +140,7 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
                                 in
                                 Element.el
                                     [ Element.Background.color bgColor
+                                    , Element.Font.color theme.fontDefault
                                     , Element.pointer
                                     , Element.width Element.fill
                                     , Element.paddingXY 10 5
@@ -155,8 +158,11 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
     Element.Input.text
         [ Element.width Element.fill
         , Element.below suggestions
+        , Element.Border.color theme.borderDefault
+        , Element.Background.color theme.bgDefault
         , Element.Events.onFocus (onInternalMessage (Toggle init))
         , Element.Events.onLoseFocus (onInternalMessage (Toggle Nothing))
+        , Element.Font.color theme.fontDefault
         , Element.htmlAttribute (Html.Events.on "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
         , id |> Maybe.map (Html.Attributes.id >> Element.htmlAttribute) |> Maybe.withDefault LanternUi.noneAttribute
         ]
