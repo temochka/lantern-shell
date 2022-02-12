@@ -9,6 +9,7 @@ import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
 import Enclojure.Types exposing (Cell(..), Env, Exception(..), IO(..), InputCell(..), InputKey, TextFormat(..), Thunk(..), UI, Value(..))
 import Enclojure.ValueMap
+import File.Download
 import Html.Events
 import Json.Decode
 import Keyboard.Event
@@ -128,6 +129,7 @@ type Message
     | UpdateRepl String
     | UpdateBrowserQuery String
     | Eval String
+    | DownloadFile String String String
     | NoOp
 
 
@@ -265,6 +267,9 @@ updateEditor model updateFn =
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg appModel =
     case msg of
+        DownloadFile filename contentType content ->
+            ( appModel, File.Download.string filename contentType content )
+
         DeleteScript script ->
             updateBrowser appModel
                 (\model ->
@@ -677,6 +682,14 @@ renderUI context uiModel =
                                     { onPress = Just (UpdateInputRequest key input |> Lantern.App.Message)
                                     , label = Element.text title
                                     }
+
+                            Download { name, contentType, content } ->
+                                LanternUi.Input.button
+                                    context.theme
+                                    []
+                                    { onPress = Just (DownloadFile name contentType content |> Lantern.App.Message)
+                                    , label = Element.text "Download"
+                                    }
                     )
                 |> Maybe.withDefault Element.none
 
@@ -751,7 +764,10 @@ viewEditor context model =
                 ]
 
         consoleWithActiveUi =
-            activeUi model.interpreter |> Maybe.map (\ui -> UiTrace ui :: model.console) |> Maybe.withDefault model.console
+            activeUi model.interpreter
+                |> Maybe.map (\ui -> UiTrace ui :: model.console)
+                |> Maybe.withDefault model.console
+                |> List.take 20
 
         console =
             consoleWithActiveUi

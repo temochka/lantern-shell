@@ -11,9 +11,7 @@ import Enclojure.Runtime as Runtime
 import Enclojure.Types exposing (Arity(..), Continuation, Env, Exception(..), IO(..), Number(..), Step, Thunk(..), Value(..))
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
-import Html exposing (a)
-import List exposing (map)
-import Parser exposing (symbol)
+import Parser
 
 
 resolveSymbol : Env -> String -> Result Exception Value
@@ -65,6 +63,9 @@ resolveSymbol env symbol =
                 "cons" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.cons))
 
+                "contains?" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.contains))
+
                 "dissoc" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.dissoc))
 
@@ -103,6 +104,9 @@ resolveSymbol env symbol =
 
                 "peek" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.peek))
+
+                "pr-str" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.prStr))
 
                 "read-field" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.readField))
@@ -766,6 +770,9 @@ uiToValue { inputs } =
                                 Just <| String s
 
                             Enclojure.Types.Button _ ->
+                                Nothing
+
+                            Enclojure.Types.Download _ ->
                                 Nothing
                 in
                 value |> Maybe.map Located.fakeLoc |> Maybe.map (Tuple.pair (Keyword k))

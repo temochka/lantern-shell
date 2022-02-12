@@ -3,7 +3,6 @@ module Enclojure.Types exposing (..)
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Enclojure.Located exposing (Located)
-import Http
 import Set
 
 
@@ -41,6 +40,7 @@ type InputCell
     = TextInput { suggestions : List String } String
     | MaskedTextInput String
     | Button { title : String }
+    | Download { name : String, contentType : String, content : String }
 
 
 type alias InputKey =

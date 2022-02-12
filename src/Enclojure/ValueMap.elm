@@ -1,4 +1,4 @@
-module Enclojure.ValueMap exposing (empty, foldl, fromList, get, insert, isEmpty, remove, toList)
+module Enclojure.ValueMap exposing (empty, foldl, fromList, get, insert, isEmpty, member, remove, toList)
 
 import Dict
 import Enclojure.Located exposing (Located(..))
@@ -265,6 +265,11 @@ get k map =
         Vector _ ->
             linearFind (Tuple.first >> (==) k) map.vectors
                 |> Maybe.map Tuple.second
+
+
+member : Value -> ValueMap -> Bool
+member val map =
+    Nothing /= get val map
 
 
 toList : ValueMap -> List ( Value, Located Value )

@@ -305,6 +305,19 @@ inspect value =
             "Exception: " ++ str
 
 
+print : Value -> String
+print value =
+    case value of
+        String string ->
+            string
+
+        Nil ->
+            ""
+
+        _ ->
+            inspect value
+
+
 toString : Value -> String
 toString value =
     case value of
@@ -312,7 +325,7 @@ toString value =
             s
 
         _ ->
-            inspect value
+            print value
 
 
 pure : (a -> Result Exception IO) -> (a -> Env -> Continuation -> Step)

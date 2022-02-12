@@ -3,6 +3,7 @@ module Enclojure.Lib exposing
     , assoc
     , conj
     , cons
+    , contains
     , dissoc
     , div
     , first
@@ -26,6 +27,7 @@ module Enclojure.Lib exposing
     , not_
     , peek
     , plus
+    , prStr
     , prelude
     , readField
     , rem
@@ -305,6 +307,45 @@ ui =
 
                                 _ ->
                                     Err (Exception "type error: invalid arguments to button cell")
+
+                        (Located _ (Keyword "download")) :: args ->
+                            case args of
+                                (Located _ (Keyword key)) :: (Located _ (String content)) :: restArgs ->
+                                    let
+                                        options =
+                                            case restArgs of
+                                                (Located _ (Map m)) :: _ ->
+                                                    m
+
+                                                _ ->
+                                                    ValueMap.empty
+
+                                        contentType =
+                                            ValueMap.get (Keyword "content-type") options
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.withDefault "text/plain"
+
+                                        name =
+                                            ValueMap.get (Keyword "name") options
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.withDefault "download.txt"
+                                    in
+                                    Ok
+                                        ( Dict.insert key
+                                            (Download
+                                                { name = name
+                                                , content = content
+                                                , contentType = contentType
+                                                }
+                                            )
+                                            inputs
+                                        , Input key
+                                        )
+
+                                _ ->
+                                    Err (Exception "type error: invalid arguments to download cell")
 
                         (Located _ (Keyword cellType)) :: _ ->
                             Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type"))
@@ -702,6 +743,21 @@ str =
     }
 
 
+prStr : Callable
+prStr =
+    let
+        arity0 { rest } =
+            rest
+                |> List.map Runtime.inspect
+                |> String.join ""
+                |> String
+                |> Ok
+    in
+    { emptyCallable
+        | arity0 = Just (Variadic (pure (arity0 >> Result.map Const)))
+    }
+
+
 seq : Callable
 seq =
     let
@@ -863,6 +919,39 @@ conj =
     in
     { emptyCallable
         | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const)
+    }
+
+
+contains : Callable
+contains =
+    let
+        arity2 ( coll, x ) =
+            case coll of
+                List _ ->
+                    Err (Exception "contains? not supported on lists")
+
+                Vector a ->
+                    case x of
+                        Number (Int i) ->
+                            Ok (Bool (i >= 0 && i < Array.length a))
+
+                        _ ->
+                            Ok (Bool False)
+
+                Nil ->
+                    Ok (Bool False)
+
+                Set s ->
+                    ValueSet.member x s |> Bool |> Ok
+
+                Map m ->
+                    ValueMap.member x m |> Bool |> Ok
+
+                _ ->
+                    Err (Exception ("don't know how to conj to " ++ inspect coll))
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| pure (arity2 >> Result.map Const)
     }
 
 
@@ -1366,5 +1455,22 @@ prelude =
 (defn update-in
   ([m ks f & args]
    (assoc-in m ks (apply f (get-in m ks) args))))
+
+(defn -dedupe
+  [seen coll]
+  (if (seq coll)
+    (let [el (first coll)]
+      (if (contains? seen el)
+        (-dedupe seen (rest coll))
+        (cons el (-dedupe (conj seen el) (rest coll)))))))
+
+(defn dedupe
+  [coll]
+  (-dedupe #{} coll))
+
+(defn fnil
+  [f default]
+  (fn [& args]
+    (apply f (if (= nil (first args)) default (first args)) (rest args))))
 
 """
