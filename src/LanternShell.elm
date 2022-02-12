@@ -95,7 +95,7 @@ init _ url key =
             { lanternConnection = lanternConnection
             , windowManager = windowManager
             , processTable = ProcessTable.empty
-            , fuzzySelect = Nothing
+            , fuzzySelect = LanternUi.FuzzySelect.hidden
             , theme = initialTheme
             , liveQueriesCache = Dict.empty
             , appLauncherQuery = ""
@@ -104,7 +104,7 @@ init _ url key =
     in
     launchers
         |> List.foldl
-            (\launcher ( model, cmd ) -> update (LaunchApp (launcher >> .init)) model |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ]))
+            (\launcher ( model, cmd ) -> update (LaunchApp (\x -> (launcher x).init Nothing)) model |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ]))
             ( starterModel
             , Cmd.none
             )
@@ -257,7 +257,7 @@ update msg model =
             [ \_ ->
                 ( { model
                     | processTable = newProcessTable
-                    , fuzzySelect = Nothing
+                    , fuzzySelect = LanternUi.FuzzySelect.hidden
                     , appLauncherQuery = ""
                   }
                 , Cmd.map (wrapAppMessage pid) appCmd
@@ -286,27 +286,32 @@ update msg model =
             ( { model | windowManager = newWindowManager }, Cmd.batch [ Cmd.map WindowManagerMessage cmd, Browser.Navigation.replaceUrl model.navigationKey newUrl ] )
 
         AppMessage pid proxiedMsg ->
-            [ \m ->
-                pid
-                    |> ProcessTable.lookup m.processTable
-                    |> Maybe.map ProcessTable.processApp
-                    |> Maybe.map
-                        (\appModel ->
-                            let
-                                lanternApp =
-                                    LanternShell.Apps.lanternAppFor appModel (appContext model)
+            case proxiedMsg of
+                LanternShell.Apps.LaunchAppMsg app ->
+                    update (LaunchApp (\_ -> app.init Nothing)) model
 
-                                ( newAppModel, cmd ) =
-                                    lanternApp.update proxiedMsg appModel
-                            in
-                            ( { m | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable }
-                            , Cmd.map (wrapAppMessage pid) cmd
-                            )
-                        )
-                    |> Maybe.withDefault ( m, Cmd.none )
-            , refreshLiveQueries pid
-            ]
-                |> threadModel model
+                _ ->
+                    [ \m ->
+                        pid
+                            |> ProcessTable.lookup m.processTable
+                            |> Maybe.map ProcessTable.processApp
+                            |> Maybe.map
+                                (\appModel ->
+                                    let
+                                        lanternApp =
+                                            LanternShell.Apps.lanternAppFor appModel (appContext model)
+
+                                        ( newAppModel, cmd ) =
+                                            lanternApp.update proxiedMsg appModel
+                                    in
+                                    ( { m | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable }
+                                    , Cmd.map (wrapAppMessage pid) cmd
+                                    )
+                                )
+                            |> Maybe.withDefault ( m, Cmd.none )
+                    , refreshLiveQueries pid
+                    ]
+                        |> threadModel model
 
         UpdateLauncherQuery query ->
             ( { model | appLauncherQuery = query }, Cmd.none )
@@ -406,7 +411,7 @@ renderAppLauncher model =
         [ Element.el [ Element.Font.color model.theme.fontContrastInactive ] (Element.text ">")
         , LanternUi.FuzzySelect.fuzzySelect
             lightTheme
-            { options = LanternShell.Apps.all |> List.map (\app -> ( (app (appContext model)).name, app >> .init ))
+            { options = LanternShell.Apps.all |> List.map (\app -> ( (app (appContext model)).name, \x -> (app x).init Nothing ))
             , placeholder = Nothing
             , label = Element.Input.labelHidden "Launch app"
             , id = Just "lanternAppLauncher"

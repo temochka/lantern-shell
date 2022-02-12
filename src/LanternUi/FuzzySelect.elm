@@ -1,4 +1,4 @@
-module LanternUi.FuzzySelect exposing (FuzzySelect, Message, fuzzySelect, update)
+module LanternUi.FuzzySelect exposing (FuzzySelect, Message, fuzzySelect, hidden, update)
 
 import Element exposing (Element)
 import Element.Background
@@ -13,40 +13,50 @@ import LanternUi
 import LanternUi.Theme exposing (Theme)
 
 
-type alias FuzzySelect =
+type FuzzySelect
+    = FuzzySelect Model
+
+
+type alias Model =
     Maybe { cursor : Int }
 
 
-init : FuzzySelect
+hidden : FuzzySelect
+hidden =
+    FuzzySelect Nothing
+
+
+init : Model
 init =
     Just { cursor = 0 }
 
 
 type Message
     = SetCursor Int
-    | Toggle FuzzySelect
+    | Toggle Model
     | MoveCursorDown Int
     | MoveCursorUp
     | Nop
 
 
 update : Message -> FuzzySelect -> FuzzySelect
-update msg maybeModel =
-    case msg of
-        SetCursor cursor ->
-            Maybe.map (\model -> { model | cursor = cursor }) maybeModel
+update msg (FuzzySelect maybeModel) =
+    FuzzySelect <|
+        case msg of
+            SetCursor cursor ->
+                Maybe.map (\model -> { model | cursor = cursor }) maybeModel
 
-        MoveCursorDown maxCursor ->
-            Maybe.map (\model -> { model | cursor = min maxCursor (model.cursor + 1) }) maybeModel
+            MoveCursorDown maxCursor ->
+                Maybe.map (\model -> { model | cursor = min maxCursor (model.cursor + 1) }) maybeModel
 
-        MoveCursorUp ->
-            Maybe.map (\model -> { model | cursor = max 0 (model.cursor - 1) }) maybeModel
+            MoveCursorUp ->
+                Maybe.map (\model -> { model | cursor = max 0 (model.cursor - 1) }) maybeModel
 
-        Toggle model ->
-            model
+            Toggle model ->
+                model
 
-        Nop ->
-            maybeModel
+            Nop ->
+                maybeModel
 
 
 selectedMatch : Int -> List ( String, a ) -> Maybe a
@@ -80,6 +90,11 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
                         String.contains (String.toLower query) (String.toLower opt)
                     )
 
+        model =
+            case state of
+                FuzzySelect m ->
+                    m
+
         handleKeyPress event =
             case event.keyCode of
                 Keyboard.Key.Up ->
@@ -92,7 +107,7 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
                     onInternalMessage (Toggle Nothing)
 
                 Keyboard.Key.Enter ->
-                    state
+                    model
                         |> Maybe.andThen
                             (\{ cursor } ->
                                 selectedMatch cursor matches
@@ -104,7 +119,7 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
                     onInternalMessage Nop
 
         suggestions =
-            (case state of
+            (case model of
                 Just { cursor } ->
                     let
                         cappedCursor =

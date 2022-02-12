@@ -145,7 +145,7 @@ liveQueries { tableViewer } =
     [ tablesQuery ] ++ tableViewerQueries
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.liveApp
         { name = "Database Explorer"

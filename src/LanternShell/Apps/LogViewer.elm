@@ -52,7 +52,7 @@ view { log, theme } _ =
         ]
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.simpleApp
         { name = "Logs"

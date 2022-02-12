@@ -67,7 +67,7 @@ view { theme } model =
         ]
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.simpleApp
         { name = "Test echo"

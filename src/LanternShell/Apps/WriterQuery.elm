@@ -114,7 +114,7 @@ view { theme } { query, arguments } =
         ]
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.simpleApp
         { name = "Writer Query"

@@ -80,11 +80,11 @@ liveQueries model =
             [ Lantern.LiveQuery.prepare ( Lantern.Query.withArguments "SELECT * FROM notes WHERE id=$id LIMIT 1" [ ( "$id", Lantern.Query.Int id ) ], noteDecoder ) UpdateNote ]
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.app
         { name = "Notes"
-        , init = init
+        , init = \_ -> init
         , view = view
         , update = update
         , liveQueries = Just liveQueries

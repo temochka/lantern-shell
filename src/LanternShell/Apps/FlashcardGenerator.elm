@@ -278,7 +278,7 @@ renderFlashCard theme ({ userTranslations, definition, translation } as options)
                                 fuzzySelectState
 
                             else
-                                Nothing
+                                LanternUi.FuzzySelect.hidden
                         }
                     , if List.isEmpty subsenses then
                         Element.none
@@ -403,7 +403,7 @@ init =
       , cache = Dict.empty
       , uiState = Config { apiCredentials = Nothing }
       , userTranslations = Dict.empty
-      , fuzzySelect = ( "", Nothing )
+      , fuzzySelect = ( "", LanternUi.FuzzySelect.hidden )
       }
     , Lantern.readerQuery
         (Lantern.Query.withArguments
@@ -828,11 +828,11 @@ view { theme } { fuzzySelect, userTranslations, uiState, userInput, words, cache
                 ]
 
 
-lanternApp : Lantern.App.App Context Model Message
+lanternApp : Lantern.App.App Context () Model Message
 lanternApp =
     Lantern.App.app
         { name = "Flashcards"
-        , init = init
+        , init = \_ -> init
         , view = view
         , update = update
         , liveQueries = Nothing

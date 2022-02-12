@@ -98,6 +98,7 @@ customElements.define(
           },
         },
       });
+      this._instance.setSize("100%", "100%");
 
       requestAnimationFrame(() => {
         this._instance?.refresh();

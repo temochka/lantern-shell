@@ -20,5 +20,14 @@ CREATE TABLE schema_migrations (
                 "version" INTEGER PRIMARY KEY NOT NULL
             );
 
-INSERT INTO schema_migrations (version) VALUES (20200530050945);
+CREATE TABLE scripts (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  code TEXT NOT NULL,
+  input TEXT NOT NULL,
+  created_at DATETIME NOT NULL,
+  updated_at DATETIME NOT NULL
+);
+
+INSERT INTO schema_migrations (version) VALUES (20220201044423);
 
