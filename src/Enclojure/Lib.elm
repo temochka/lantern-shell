@@ -1389,6 +1389,14 @@ prelude =
      (reduce f (f init (first coll)) (rest coll))
      init)))
 
+(defn every?
+  [pred coll]
+  (if (seq coll)
+    (if (pred (first coll))
+      (every? pred (rest coll))
+      false)
+    true))
+
 (defn repeat [n x]
   (if (pos? n)
     (cons x (repeat (dec n) x))
