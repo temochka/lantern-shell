@@ -205,7 +205,11 @@ expandAnd i (Located loc args) =
                             (List
                                 [ Located loc (Symbol "if")
                                 , Located loc (Symbol id)
-                                , Located loc (List (Located loc (Symbol "and") :: rest))
+                                , if List.isEmpty rest then
+                                    Located loc (Symbol id)
+
+                                  else
+                                    Located loc (List (Located loc (Symbol "and") :: rest))
                                 , Located loc (Symbol id)
                                 ]
                             )
