@@ -274,6 +274,7 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                     , Element.spacing (3 + spacing)
                     , Element.padding 3
                     , Element.clip
+                    , Element.scrollbarY
                     ]
                     masterWindowPane
                 , if not (List.isEmpty windowPanes) then
@@ -284,6 +285,7 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                         , Element.alignTop
                         , Element.padding 3
                         , Element.clip
+                        , Element.scrollbarY
                         ]
                         windowPanes
 

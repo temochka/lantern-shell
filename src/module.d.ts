@@ -1,5 +1,8 @@
 interface ElmAppFactory<A> {
-  init(options: { node: HTMLElement }): A;
+  init(options: {
+    node: HTMLElement;
+    flags: { width: number; height: number };
+  }): A;
 }
 
 interface InPort {

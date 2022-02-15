@@ -72,11 +72,12 @@ type alias Model =
     , theme : LanternUi.Theme.Theme
     , liveQueriesCache : Dict ProcessTable.Pid (List (LiveQuery Msg))
     , navigationKey : Browser.Navigation.Key
+    , viewport : { width : Int, height : Int }
     }
 
 
-init : () -> Url.Url -> Browser.Navigation.Key -> ( Model, Cmd Msg )
-init _ url key =
+init : { width : Int, height : Int } -> Url.Url -> Browser.Navigation.Key -> ( Model, Cmd Msg )
+init viewport url key =
     let
         lanternConnection =
             Lantern.newConnection lanternRequestPort
@@ -100,6 +101,7 @@ init _ url key =
             , liveQueriesCache = Dict.empty
             , appLauncherQuery = ""
             , navigationKey = key
+            , viewport = viewport
             }
     in
     launchers
@@ -134,6 +136,7 @@ subscriptions model =
     Sub.batch
         [ Lantern.subscriptions LanternMessage lanternResponsePort
         , Browser.Events.onKeyDown (handleShortcuts model)
+        , Browser.Events.onResize UpdateViewport
         , appSubs
         ]
 
@@ -152,6 +155,7 @@ type Msg
     | LaunchApp LauncherEntry
     | WindowManagerMessage LanternUi.WindowManager.Message
     | UpdateLauncherQuery String
+    | UpdateViewport Int Int
     | UrlChange Url.Url
     | UrlRequest Browser.UrlRequest
 
@@ -316,6 +320,9 @@ update msg model =
         UpdateLauncherQuery query ->
             ( { model | appLauncherQuery = query }, Cmd.none )
 
+        UpdateViewport x y ->
+            ( { model | viewport = { width = x, height = y } }, Cmd.none )
+
         UrlChange _ ->
             ( model, Cmd.none )
 
@@ -442,8 +449,21 @@ view model =
                 , Element.Font.typeface "Monaco"
                 , Element.Font.monospace
                 ]
+            , Element.height (Element.fill |> Element.maximum model.viewport.height)
             ]
-            [ renderAppLauncher model, Element.el [ Element.paddingXY 20 0, Element.width Element.fill, Element.height Element.fill ] (tools model) ]
-            |> Element.layout [ Element.width Element.fill, Element.Background.color model.theme.bgDefault ]
+            [ renderAppLauncher model
+            , Element.el
+                [ Element.paddingEach { top = 0, bottom = 10, left = 20, right = 20 }
+                , Element.width Element.fill
+                , Element.height Element.fill
+                , Element.scrollbarY
+                ]
+                (tools model)
+            ]
+            |> Element.layout
+                [ Element.width Element.fill
+                , Element.height Element.fill
+                , Element.Background.color model.theme.bgDefault
+                ]
         ]
     }

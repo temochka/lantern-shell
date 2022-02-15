@@ -136,7 +136,7 @@ code theme extraAttrs mainAttrs =
                     "sql"
     in
     Element.column
-        (inputWidth :: extraAttrs)
+        ([ inputWidth, Element.height (Element.fill |> Element.maximum 500) ] ++ extraAttrs)
         [ mainAttrs.label |> Maybe.withDefault Element.none
         , Element.html <|
             Html.node "code-editor"

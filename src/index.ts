@@ -5,7 +5,10 @@ import "./LanternJs/WebComponents/CodeEditor";
 const mountTarget = document.getElementById("main");
 
 if (mountTarget) {
-  const app = Elm.LanternShell.init({ node: mountTarget });
+  const app = Elm.LanternShell.init({
+    node: mountTarget,
+    flags: { width: window.innerWidth, height: window.innerHeight },
+  });
   const wsScheme = location.protocol.match(/^https/) ? "wss" : "ws";
   const connection = new WebSocketClient(
     `${wsScheme}://${window.location.host}/_api/ws`,
