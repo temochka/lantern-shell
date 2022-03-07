@@ -10,8 +10,9 @@ if (mountTarget) {
     flags: { width: window.innerWidth, height: window.innerHeight },
   });
   const wsScheme = location.protocol.match(/^https/) ? "wss" : "ws";
+  const port = window.location.hostname == "localhost" ? ":4666" : "";
   const connection = new WebSocketClient(
-    `${wsScheme}://${window.location.host}/_api/ws`,
+    `${wsScheme}://${window.location.hostname}${port}/_api/ws`,
     (message) => {
       app.ports.lanternResponsePort.send(message);
     }
