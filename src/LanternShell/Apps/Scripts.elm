@@ -112,7 +112,7 @@ type Message
     = FuzzySelectMessage String LanternUi.FuzzySelect.Message
     | Run
     | Stop
-    | UpdateInputRequest InputKey InputCell
+    | UpdateInputRequest InputKey InputCell String
     | UpdateScripts (Result Lantern.Error (List Script))
     | HandleIO ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
     | Rewind ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
@@ -435,20 +435,20 @@ update msg appModel =
             in
             update (HandleIO ret) newAppModel
 
-        UpdateInputRequest name v ->
+        UpdateInputRequest name inputType v ->
             updateEditor
                 appModel
                 (\model ->
                     case model.interpreter of
                         UI ({ enclojureUi } as ui) ( env, thunk ) ->
-                            case v of
+                            case inputType of
                                 Button _ ->
                                     let
                                         exitCode =
                                             Located.fakeLoc <| Keyword name
 
                                         state =
-                                            Located.fakeLoc <| Enclojure.uiToValue enclojureUi
+                                            Located.fakeLoc <| Map enclojureUi.state
 
                                         console =
                                             printResult model.interpreter model.console
@@ -461,11 +461,11 @@ update msg appModel =
 
                                 _ ->
                                     let
-                                        updatedInputs =
-                                            Dict.insert name v ui.enclojureUi.inputs
+                                        updatedState =
+                                            Enclojure.ValueMap.insert (Keyword name) (Located.fakeLoc (String v)) ui.enclojureUi.state
 
                                         updatedUi =
-                                            { enclojureUi | inputs = updatedInputs }
+                                            { enclojureUi | state = updatedState }
 
                                         updatedModel =
                                             { model | interpreter = UI { ui | enclojureUi = updatedUi } ( env, thunk ) }
@@ -616,7 +616,7 @@ isRunning interpreter =
 renderUI : Context -> UiModel -> Element (Lantern.App.Message Message)
 renderUI context uiModel =
     let
-        { cell, inputs } =
+        { cell, state, watchFn } =
             uiModel.enclojureUi
 
         { fuzzySelects } =
@@ -625,73 +625,74 @@ renderUI context uiModel =
     case cell of
         VStack cells ->
             cells
-                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, inputs = inputs } })
+                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, watchFn = watchFn, state = state } })
                 |> Element.column [ Element.width Element.fill, Element.alignTop, Element.spacing 10 ]
 
         HStack cells ->
             cells
-                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, inputs = inputs } })
+                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, watchFn = watchFn, state = state } })
                 |> Element.row [ Element.width Element.fill ]
 
-        Input key ->
-            Dict.get key inputs
-                |> Maybe.map
-                    (\input ->
-                        case input of
-                            TextInput opts s ->
-                                if List.isEmpty opts.suggestions then
-                                    LanternUi.Input.multiline
-                                        context.theme
-                                        []
-                                        { onChange = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
-                                        , placeholder = Nothing
-                                        , label = Element.Input.labelHidden key
-                                        , text = s
-                                        , spellcheck = False
-                                        }
+        Input key inputType ->
+            let
+                val =
+                    Enclojure.ValueMap.get (Keyword key) state
+                        |> Maybe.map (Located.getValue >> Runtime.toString)
+                        |> Maybe.withDefault ""
+            in
+            case inputType of
+                TextInput opts ->
+                    if List.isEmpty opts.suggestions then
+                        LanternUi.Input.multiline
+                            context.theme
+                            []
+                            { onChange = UpdateInputRequest key inputType >> Lantern.App.Message
+                            , placeholder = Nothing
+                            , label = Element.Input.labelHidden key
+                            , text = val
+                            , spellcheck = False
+                            }
 
-                                else
-                                    LanternUi.FuzzySelect.fuzzySelect
-                                        context.theme
-                                        { label = Element.Input.labelHidden ""
-                                        , onQueryChange = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
-                                        , onInternalMessage = FuzzySelectMessage key >> Lantern.App.Message
-                                        , onOptionSelect = TextInput opts >> UpdateInputRequest key >> Lantern.App.Message
-                                        , options = List.map2 Tuple.pair opts.suggestions opts.suggestions
-                                        , placeholder = Nothing
-                                        , query = s
-                                        , state = Dict.get key fuzzySelects |> Maybe.withDefault LanternUi.FuzzySelect.hidden
-                                        , id = Nothing
-                                        }
+                    else
+                        LanternUi.FuzzySelect.fuzzySelect
+                            context.theme
+                            { label = Element.Input.labelHidden ""
+                            , onQueryChange = UpdateInputRequest key inputType >> Lantern.App.Message
+                            , onInternalMessage = FuzzySelectMessage key >> Lantern.App.Message
+                            , onOptionSelect = UpdateInputRequest key inputType >> Lantern.App.Message
+                            , options = List.map2 Tuple.pair opts.suggestions opts.suggestions
+                            , placeholder = Nothing
+                            , query = val
+                            , state = Dict.get key fuzzySelects |> Maybe.withDefault LanternUi.FuzzySelect.hidden
+                            , id = Nothing
+                            }
 
-                            MaskedTextInput s ->
-                                LanternUi.Input.password
-                                    context.theme
-                                    []
-                                    { onChange = MaskedTextInput >> UpdateInputRequest key >> Lantern.App.Message
-                                    , placeholder = Nothing
-                                    , label = Element.Input.labelHidden ""
-                                    , text = s
-                                    , show = False
-                                    }
+                MaskedTextInput ->
+                    LanternUi.Input.password
+                        context.theme
+                        []
+                        { onChange = UpdateInputRequest key inputType >> Lantern.App.Message
+                        , placeholder = Nothing
+                        , label = Element.Input.labelHidden ""
+                        , text = val
+                        , show = False
+                        }
 
-                            Button { title } ->
-                                LanternUi.Input.button
-                                    context.theme
-                                    []
-                                    { onPress = Just (UpdateInputRequest key input |> Lantern.App.Message)
-                                    , label = Element.text title
-                                    }
+                Button { title } ->
+                    LanternUi.Input.button
+                        context.theme
+                        []
+                        { onPress = Just (UpdateInputRequest key inputType "" |> Lantern.App.Message)
+                        , label = Element.text title
+                        }
 
-                            Download { name, contentType, content } ->
-                                LanternUi.Input.button
-                                    context.theme
-                                    []
-                                    { onPress = Just (DownloadFile name contentType content |> Lantern.App.Message)
-                                    , label = Element.text "Download"
-                                    }
-                    )
-                |> Maybe.withDefault Element.none
+                Download { name, contentType, content } ->
+                    LanternUi.Input.button
+                        context.theme
+                        []
+                        { onPress = Just (DownloadFile name contentType content |> Lantern.App.Message)
+                        , label = Element.text "Download"
+                        }
 
         Text textCells ->
             textCells

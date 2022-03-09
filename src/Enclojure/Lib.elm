@@ -211,7 +211,7 @@ ui =
                 _ ->
                     Err (Exception "text parts must be plain strings")
 
-        toUi inputs (Located _ val) defaults =
+        toUi (Located _ val) =
             case val of
                 Vector v ->
                     case Array.toList v of
@@ -221,16 +221,16 @@ ui =
                                     (\e acc ->
                                         acc
                                             |> Result.andThen
-                                                (\( accInputs, l ) ->
-                                                    toUi accInputs e defaults
+                                                (\l ->
+                                                    toUi e
                                                         |> Result.map
-                                                            (\( retInputs, retCell ) ->
-                                                                ( retInputs, retCell :: l )
+                                                            (\retCell ->
+                                                                retCell :: l
                                                             )
                                                 )
                                     )
-                                    (Ok ( inputs, [] ))
-                                |> Result.map (Tuple.mapSecond (List.reverse >> VStack))
+                                    (Ok [])
+                                |> Result.map (List.reverse >> VStack)
 
                         (Located _ (Keyword "h-stack")) :: cells ->
                             cells
@@ -238,29 +238,26 @@ ui =
                                     (\e acc ->
                                         acc
                                             |> Result.andThen
-                                                (\( accInputs, l ) ->
-                                                    toUi accInputs e defaults
+                                                (\l ->
+                                                    toUi e
                                                         |> Result.map
-                                                            (\( retInputs, retCell ) ->
-                                                                ( retInputs, retCell :: l )
+                                                            (\retCell ->
+                                                                retCell :: l
                                                             )
                                                 )
                                     )
-                                    (Ok ( inputs, [] ))
-                                |> Result.map (Tuple.mapSecond (List.reverse >> HStack))
+                                    (Ok [])
+                                |> Result.map (List.reverse >> HStack)
 
                         (Located _ (Keyword "text")) :: parts ->
                             parts
                                 |> List.foldl (\e a -> toTextPart e |> Result.map2 (flip (::)) a) (Ok [])
-                                |> Result.map (Text >> Tuple.pair inputs)
+                                |> Result.map Text
 
                         (Located _ (Keyword "text-input")) :: args ->
                             case args of
                                 (Located _ (Keyword key)) :: restArgs ->
                                     let
-                                        value =
-                                            Dict.get key defaults |> Maybe.withDefault (String "")
-
                                         options =
                                             restArgs
                                                 |> List.head
@@ -275,12 +272,7 @@ ui =
                                                 |> Maybe.andThen (Runtime.trySequenceOf Runtime.tryString)
                                                 |> Maybe.withDefault []
                                     in
-                                    case value of
-                                        String s ->
-                                            Ok ( Dict.insert key (TextInput { suggestions = suggestions } s) inputs, Input key )
-
-                                        _ ->
-                                            Err (Exception "type error: the default for text-input must be a string")
+                                    Ok (Input key (TextInput { suggestions = suggestions }))
 
                                 _ ->
                                     Err (Exception "type error: invalid arguments to text-input cell")
@@ -303,7 +295,7 @@ ui =
                                                 |> Maybe.andThen Runtime.tryString
                                                 |> Maybe.withDefault key
                                     in
-                                    Ok ( Dict.insert key (Button { title = title }) inputs, Input key )
+                                    Ok (Input key (Button { title = title }))
 
                                 _ ->
                                     Err (Exception "type error: invalid arguments to button cell")
@@ -333,15 +325,13 @@ ui =
                                                 |> Maybe.withDefault "download.txt"
                                     in
                                     Ok
-                                        ( Dict.insert key
+                                        (Input key
                                             (Download
                                                 { name = name
                                                 , content = content
                                                 , contentType = contentType
                                                 }
                                             )
-                                            inputs
-                                        , Input key
                                         )
 
                                 _ ->
@@ -360,26 +350,17 @@ ui =
                     Err (Exception "cell must be a vector")
 
         arity1 val =
-            toUi Dict.empty (Located.fakeLoc val) Dict.empty
-                |> Result.map (\( inputs, cell ) -> ShowUI { cell = cell, inputs = inputs })
+            toUi (Located.fakeLoc val)
+                |> Result.map (\cell -> ShowUI { cell = cell, watchFn = Nil, state = ValueMap.empty })
 
         arity2 ( uiVal, defaultsMap ) =
+            arity3 ( uiVal, Nil, defaultsMap )
+
+        arity3 ( uiVal, watchFn, defaultsMap ) =
             case defaultsMap of
                 Map m ->
-                    m
-                        |> ValueMap.toList
-                        |> List.foldl
-                            (\( keyValue, Located _ val ) a ->
-                                case keyValue of
-                                    Keyword key ->
-                                        Dict.insert key val a
-
-                                    _ ->
-                                        a
-                            )
-                            Dict.empty
-                        |> toUi Dict.empty (Located.fakeLoc uiVal)
-                        |> Result.map (\( inputs, cell ) -> ShowUI { cell = cell, inputs = inputs })
+                    toUi (Located.fakeLoc uiVal)
+                        |> Result.map (\cell -> ShowUI { cell = cell, watchFn = watchFn, state = m })
 
                 _ ->
                     Err (Exception ("type error: expected a map of defaults, got " ++ inspect defaultsMap))
@@ -387,6 +368,7 @@ ui =
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
         , arity2 = Just (Fixed (pure arity2))
+        , arity3 = Just (Fixed (pure arity3))
     }
 
 

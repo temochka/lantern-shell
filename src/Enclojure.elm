@@ -1,7 +1,6 @@
-module Enclojure exposing (eval, uiToValue)
+module Enclojure exposing (eval)
 
 import Array exposing (Array)
-import Dict
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Lib.String as LibString
@@ -752,33 +751,6 @@ wrapInDo (Located loc vs) =
 prelude : Result (List Parser.DeadEnd) (List (Located Value))
 prelude =
     Parser.parse Lib.prelude
-
-
-uiToValue : Enclojure.Types.UI -> Value
-uiToValue { inputs } =
-    inputs
-        |> Dict.toList
-        |> List.filterMap
-            (\( k, v ) ->
-                let
-                    value =
-                        case v of
-                            Enclojure.Types.TextInput _ s ->
-                                Just <| String s
-
-                            Enclojure.Types.MaskedTextInput s ->
-                                Just <| String s
-
-                            Enclojure.Types.Button _ ->
-                                Nothing
-
-                            Enclojure.Types.Download _ ->
-                                Nothing
-                in
-                value |> Maybe.map Located.fakeLoc |> Maybe.map (Tuple.pair (Keyword k))
-            )
-        |> ValueMap.fromList
-        |> Map
 
 
 eval : Env -> String -> Step

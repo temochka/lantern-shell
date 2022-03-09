@@ -37,8 +37,8 @@ type TextFormat
 
 
 type InputCell
-    = TextInput { suggestions : List String } String
-    | MaskedTextInput String
+    = TextInput { suggestions : List String }
+    | MaskedTextInput
     | Button { title : String }
     | Download { name : String, contentType : String, content : String }
 
@@ -48,15 +48,16 @@ type alias InputKey =
 
 
 type Cell
-    = Input InputKey
+    = Input InputKey InputCell
     | Text (List TextFormat)
     | VStack (List Cell)
     | HStack (List Cell)
 
 
 type alias UI =
-    { inputs : Dict InputKey InputCell
+    { state : ValueMap
     , cell : Cell
+    , watchFn : Value
     }
 
 
