@@ -208,6 +208,14 @@ ui =
                 String s ->
                     Ok (Plain s)
 
+                Vector v ->
+                    case Array.toList v of
+                        [ Located _ (Keyword "$"), Located _ (Keyword key) ] ->
+                            Ok (TextRef key)
+
+                        _ ->
+                            Err (Exception "type error: invalid text formatter")
+
                 _ ->
                     Err (Exception "text parts must be plain strings")
 
@@ -251,7 +259,7 @@ ui =
 
                         (Located _ (Keyword "text")) :: parts ->
                             parts
-                                |> List.foldl (\e a -> toTextPart e |> Result.map2 (flip (::)) a) (Ok [])
+                                |> List.foldr (\e a -> toTextPart e |> Result.map2 (flip (::)) a) (Ok [])
                                 |> Result.map Text
 
                         (Located _ (Keyword "text-input")) :: args ->

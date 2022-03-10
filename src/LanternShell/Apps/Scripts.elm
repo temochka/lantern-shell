@@ -701,6 +701,15 @@ renderUI context uiModel =
                         case c of
                             Plain t ->
                                 Element.text t
+
+                            TextRef key ->
+                                let
+                                    val =
+                                        Enclojure.ValueMap.get (Keyword key) state
+                                            |> Maybe.map (Located.getValue >> Runtime.toString)
+                                            |> Maybe.withDefault ""
+                                in
+                                Element.text val
                     )
                 |> Element.paragraph []
 

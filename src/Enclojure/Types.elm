@@ -34,6 +34,7 @@ type Arity a
 
 type TextFormat
     = Plain String
+    | TextRef InputKey
 
 
 type InputCell
