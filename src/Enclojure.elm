@@ -1,4 +1,4 @@
-module Enclojure exposing (eval)
+module Enclojure exposing (eval, terminate)
 
 import Array exposing (Array)
 import Enclojure.Extra.Maybe exposing (orElse)
@@ -753,6 +753,11 @@ prelude =
     Parser.parse Lib.prelude
 
 
+terminate : Continuation
+terminate (Located pos v) env =
+    ( Ok ( Located pos (Const v), env ), Nothing )
+
+
 eval : Env -> String -> Step
 eval initEnv code =
     Parser.parse code
@@ -771,9 +776,7 @@ eval initEnv code =
             (\program ->
                 evalExpression program
                     initEnv
-                    (\(Located pos v) env ->
-                        ( Ok ( Located pos (Const v), env ), Nothing )
-                    )
+                    terminate
             )
         |> (\r ->
                 case r of

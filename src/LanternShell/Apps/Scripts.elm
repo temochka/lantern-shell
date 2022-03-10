@@ -264,6 +264,32 @@ updateEditor model updateFn =
             ( model, Cmd.none )
 
 
+runWatchFn : Env -> Value -> Enclojure.Types.ValueMap -> Result (Located Exception) Enclojure.Types.ValueMap
+runWatchFn env watchFn stateMap =
+    case watchFn of
+        Nil ->
+            Ok stateMap
+
+        _ ->
+            let
+                ( interpreter, _ ) =
+                    trampoline
+                        (Runtime.apply (Located.fakeLoc watchFn) (Located.fakeLoc (Map stateMap)) env Enclojure.terminate)
+                        stackLimit
+            in
+            case interpreter of
+                Done ( val, _ ) ->
+                    val
+                        |> Runtime.tryMap
+                        |> Result.fromMaybe (Located.fakeLoc (Exception "type error: watch returned a non-map"))
+
+                Panic ( err, _ ) ->
+                    Err err
+
+                _ ->
+                    Err (Located.fakeLoc (Exception "runtime error: watch fn tried to run a side effect"))
+
+
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg appModel =
     case msg of
@@ -463,12 +489,22 @@ update msg appModel =
                                     let
                                         updatedState =
                                             Enclojure.ValueMap.insert (Keyword name) (Located.fakeLoc (String v)) ui.enclojureUi.state
+                                                |> runWatchFn env ui.enclojureUi.watchFn
 
-                                        updatedUi =
-                                            { enclojureUi | state = updatedState }
+                                        interpreter =
+                                            case updatedState of
+                                                Ok st ->
+                                                    let
+                                                        updatedUi =
+                                                            { enclojureUi | state = st }
+                                                    in
+                                                    UI { ui | enclojureUi = updatedUi } ( env, thunk )
+
+                                                Err ex ->
+                                                    Panic ( ex, env )
 
                                         updatedModel =
-                                            { model | interpreter = UI { ui | enclojureUi = updatedUi } ( env, thunk ) }
+                                            { model | interpreter = interpreter }
                                     in
                                     ( updatedModel, Cmd.none )
 
