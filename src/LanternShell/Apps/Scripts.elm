@@ -78,14 +78,16 @@ printResult interpreter console =
         Done ( value, _ ) ->
             Success value :: console
 
-        UI model _ ->
-            UiTrace model :: console
-
         Panic e ->
             Failure e :: console
 
         _ ->
             console
+
+
+traceUi : UiModel -> Console -> Console
+traceUi model console =
+    UiTrace model :: console
 
 
 recordSavepoint : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Console -> Console
@@ -481,7 +483,9 @@ update msg appModel =
                                             Located.fakeLoc <| Map enclojureUi.state
 
                                         console =
-                                            printResult model.interpreter model.console
+                                            model.console
+                                                |> traceUi ui
+                                                |> printResult model.interpreter
                                     in
                                     ( { model | interpreter = Running, console = console }
                                     , Task.perform
