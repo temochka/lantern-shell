@@ -274,7 +274,11 @@ runWatchFn env watchFn stateMap =
             let
                 ( interpreter, _ ) =
                     trampoline
-                        (Runtime.apply (Located.fakeLoc watchFn) (Located.fakeLoc (Map stateMap)) env Enclojure.terminate)
+                        (Runtime.apply (Located.fakeLoc watchFn)
+                            (Located.fakeLoc (List [ Located.fakeLoc (Map stateMap) ]))
+                            env
+                            Enclojure.terminate
+                        )
                         stackLimit
             in
             case interpreter of
