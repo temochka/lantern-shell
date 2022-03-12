@@ -1337,6 +1337,14 @@ prelude =
     (cons (f (first coll)) (map f (rest coll)))
     (list)))
 
+(defn -map-indexed [i f coll]
+  (if (seq coll)
+    (cons (f i (first coll)) (-map-indexed (inc i) f (rest coll)))
+    (list)))
+
+(defn map-indexed [f coll]
+  (-map-indexed 0 f coll))
+
 (defn mapcat [f coll]
   (if (seq coll)
     (concat (f (first coll)) (mapcat f (rest coll)))
