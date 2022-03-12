@@ -951,6 +951,7 @@ first =
         arity1 collVal =
             collVal
                 |> Runtime.toSeq
+                |> Result.map (List.map Located.getValue)
                 |> Result.map
                     (\s ->
                         case s of
@@ -972,6 +973,7 @@ second =
         arity1 collVal =
             collVal
                 |> Runtime.toSeq
+                |> Result.map (List.map Located.getValue)
                 |> Result.map
                     (\s ->
                         case s of
@@ -1158,7 +1160,7 @@ apply =
                 Ok listArgs ->
                     Runtime.apply
                         (Located.fakeLoc fn)
-                        (Located.fakeLoc (List (List.map Located.fakeLoc (posArgs ++ listArgs))))
+                        (Located.fakeLoc (List (List.map Located.fakeLoc posArgs ++ listArgs)))
                         env
                         k
                         |> toRuntimeStep

@@ -211,23 +211,23 @@ isTruthy val =
             True
 
 
-toSeq : Value -> Result Exception (List Value)
+toSeq : Value -> Result Exception (List (Located Value))
 toSeq val =
     case val of
         List l ->
-            Ok <| List.map Located.getValue l
+            Ok l
 
         Vector v ->
-            Ok <| List.map Located.getValue <| Array.toList v
+            Ok <| Array.toList v
 
         Set s ->
-            Ok <| ValueSet.toList s
+            Ok <| List.map Located.fakeLoc <| ValueSet.toList s
 
         Map m ->
-            Ok <| List.map MapEntry (ValueMap.toList m)
+            Ok <| List.map (\(( _, Located loc _ ) as entry) -> Located loc (MapEntry entry)) (ValueMap.toList m)
 
         String s ->
-            Ok <| List.map (String.fromChar >> String) (String.toList s)
+            Ok <| List.map (String.fromChar >> String >> Located.fakeLoc) (String.toList s)
 
         Nil ->
             Ok []
@@ -429,6 +429,7 @@ trySequenceOf extract value =
                     (Just [])
     in
     toSeq value
+        |> Result.map (List.map Located.getValue)
         |> Result.toMaybe
         |> Maybe.andThen extractAll
 

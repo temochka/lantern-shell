@@ -376,6 +376,57 @@ evalSet (Located setLoc set) env k =
     )
 
 
+destructure : Located Value -> Located Value -> Result (Located Exception) (List ( String, Value ))
+destructure arg template =
+    case template of
+        Located _ (Symbol name) ->
+            Ok [ ( name, Located.getValue arg ) ]
+
+        Located loc (Vector vec) ->
+            case Array.toList vec of
+                [] ->
+                    Ok []
+
+                [ Located _ (Symbol "&"), nextTemplate ] ->
+                    arg
+                        |> Located.getValue
+                        |> Runtime.toSeq
+                        |> Result.mapError (Located loc)
+                        |> Result.andThen
+                            (\seq ->
+                                destructure (Located.replace arg (List seq)) nextTemplate
+                            )
+
+                nextTemplate :: rest ->
+                    arg
+                        |> Located.getValue
+                        |> Runtime.toSeq
+                        |> Result.mapError (Located loc)
+                        |> Result.andThen
+                            (\argAsList ->
+                                let
+                                    newArg =
+                                        argAsList |> List.head |> Maybe.withDefault (Located.fakeLoc Nil)
+                                in
+                                destructure newArg nextTemplate
+                                    |> Result.andThen
+                                        (\boundArgs ->
+                                            destructure
+                                                (argAsList
+                                                    |> List.tail
+                                                    |> Maybe.map List
+                                                    |> Maybe.withDefault Nil
+                                                    |> Located.fakeLoc
+                                                )
+                                                (Located loc (Vector (Array.fromList rest)))
+                                                |> Result.map ((++) boundArgs)
+                                        )
+                            )
+
+        _ ->
+            Err (Located.replace arg (Exception "Parsing error: arguments didn't match the function definition"))
+
+
 mapArgs : List (Located Value) -> List (Located Value) -> Result (Located Exception) (List ( String, Value ))
 mapArgs args bindings =
     case ( args, bindings ) of
@@ -391,11 +442,12 @@ mapArgs args bindings =
         ( [], (Located loc (Symbol _)) :: _ ) ->
             Err (Located loc (Exception "Argument error: Too few arguments"))
 
-        ( (Located _ arg) :: restArgs, (Located _ (Symbol name)) :: restBindings ) ->
-            mapArgs restArgs restBindings |> Result.map (\b -> ( name, arg ) :: b)
-
-        ( (Located loc _) :: _, _ ) ->
-            Err (Located loc (Exception "Parsing error: arguments didn't match the function definition"))
+        ( arg :: restArgs, template :: restBindings ) ->
+            destructure arg template
+                |> Result.andThen
+                    (\destructuredArgs ->
+                        mapArgs restArgs restBindings |> Result.map (\b -> destructuredArgs ++ b)
+                    )
 
         ( _, (Located loc _) :: _ ) ->
             Err (Located loc (Exception "Parsing error: arguments didn't match the function definition"))
