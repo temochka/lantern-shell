@@ -75,6 +75,10 @@ macroexpand i (Located loc value) =
                     expandAnd i (Located loc args)
                         |> Result.map Expanded
 
+                (Located _ (Symbol "cond")) :: args ->
+                    expandCond i (Located loc args)
+                        |> Result.map Expanded
+
                 (Located _ (Symbol "defn")) :: args ->
                     expandDefn i (Located loc args)
                         |> Result.map Expanded
@@ -293,6 +297,41 @@ expandWhenNot i (Located loc args) =
 
         [] ->
             Err (Exception "Argument error: wrong number of arguments (0) passed to when-not")
+
+
+expandCond : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandCond i (Located loc args) =
+    case args of
+        (Located letLoc (Keyword "let")) :: bindings :: rest ->
+            Ok <|
+                ( i
+                , Located loc
+                    (List
+                        [ Located letLoc (Symbol "let")
+                        , bindings
+                        , Located loc (List (Located loc (Symbol "cond") :: rest))
+                        ]
+                    )
+                )
+
+        condForm :: thenForm :: rest ->
+            Ok <|
+                ( i
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "if")
+                        , condForm
+                        , thenForm
+                        , Located loc (List (Located loc (Symbol "cond") :: rest))
+                        ]
+                    )
+                )
+
+        [ _ ] ->
+            Err (Exception "compilation error: cond has uneven number of forms")
+
+        [] ->
+            Ok <| ( i, Located loc Nil )
 
 
 expandThreadFirst : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
