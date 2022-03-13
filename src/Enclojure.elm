@@ -607,9 +607,9 @@ evalLet (Located loc body) env k =
     let
         parseBindings bindings =
             case bindings of
-                (Located _ (Symbol name)) :: value :: rest ->
+                template :: value :: rest ->
                     parseBindings rest
-                        |> Result.map (\r -> ( name, value ) :: r)
+                        |> Result.map (\r -> ( template, value ) :: r)
 
                 [] ->
                     Ok []
@@ -626,14 +626,23 @@ evalLet (Located loc body) env k =
                     |> parseBindings
                     |> Result.map
                         (List.foldr
-                            (\( name, e ) a ->
+                            (\( template, e ) a ->
                                 \_ eenv ->
                                     evalExpression e
                                         eenv
                                         (\ret retEnv ->
-                                            a
-                                                (Located loc Nil)
-                                                (Runtime.setLocalEnv name (Located.getValue ret) retEnv)
+                                            ( destructure ret template
+                                                |> Result.mapError (\ex -> ( ex, retEnv ))
+                                                |> Result.andThen
+                                                    (\destructuredBindings ->
+                                                        Ok
+                                                            ( Located loc (Const Nil)
+                                                            , destructuredBindings
+                                                                |> List.foldl (\( name, v ) -> Runtime.setLocalEnv name v) retEnv
+                                                            )
+                                                    )
+                                            , Just (Thunk a)
+                                            )
                                         )
                             )
                             (\_ renv ->
