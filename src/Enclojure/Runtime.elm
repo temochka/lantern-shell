@@ -402,6 +402,16 @@ tryKeyword value =
             Nothing
 
 
+trySymbol : Value -> Maybe String
+trySymbol value =
+    case value of
+        Symbol s ->
+            Just s
+
+        _ ->
+            Nothing
+
+
 tryMap : Value -> Maybe Types.ValueMap
 tryMap value =
     case value of

@@ -382,6 +382,78 @@ destructure arg template =
         Located _ (Symbol name) ->
             Ok [ ( name, Located.getValue arg ) ]
 
+        Located loc (Map templateMap) ->
+            case arg of
+                Located _ (Map map) ->
+                    let
+                        keywordKeys =
+                            templateMap
+                                |> ValueMap.get (Keyword "keys")
+                                |> Maybe.map Located.getValue
+                                |> Maybe.withDefault (List [])
+                                |> Runtime.trySequenceOf Runtime.trySymbol
+                                |> Result.fromMaybe (Located loc (Exception "type error: :keys must be a vector of symbols"))
+                                |> Result.map
+                                    (\keys ->
+                                        keys
+                                            |> List.map
+                                                (\key ->
+                                                    ( key
+                                                    , ValueMap.get (Keyword key) map
+                                                        |> Maybe.map Located.getValue
+                                                        |> Maybe.withDefault Nil
+                                                    )
+                                                )
+                                    )
+
+                        stringKeys =
+                            templateMap
+                                |> ValueMap.get (Keyword "strs")
+                                |> Maybe.map Located.getValue
+                                |> Maybe.withDefault (List [])
+                                |> Runtime.trySequenceOf Runtime.trySymbol
+                                |> Result.fromMaybe (Located loc (Exception "type error: :strs must be a vector of symbols"))
+                                |> Result.map
+                                    (\keys ->
+                                        keys
+                                            |> List.map
+                                                (\key ->
+                                                    ( key
+                                                    , ValueMap.get (String key) map
+                                                        |> Maybe.map Located.getValue
+                                                        |> Maybe.withDefault Nil
+                                                    )
+                                                )
+                                    )
+
+                        otherKeys =
+                            templateMap
+                                |> ValueMap.remove (Keyword "keys")
+                                |> ValueMap.remove (Keyword "strs")
+                                |> ValueMap.toList
+                                |> List.foldr
+                                    (\( keyTemplate, Located _ key ) allBindingsResult ->
+                                        allBindingsResult
+                                            |> Result.andThen
+                                                (\allBindings ->
+                                                    destructure
+                                                        (ValueMap.get key map
+                                                            |> Maybe.withDefault (Located loc Nil)
+                                                        )
+                                                        (Located loc keyTemplate)
+                                                        |> Result.map ((++) allBindings)
+                                                )
+                                    )
+                                    (Ok [])
+                    in
+                    Result.map3 (\a b c -> a ++ b ++ c)
+                        keywordKeys
+                        stringKeys
+                        otherKeys
+
+                _ ->
+                    Err (Located loc (Exception "type error: destructured value is not a map"))
+
         Located loc (Vector vec) ->
             case Array.toList vec of
                 [] ->
