@@ -1523,4 +1523,8 @@ prelude =
   (fn [& args]
     (apply f (if (= nil (first args)) default (first args)) (rest args))))
 
+(defn empty?
+  [coll]
+  (not (seq coll)))
+
 """
