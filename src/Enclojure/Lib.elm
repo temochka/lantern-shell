@@ -1527,4 +1527,7 @@ prelude =
   [coll]
   (not (seq coll)))
 
+(defn update-vals
+  [m f]
+  (reduce-kv (fn [a k v] (assoc a k (f v))) {} m))
 """
