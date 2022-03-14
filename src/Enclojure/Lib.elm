@@ -1423,6 +1423,14 @@ prelude =
      (reduce f (f init (first coll)) (rest coll))
      init)))
 
+(defn reduce-kv
+  ([f coll]
+   (reduce-kv f (f) coll))
+  ([f init coll]
+   (if (seq coll)
+     (reduce-kv f (f init (key (first coll)) (val (first coll))) (rest coll))
+     init)))
+
 (defn every?
   [pred coll]
   (if (seq coll)
