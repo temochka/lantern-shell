@@ -91,6 +91,14 @@ macroexpand i (Located loc value) =
                     expandOr i (Located loc args)
                         |> Result.map Expanded
 
+                (Located _ (Symbol "some->")) :: args ->
+                    expandThreadSomeFirst i (Located loc args)
+                        |> Result.map Expanded
+
+                (Located _ (Symbol "some->>")) :: args ->
+                    expandThreadSomeLast i (Located loc args)
+                        |> Result.map Expanded
+
                 (Located _ (Symbol "when")) :: args ->
                     expandWhen i (Located loc args)
                         |> Result.map Expanded
@@ -188,7 +196,7 @@ expandWhenLet i (Located loc args) =
                     Err (Exception "Argument error: more than 2 elements in bindings array to if-let")
 
         _ ->
-            Err (Exception "Argument error: invalid arguments to if-let")
+            Err (Exception "Argument error: invalid arguments to when-let")
 
 
 expandAnd : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -392,6 +400,86 @@ expandThreadLast i (Located loc args) =
 
         [] ->
             Err (Exception "Argument error: wrong number of arguments (0) passed to ->>")
+
+
+expandThreadSomeFirst : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandThreadSomeFirst i (Located loc args) =
+    case args of
+        someArg :: op :: rest ->
+            let
+                binding =
+                    Located loc (Symbol ("some->__" ++ String.fromInt i ++ "__auto__"))
+            in
+            Ok
+                ( i + 1
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "when-let")
+                        , Located loc (Vector (Array.fromList [ binding, someArg ]))
+                        , Located loc
+                            (List
+                                (Located loc (Symbol "some->")
+                                    :: (case op of
+                                            Located _ (List forms) ->
+                                                (\fn restArgs ->
+                                                    Located.replace fn (List (fn :: binding :: restArgs))
+                                                )
+                                                    (List.head forms |> Maybe.withDefault (Located loc Nil))
+                                                    (List.tail forms |> Maybe.withDefault [])
+
+                                            _ ->
+                                                Located.replace binding (List [ op, binding ])
+                                       )
+                                    :: rest
+                                )
+                            )
+                        ]
+                    )
+                )
+
+        [ arg ] ->
+            Ok ( i, arg )
+
+        [] ->
+            Err (Exception "Argument error: wrong number of arguments (0) passed to some->")
+
+
+expandThreadSomeLast : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandThreadSomeLast i (Located loc args) =
+    case args of
+        someArg :: op :: rest ->
+            let
+                binding =
+                    Located loc (Symbol ("some->>__" ++ String.fromInt i ++ "__auto__"))
+            in
+            Ok
+                ( i + 1
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "when-let")
+                        , Located loc (Vector (Array.fromList [ binding, someArg ]))
+                        , Located loc
+                            (List
+                                (Located loc (Symbol "some->>")
+                                    :: (case op of
+                                            Located lloc (List forms) ->
+                                                Located lloc (List (forms ++ [ binding ]))
+
+                                            _ ->
+                                                Located.replace binding (List [ op, binding ])
+                                       )
+                                    :: rest
+                                )
+                            )
+                        ]
+                    )
+                )
+
+        [ arg ] ->
+            Ok ( i, arg )
+
+        [] ->
+            Err (Exception "Argument error: wrong number of arguments (0) passed to some->>")
 
 
 walk : a -> (a -> Located Value -> Result (Located Exception) ( a, Located Value )) -> Located Value -> Result (Located Exception) ( a, Located Value )
