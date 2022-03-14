@@ -20,6 +20,7 @@ module Enclojure.Lib exposing
     , isNumber
     , jsonDecode
     , jsonEncode
+    , key_
     , list
     , minus
     , mul
@@ -39,6 +40,7 @@ module Enclojure.Lib exposing
     , str
     , throw
     , ui
+    , val_
     )
 
 import Array
@@ -1294,6 +1296,38 @@ dissoc =
                     Err (Exception (inspect val ++ " is not dissociable"))
     in
     { emptyCallable | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const) }
+
+
+key_ : Callable
+key_ =
+    let
+        arity1 v =
+            case v of
+                MapEntry ( k, _ ) ->
+                    Ok (Const k)
+
+                _ ->
+                    Err (Exception (inspect v ++ " is not a map entry"))
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure arity1
+    }
+
+
+val_ : Callable
+val_ =
+    let
+        arity1 v =
+            case v of
+                MapEntry ( _, Located _ value ) ->
+                    Ok (Const value)
+
+                _ ->
+                    Err (Exception (inspect v ++ " is not a map entry"))
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure arity1
+    }
 
 
 prelude : String

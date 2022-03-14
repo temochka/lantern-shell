@@ -89,6 +89,9 @@ resolveSymbol env symbol =
                 "integer?" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
 
+                "key" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.key_))
+
                 "list" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
 
@@ -145,6 +148,9 @@ resolveSymbol env symbol =
 
                 "ui" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.ui))
+
+                "val" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.val_))
 
                 _ ->
                     Err (Exception ("Unknown symbol " ++ symbol))
