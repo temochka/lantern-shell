@@ -367,6 +367,21 @@ getFn key =
     }
 
 
+setLookupFn : Types.ValueSet -> Callable
+setLookupFn set =
+    let
+        arity1 val =
+            if ValueSet.member val set then
+                val
+
+            else
+                Nil
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+    }
+
+
 apply : Located Value -> Located Value -> Env -> Continuation -> Types.Step
 apply ((Located fnLoc fnExpr) as fn) arg env k =
     case fnExpr of
@@ -375,6 +390,9 @@ apply ((Located fnLoc fnExpr) as fn) arg env k =
 
         Keyword key ->
             ( Ok ( Located.map Const arg, env ), Just (toContinuation (getFn key) { self = fnExpr, k = k }) )
+
+        Set set ->
+            ( Ok ( Located.map Const arg, env ), Just (toContinuation (setLookupFn set) { self = fnExpr, k = k }) )
 
         _ ->
             ( Err ( Located fnLoc (Exception (inspectLocated fn ++ " is not a valid callable.")), env )
