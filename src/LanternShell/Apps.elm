@@ -13,7 +13,6 @@ import Lantern
 import Lantern.App
 import LanternShell.Apps.DatabaseExplorer as DatabaseExplorerApp
 import LanternShell.Apps.Echo as EchoApp
-import LanternShell.Apps.FlashcardGenerator as FlashcardGeneratorApp
 import LanternShell.Apps.LogViewer as LogViewerApp
 import LanternShell.Apps.Migrations as MigrationsApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
@@ -32,7 +31,6 @@ type alias Context msg =
 type App
     = EchoApp EchoApp.Model
     | DatabaseExplorerApp DatabaseExplorerApp.Model
-    | FlashcardGeneratorApp FlashcardGeneratorApp.Model
     | LogViewerApp LogViewerApp.Model
     | MigrationsApp MigrationsApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
@@ -44,7 +42,6 @@ type App
 type Message
     = EchoMsg EchoApp.Message
     | DatabaseExplorerMsg DatabaseExplorerApp.Message
-    | FlashcardGeneratorMsg FlashcardGeneratorApp.Message
     | LogViewerMsg LogViewerApp.Message
     | MigrationsMsg MigrationsApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
@@ -62,9 +59,6 @@ appId app =
 
         EchoApp _ ->
             "Echo"
-
-        FlashcardGeneratorApp _ ->
-            "FlashcardGenerator"
 
         LogViewerApp _ ->
             "LogViewer"
@@ -93,9 +87,6 @@ launcherForId id =
 
         "Echo" ->
             Just echo
-
-        "FlashcardGenerator" ->
-            Just flashcardGenerator
 
         "LogViewer" ->
             Just logViewer
@@ -128,9 +119,6 @@ lanternAppFor app =
         EchoApp _ ->
             echo
 
-        FlashcardGeneratorApp _ ->
-            flashcardGenerator
-
         LogViewerApp _ ->
             logViewer
 
@@ -154,7 +142,6 @@ all : List (Context msg -> Lantern.App.App () () App Message)
 all =
     [ echo
     , databaseExplorer
-    , flashcardGenerator
     , readerQuery
     , scripts
     , valueInspector Nothing
@@ -216,33 +203,6 @@ echo context =
         , context = \_ -> { theme = context.theme }
         }
         EchoApp.lanternApp
-
-
-flashcardGenerator : Context msg -> Lantern.App.App () () App Message
-flashcardGenerator context =
-    Lantern.App.mount
-        { unwrapMsg =
-            \wrappedMsg ->
-                case wrappedMsg of
-                    FlashcardGeneratorMsg unwrappedMsg ->
-                        Just unwrappedMsg
-
-                    _ ->
-                        Nothing
-        , unwrapModel =
-            \wrappedModel ->
-                case wrappedModel of
-                    FlashcardGeneratorApp unwrappedModel ->
-                        Just unwrappedModel
-
-                    _ ->
-                        Nothing
-        , wrapModel = FlashcardGeneratorApp
-        , wrapMsg = FlashcardGeneratorMsg
-        , flags = Nothing
-        , context = \_ -> { theme = context.theme }
-        }
-        FlashcardGeneratorApp.lanternApp
 
 
 logViewer : Context msg -> Lantern.App.App () () App Message
