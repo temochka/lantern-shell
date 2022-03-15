@@ -61,9 +61,6 @@ update msg model =
 
                 newState =
                     { model | tableViewer = newTableViewerState }
-
-                _ =
-                    Debug.log "newState" newState
             in
             ( newState
             , Cmd.none

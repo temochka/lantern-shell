@@ -9,7 +9,6 @@ import Element exposing (Element)
 import Element.Background
 import Element.Border
 import Element.Font
-import Element.Input
 import Html.Attributes
 import Json.Decode
 import Keyboard.Event
@@ -18,8 +17,7 @@ import Lantern.App
 import Lantern.LiveQuery exposing (LiveQuery(..))
 import LanternShell.Apps
 import LanternUi
-import LanternUi.FuzzySelect
-import LanternUi.Theme exposing (solarizedDark)
+import LanternUi.Theme
 import LanternUi.WindowManager
 import ProcessTable exposing (ProcessTable)
 import Task
@@ -59,16 +57,10 @@ appContext { theme, lanternConnection } =
 -- MODEL
 
 
-type alias LauncherEntry =
-    LanternShell.Apps.Context Msg -> ( LanternShell.Apps.App, Cmd (Lantern.App.Message LanternShell.Apps.Message) )
-
-
 type alias Model =
     { lanternConnection : Lantern.Connection Msg
-    , processTable : ProcessTable LanternShell.Apps.App
+    , processTable : ProcessTable (LanternShell.Apps.App Msg)
     , windowManager : LanternUi.WindowManager.WindowManager
-    , appLauncherQuery : String
-    , fuzzySelect : LanternUi.FuzzySelect.FuzzySelect
     , theme : LanternUi.Theme.Theme
     , liveQueriesCache : Dict ProcessTable.Pid (List (LiveQuery Msg))
     , navigationKey : Browser.Navigation.Key
@@ -96,17 +88,18 @@ init viewport url key =
             { lanternConnection = lanternConnection
             , windowManager = windowManager
             , processTable = ProcessTable.empty
-            , fuzzySelect = LanternUi.FuzzySelect.hidden
             , theme = initialTheme
             , liveQueriesCache = Dict.empty
-            , appLauncherQuery = ""
             , navigationKey = key
             , viewport = viewport
             }
     in
-    launchers
+    (LanternShell.Apps.appLauncher :: launchers)
         |> List.foldl
-            (\launcher ( model, cmd ) -> update (LaunchApp (\x -> (launcher x).init Nothing)) model |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ]))
+            (\launcher ( model, cmd ) ->
+                update (LaunchApp (launcher (LanternShell.Apps.appContext model))) model
+                    |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ])
+            )
             ( starterModel
             , Cmd.none
             )
@@ -128,7 +121,7 @@ subscriptions model =
                             appModel =
                                 ProcessTable.processApp appProcess
                         in
-                        (LanternShell.Apps.lanternAppFor appModel (appContext model)).subscriptions appModel
+                        (LanternShell.Apps.lanternAppFor appModel (LanternShell.Apps.appContext model)).subscriptions appModel
                             |> Sub.map (wrapAppMessage appProcess.pid)
                     )
                 |> Sub.batch
@@ -147,14 +140,12 @@ subscriptions model =
 
 type Msg
     = Nop
-    | AppLauncherMessage LanternUi.FuzzySelect.Message
-    | AppMessage ProcessTable.Pid LanternShell.Apps.Message
+    | AppMessage ProcessTable.Pid (LanternShell.Apps.Message Msg)
     | CloseApp ProcessTable.Pid
     | FocusAppLauncher
     | LanternMessage (Lantern.Message Msg)
-    | LaunchApp LauncherEntry
+    | LaunchApp (LanternShell.Apps.LauncherEntry Msg)
     | WindowManagerMessage LanternUi.WindowManager.Message
-    | UpdateLauncherQuery String
     | UpdateViewport Int Int
     | UrlChange Url.Url
     | UrlRequest Browser.UrlRequest
@@ -165,7 +156,7 @@ threadModel model ops =
     List.foldl (\updateFn ( oldModel, oldCmd ) -> updateFn oldModel |> Tuple.mapSecond (\newCmd -> Cmd.batch [ oldCmd, newCmd ])) ( model, Cmd.none ) ops
 
 
-wrapAppMessage : ProcessTable.Pid -> Lantern.App.Message LanternShell.Apps.Message -> Msg
+wrapAppMessage : ProcessTable.Pid -> Lantern.App.Message (LanternShell.Apps.Message Msg) -> Msg
 wrapAppMessage pid msg =
     case msg of
         Lantern.App.Message appMsg ->
@@ -184,7 +175,7 @@ refreshLiveQueries pid model =
             (\appModel ->
                 let
                     lanternApp =
-                        LanternShell.Apps.lanternAppFor appModel (appContext model)
+                        LanternShell.Apps.lanternAppFor appModel (LanternShell.Apps.appContext model)
 
                     newLiveQueries =
                         lanternApp.liveQueries appModel |> List.map (Lantern.LiveQuery.map (AppMessage pid))
@@ -199,7 +190,7 @@ refreshLiveQueries pid model =
 
                     cmd =
                         if liveQueriesChanged then
-                            Lantern.liveQueries (liveQueriesCache |> Dict.values |> List.concatMap identity)
+                            Lantern.liveQueries (liveQueriesCache |> Dict.values |> List.concat)
                                 |> Cmd.map LanternMessage
 
                         else
@@ -221,7 +212,7 @@ update msg model =
                 newProcessTable =
                     ProcessTable.kill pid model.processTable
             in
-            [ update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.pids newProcessTable))) ]
+            [ update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable))) ]
                 |> threadModel { model | processTable = newProcessTable }
 
         FocusAppLauncher ->
@@ -234,16 +225,13 @@ update msg model =
             in
             ( { model | lanternConnection = lanternConnection }, lanternCmd )
 
-        AppLauncherMessage proxiedMsg ->
-            ( { model | fuzzySelect = LanternUi.FuzzySelect.update proxiedMsg model.fuzzySelect }, Cmd.none )
-
         LaunchApp launcher ->
             let
                 context =
-                    appContext model
+                    LanternShell.Apps.appContext model
 
                 ( appModel, appCmd ) =
-                    launcher context
+                    launcher.init Nothing
 
                 app =
                     LanternShell.Apps.lanternAppFor appModel context
@@ -261,13 +249,11 @@ update msg model =
             [ \_ ->
                 ( { model
                     | processTable = newProcessTable
-                    , fuzzySelect = LanternUi.FuzzySelect.hidden
-                    , appLauncherQuery = ""
                   }
                 , Cmd.map (wrapAppMessage pid) appCmd
                 )
             , refreshLiveQueries pid
-            , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.pids newProcessTable)))
+            , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable)))
             ]
                 |> threadModel model
 
@@ -292,7 +278,7 @@ update msg model =
         AppMessage pid proxiedMsg ->
             case proxiedMsg of
                 LanternShell.Apps.LaunchAppMsg app ->
-                    update (LaunchApp (\_ -> app.init Nothing)) model
+                    update (LaunchApp app) model
 
                 _ ->
                     [ \m ->
@@ -316,9 +302,6 @@ update msg model =
                     , refreshLiveQueries pid
                     ]
                         |> threadModel model
-
-        UpdateLauncherQuery query ->
-            ( { model | appLauncherQuery = query }, Cmd.none )
 
         UpdateViewport x y ->
             ( { model | viewport = { width = x, height = y } }, Cmd.none )
@@ -366,7 +349,7 @@ handleShortcuts model =
 renderApp :
     Model
     -> LanternUi.WindowManager.RenderOptions
-    -> ProcessTable.Process LanternShell.Apps.App
+    -> ProcessTable.Process (LanternShell.Apps.App Msg)
     -> Element Msg
 renderApp model { focused, id, tabindex } process =
     let
@@ -374,7 +357,7 @@ renderApp model { focused, id, tabindex } process =
             ProcessTable.processApp process
 
         content =
-            (LanternShell.Apps.lanternAppFor app (appContext model)).view () app
+            (LanternShell.Apps.lanternAppFor app (LanternShell.Apps.appContext model)).view () app
 
         border =
             if focused then
@@ -413,25 +396,11 @@ tools model =
 
 renderAppLauncher : Model -> Element Msg
 renderAppLauncher model =
-    Element.row
-        [ Element.width Element.fill
-        , Element.spacing 10
-        , Element.paddingXY 25 10
-        ]
-        [ Element.el [ Element.Font.color model.theme.fontContrastInactive ] (Element.text ">")
-        , LanternUi.FuzzySelect.fuzzySelect
-            solarizedDark
-            { options = LanternShell.Apps.all |> List.map (\app -> ( (app (appContext model)).name, \x -> (app x).init Nothing ))
-            , placeholder = Nothing
-            , label = Element.Input.labelHidden "Launch app"
-            , id = Just "lanternAppLauncher"
-            , onInternalMessage = AppLauncherMessage
-            , onOptionSelect = LaunchApp
-            , onQueryChange = UpdateLauncherQuery
-            , state = model.fuzzySelect
-            , query = model.appLauncherQuery
-            }
-        ]
+    ProcessTable.lookup model.processTable 0
+        |> Maybe.map ProcessTable.processApp
+        |> Maybe.map (\app -> (LanternShell.Apps.lanternAppFor app (LanternShell.Apps.appContext model)).view () app)
+        |> Maybe.map (Element.map (wrapAppMessage 0))
+        |> Maybe.withDefault Element.none
 
 
 view : Model -> Browser.Document Msg

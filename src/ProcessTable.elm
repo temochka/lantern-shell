@@ -1,4 +1,4 @@
-module ProcessTable exposing (Pid, Process, ProcessTable, empty, kill, launch, lookup, mapProcess, pids, processApp, processes, processesWithPids)
+module ProcessTable exposing (Pid, Process, ProcessTable, empty, kill, launch, lookup, mapProcess, pids, processApp, processes, processesWithPids, userPids)
 
 import Dict exposing (Dict)
 
@@ -30,14 +30,12 @@ type alias ProcessTable app =
     }
 
 
-type Message app
-    = Launch (Launcher app)
-
-
 empty : ProcessTable app
 empty =
     { processes = Dict.empty
-    , pid = 0
+
+    -- First launched process should be 0
+    , pid = -1
     }
 
 
@@ -54,6 +52,11 @@ processesWithPids table =
 pids : ProcessTable app -> List Pid
 pids table =
     Dict.keys table.processes
+
+
+userPids : ProcessTable app -> List Pid
+userPids table =
+    table.processes |> Dict.remove 0 |> Dict.keys
 
 
 processApp : Process app -> app
