@@ -17,7 +17,6 @@ import LanternShell.Apps.FlashcardGenerator as FlashcardGeneratorApp
 import LanternShell.Apps.LetterCubes as LetterCubesApp
 import LanternShell.Apps.LogViewer as LogViewerApp
 import LanternShell.Apps.Migrations as MigrationsApp
-import LanternShell.Apps.Notes as NotesApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
 import LanternShell.Apps.Scripts as ScriptsApp
 import LanternShell.Apps.ValueInspector as ValueInspectorApp
@@ -38,7 +37,6 @@ type App
     | LetterCubesApp LetterCubesApp.Model
     | LogViewerApp LogViewerApp.Model
     | MigrationsApp MigrationsApp.Model
-    | NotesApp NotesApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
     | ScriptsApp ScriptsApp.Model
     | ValueInspectorApp ValueInspectorApp.Model
@@ -52,7 +50,6 @@ type Message
     | LetterCubesMsg LetterCubesApp.Message
     | LogViewerMsg LogViewerApp.Message
     | MigrationsMsg MigrationsApp.Message
-    | NotesMsg NotesApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
     | ScriptsMsg ScriptsApp.Message
     | ValueInspectorMsg ValueInspectorApp.Message
@@ -80,9 +77,6 @@ appId app =
 
         MigrationsApp _ ->
             "Migrations"
-
-        NotesApp _ ->
-            "Notes"
 
         ReaderQueryApp _ ->
             "ReaderQuery"
@@ -117,9 +111,6 @@ launcherForId id =
 
         "Migrations" ->
             Just migrations
-
-        "Notes" ->
-            Just notes
 
         "ReaderQuery" ->
             Just readerQuery
@@ -158,9 +149,6 @@ lanternAppFor app =
         MigrationsApp _ ->
             migrations
 
-        NotesApp _ ->
-            notes
-
         ReaderQueryApp _ ->
             readerQuery
 
@@ -180,7 +168,6 @@ all =
     , databaseExplorer
     , flashcardGenerator
     , letterCubes
-    , notes
     , readerQuery
     , scripts
     , valueInspector Nothing
@@ -296,33 +283,6 @@ letterCubes context =
         , context = \_ -> { theme = context.theme }
         }
         LetterCubesApp.lanternApp
-
-
-notes : Context msg -> Lantern.App.App () () App Message
-notes context =
-    Lantern.App.mount
-        { unwrapMsg =
-            \wrappedMsg ->
-                case wrappedMsg of
-                    NotesMsg unwrappedMsg ->
-                        Just unwrappedMsg
-
-                    _ ->
-                        Nothing
-        , unwrapModel =
-            \wrappedModel ->
-                case wrappedModel of
-                    NotesApp unwrappedModel ->
-                        Just unwrappedModel
-
-                    _ ->
-                        Nothing
-        , wrapModel = NotesApp
-        , wrapMsg = NotesMsg
-        , flags = Nothing
-        , context = \_ -> { theme = context.theme }
-        }
-        NotesApp.lanternApp
 
 
 logViewer : Context msg -> Lantern.App.App () () App Message
