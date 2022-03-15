@@ -14,7 +14,6 @@ import Lantern.App
 import LanternShell.Apps.DatabaseExplorer as DatabaseExplorerApp
 import LanternShell.Apps.Echo as EchoApp
 import LanternShell.Apps.FlashcardGenerator as FlashcardGeneratorApp
-import LanternShell.Apps.LetterCubes as LetterCubesApp
 import LanternShell.Apps.LogViewer as LogViewerApp
 import LanternShell.Apps.Migrations as MigrationsApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
@@ -34,7 +33,6 @@ type App
     = EchoApp EchoApp.Model
     | DatabaseExplorerApp DatabaseExplorerApp.Model
     | FlashcardGeneratorApp FlashcardGeneratorApp.Model
-    | LetterCubesApp LetterCubesApp.Model
     | LogViewerApp LogViewerApp.Model
     | MigrationsApp MigrationsApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
@@ -47,7 +45,6 @@ type Message
     = EchoMsg EchoApp.Message
     | DatabaseExplorerMsg DatabaseExplorerApp.Message
     | FlashcardGeneratorMsg FlashcardGeneratorApp.Message
-    | LetterCubesMsg LetterCubesApp.Message
     | LogViewerMsg LogViewerApp.Message
     | MigrationsMsg MigrationsApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
@@ -68,9 +65,6 @@ appId app =
 
         FlashcardGeneratorApp _ ->
             "FlashcardGenerator"
-
-        LetterCubesApp _ ->
-            "LetterCubesApp"
 
         LogViewerApp _ ->
             "LogViewer"
@@ -102,9 +96,6 @@ launcherForId id =
 
         "FlashcardGenerator" ->
             Just flashcardGenerator
-
-        "LetterCubes" ->
-            Just letterCubes
 
         "LogViewer" ->
             Just logViewer
@@ -140,9 +131,6 @@ lanternAppFor app =
         FlashcardGeneratorApp _ ->
             flashcardGenerator
 
-        LetterCubesApp _ ->
-            letterCubes
-
         LogViewerApp _ ->
             logViewer
 
@@ -167,7 +155,6 @@ all =
     [ echo
     , databaseExplorer
     , flashcardGenerator
-    , letterCubes
     , readerQuery
     , scripts
     , valueInspector Nothing
@@ -256,33 +243,6 @@ flashcardGenerator context =
         , context = \_ -> { theme = context.theme }
         }
         FlashcardGeneratorApp.lanternApp
-
-
-letterCubes : Context msg -> Lantern.App.App () () App Message
-letterCubes context =
-    Lantern.App.mount
-        { unwrapMsg =
-            \wrappedMsg ->
-                case wrappedMsg of
-                    LetterCubesMsg unwrappedMsg ->
-                        Just unwrappedMsg
-
-                    _ ->
-                        Nothing
-        , unwrapModel =
-            \wrappedModel ->
-                case wrappedModel of
-                    LetterCubesApp unwrappedModel ->
-                        Just unwrappedModel
-
-                    _ ->
-                        Nothing
-        , wrapModel = LetterCubesApp
-        , wrapMsg = LetterCubesMsg
-        , flags = Nothing
-        , context = \_ -> { theme = context.theme }
-        }
-        LetterCubesApp.lanternApp
 
 
 logViewer : Context msg -> Lantern.App.App () () App Message
