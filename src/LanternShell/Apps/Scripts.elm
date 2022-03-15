@@ -499,20 +499,26 @@ update msg appModel =
                                             Enclojure.ValueMap.insert (Keyword name) (Located.fakeLoc (String v)) ui.enclojureUi.state
                                                 |> runWatchFn env ui.enclojureUi.watchFn
 
-                                        interpreter =
+                                        ( interpreter, console ) =
                                             case updatedState of
                                                 Ok st ->
                                                     let
                                                         updatedUi =
                                                             { enclojureUi | state = st }
                                                     in
-                                                    UI { ui | enclojureUi = updatedUi } ( env, thunk )
+                                                    ( UI { ui | enclojureUi = updatedUi } ( env, thunk )
+                                                    , model.console
+                                                    )
 
                                                 Err ex ->
-                                                    Panic ( ex, env )
+                                                    let
+                                                        i =
+                                                            Panic ( ex, env )
+                                                    in
+                                                    ( i, printResult i model.console )
 
                                         updatedModel =
-                                            { model | interpreter = interpreter }
+                                            { model | interpreter = interpreter, console = console }
                                     in
                                     ( updatedModel, Cmd.none )
 
