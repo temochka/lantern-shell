@@ -816,11 +816,26 @@ activeUi interpreter =
             Nothing
 
 
-viewConsole : Context -> Interpreter -> Console -> Element (Lantern.App.Message Message)
-viewConsole context interpreter console =
+type alias ConsoleOptions =
+    { devMode : Bool }
+
+
+isDevModeOnlyEntry : ConsoleEntry -> Bool
+isDevModeOnlyEntry entry =
+    case entry of
+        Savepoint_ _ ->
+            True
+
+        _ ->
+            False
+
+
+viewConsole : Context -> Interpreter -> Console -> ConsoleOptions -> Element (Lantern.App.Message Message)
+viewConsole context interpreter console options =
     activeUi interpreter
         |> Maybe.map (\ui -> UiTrace ui :: console)
         |> Maybe.withDefault console
+        |> List.filter (\entry -> options.devMode || not (isDevModeOnlyEntry entry))
         |> List.take 20
         |> List.indexedMap
             (\i entry ->
@@ -970,7 +985,7 @@ viewEditor context model =
                     , label = Just <| Element.text "REPL"
                     }
                 , Element.paragraph [] [ Element.text "Console" ]
-                , viewConsole context model.interpreter model.console
+                , viewConsole context model.interpreter model.console { devMode = True }
                 ]
     in
     LanternUi.columnLayout
@@ -1041,7 +1056,7 @@ viewBrowser context model =
 
 viewRunner : Context -> EditorModel -> Element (Lantern.App.Message Message)
 viewRunner context model =
-    viewConsole context model.interpreter model.console
+    viewConsole context model.interpreter model.console { devMode = False }
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)
