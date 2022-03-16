@@ -51,7 +51,7 @@ type alias BrowserModel =
 
 type alias EditorModel =
     { interpreter : Interpreter
-    , scriptEditor : Script
+    , script : Script
     , console : Console
     , repl : String
     }
@@ -60,6 +60,7 @@ type alias EditorModel =
 type Model
     = Browser BrowserModel
     | Editor EditorModel
+    | Runner EditorModel
 
 
 type alias Flags =
@@ -141,19 +142,20 @@ type Message
 
 init : Maybe Flags -> ( Model, Cmd (Lantern.App.Message Message) )
 init flags =
-    ( flags
+    flags
         |> Maybe.map
             (\script ->
-                Editor
-                    { interpreter = Stopped
-                    , scriptEditor = script
-                    , console = []
-                    , repl = ""
-                    }
+                updateRunner
+                    (Runner
+                        { interpreter = Stopped
+                        , script = script
+                        , console = []
+                        , repl = ""
+                        }
+                    )
+                    runScript
             )
-        |> Maybe.withDefault (Browser { scripts = [], query = "" })
-    , Cmd.none
-    )
+        |> Maybe.withDefault ( Browser { scripts = [], query = "" }, Cmd.none )
 
 
 unsavedScript : { id : Maybe Int, code : String, name : String, input : String }
@@ -280,6 +282,30 @@ updateEditor model updateFn =
             ( model, Cmd.none )
 
 
+updateRunner :
+    Model
+    -> (EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) ))
+    -> ( Model, Cmd (Lantern.App.Message Message) )
+updateRunner model updateFn =
+    case model of
+        Editor m ->
+            let
+                ( newM, cmd ) =
+                    updateFn m
+            in
+            ( Editor newM, cmd )
+
+        Runner m ->
+            let
+                ( newM, cmd ) =
+                    updateFn m
+            in
+            ( Runner newM, cmd )
+
+        _ ->
+            ( model, Cmd.none )
+
+
 runWatchFn : Env -> Value -> Enclojure.Types.ValueMap -> Result (Located Exception) Enclojure.Types.ValueMap
 runWatchFn env watchFn stateMap =
     case watchFn of
@@ -310,6 +336,23 @@ runWatchFn env watchFn stateMap =
                     Err (Located.fakeLoc (Exception "runtime error: watch fn tried to run a side effect"))
 
 
+runScript : EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) )
+runScript model =
+    let
+        ( interpreter, retMsg ) =
+            trampoline (Enclojure.eval Runtime.emptyEnv model.script.code) stackLimit
+    in
+    ( { model
+        | interpreter = interpreter
+        , console =
+            model.console
+                |> printLn ("Starting " ++ scriptName model.script)
+                |> printResult interpreter
+      }
+    , retMsg
+    )
+
+
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg appModel =
     case msg of
@@ -332,7 +375,7 @@ update msg appModel =
                 )
 
         FuzzySelectMessage id selectMsg ->
-            updateEditor appModel
+            updateRunner appModel
                 (\model ->
                     case model.interpreter of
                         UI ({ fuzzySelects } as ui) args ->
@@ -357,13 +400,13 @@ update msg appModel =
             updateEditor appModel
                 (\model ->
                     let
-                        scriptEditor =
-                            model.scriptEditor
+                        script =
+                            model.script
 
                         editor =
-                            { scriptEditor | code = code }
+                            { script | code = code }
                     in
-                    ( { model | scriptEditor = editor }, Cmd.none )
+                    ( { model | script = editor }, Cmd.none )
                 )
 
         UpdateRepl code ->
@@ -419,32 +462,17 @@ update msg appModel =
             updateEditor appModel
                 (\model ->
                     let
-                        scriptEditor =
-                            model.scriptEditor
+                        script =
+                            model.script
 
-                        editor =
-                            { scriptEditor | name = name }
+                        newScript =
+                            { script | name = name }
                     in
-                    ( { model | scriptEditor = editor }, Cmd.none )
+                    ( { model | script = newScript }, Cmd.none )
                 )
 
         Run ->
-            updateEditor appModel
-                (\model ->
-                    let
-                        ( interpreter, retMsg ) =
-                            trampoline (Enclojure.eval Runtime.emptyEnv model.scriptEditor.code) stackLimit
-                    in
-                    ( { model
-                        | interpreter = interpreter
-                        , console =
-                            model.console
-                                |> printLn ("Starting " ++ scriptName model.scriptEditor)
-                                |> printResult interpreter
-                      }
-                    , retMsg
-                    )
-                )
+            updateEditor appModel runScript
 
         Stop ->
             updateEditor appModel
@@ -457,7 +485,7 @@ update msg appModel =
                 )
 
         HandleIO ret ->
-            updateEditor appModel
+            updateRunner appModel
                 (\model ->
                     let
                         ( interpreter, retMsg ) =
@@ -482,7 +510,7 @@ update msg appModel =
             update (HandleIO ret) newAppModel
 
         UpdateInputRequest name inputType v ->
-            updateEditor
+            updateRunner
                 appModel
                 (\model ->
                     case model.interpreter of
@@ -556,14 +584,14 @@ update msg appModel =
                 (\model ->
                     let
                         cmd =
-                            model.scriptEditor.id
+                            model.script.id
                                 |> Maybe.map
                                     (\id ->
                                         Lantern.Query.withArguments
                                             "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
-                                            [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
-                                            , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
-                                            , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
+                                            [ ( "$name", model.script.name |> Lantern.Query.String )
+                                            , ( "$code", model.script.code |> Lantern.Query.String )
+                                            , ( "$input", model.script.input |> Lantern.Query.String )
                                             , ( "$id", id |> Lantern.Query.Int )
                                             ]
                                     )
@@ -576,7 +604,7 @@ update msg appModel =
         NewScript ->
             ( Editor
                 { interpreter = Stopped
-                , scriptEditor = unsavedScript
+                , script = unsavedScript
                 , console = []
                 , repl = ""
                 }
@@ -593,9 +621,9 @@ update msg appModel =
                         query =
                             Lantern.Query.withArguments
                                 "INSERT INTO scripts (name, code, input, created_at, updated_at) VALUES ($name, $code, $input, datetime('now'), datetime('now'))"
-                                [ ( "$name", model.scriptEditor.name |> Lantern.Query.String )
-                                , ( "$code", model.scriptEditor.code |> Lantern.Query.String )
-                                , ( "$input", model.scriptEditor.input |> Lantern.Query.String )
+                                [ ( "$name", model.script.name |> Lantern.Query.String )
+                                , ( "$code", model.script.code |> Lantern.Query.String )
+                                , ( "$input", model.script.input |> Lantern.Query.String )
                                 ]
                     in
                     ( model, Lantern.writerQuery query ScriptCreated |> Lantern.App.call )
@@ -609,12 +637,12 @@ update msg appModel =
                             (\writerResult ->
                                 let
                                     editor =
-                                        model.scriptEditor
+                                        model.script
 
                                     newEditor =
                                         { editor | id = Just writerResult.lastInsertRowId }
                                 in
-                                ( { model | scriptEditor = newEditor }, Cmd.none )
+                                ( { model | script = newEditor }, Cmd.none )
                             )
                         |> Result.withDefault ( model, Cmd.none )
                 )
@@ -622,7 +650,7 @@ update msg appModel =
         EditScript script ->
             ( Editor
                 { interpreter = Stopped
-                , scriptEditor = script
+                , script = script
                 , console = []
                 , repl = ""
                 }
@@ -788,6 +816,91 @@ activeUi interpreter =
             Nothing
 
 
+viewConsole : Context -> Interpreter -> Console -> Element (Lantern.App.Message Message)
+viewConsole context interpreter console =
+    activeUi interpreter
+        |> Maybe.map (\ui -> UiTrace ui :: console)
+        |> Maybe.withDefault console
+        |> List.take 20
+        |> List.indexedMap
+            (\i entry ->
+                let
+                    valueRow val =
+                        Element.paragraph
+                            [ Element.width Element.fill ]
+                            [ Element.text (Runtime.inspect val)
+                            , LanternUi.Input.button context.theme
+                                []
+                                { onPress = Just (Lantern.App.Message <| InspectValue val)
+                                , label = Element.text "Inspect"
+                                }
+                            ]
+                in
+                Element.el
+                    [ Element.width Element.fill
+                    , if i == 0 then
+                        Element.alpha 1.0
+
+                      else
+                        Element.alpha 0.6
+                    ]
+                    (case entry of
+                        ConsoleString s ->
+                            Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
+
+                        Savepoint_ ( ( Located loc io, env ), thunk ) ->
+                            let
+                                newEnv =
+                                    case interpreter of
+                                        Done ( _, cEnv ) ->
+                                            { cEnv | local = env.local }
+
+                                        Panic ( _, cEnv ) ->
+                                            { cEnv | local = env.local }
+
+                                        _ ->
+                                            env
+
+                                rewindButton =
+                                    LanternUi.Input.button context.theme
+                                        []
+                                        { onPress = Just (Lantern.App.Message <| Rewind ( Ok ( Located loc io, newEnv ), thunk ))
+                                        , label = Element.text "Rewind"
+                                        }
+                            in
+                            Element.column
+                                [ Element.width Element.fill ]
+                                [ Element.paragraph [] [ Element.text "Savepoint", rewindButton ]
+                                , case io of
+                                    Const v ->
+                                        valueRow v
+
+                                    _ ->
+                                        Element.none
+                                ]
+
+                        Success val ->
+                            Element.column
+                                [ Element.width Element.fill ]
+                                [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
+                                , valueRow val
+                                ]
+
+                        Failure ( e, _ ) ->
+                            Element.text <| Runtime.inspectLocated (Located.map Throwable e)
+
+                        UiTrace ui ->
+                            Element.column
+                                [ Element.width Element.fill ]
+                                [ renderUI context ui ]
+                    )
+            )
+        |> Element.column
+            [ Element.width Element.fill
+            , Element.spacing 10
+            ]
+
+
 viewEditor : Context -> EditorModel -> Element (Lantern.App.Message Message)
 viewEditor context model =
     let
@@ -803,10 +916,10 @@ viewEditor context model =
             LanternUi.Input.button context.theme [] { label = Element.text runButtonTitle, onPress = Just <| Lantern.App.Message Run }
 
         evalButton =
-            LanternUi.Input.button context.theme [] { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.scriptEditor.code) }
+            LanternUi.Input.button context.theme [] { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.script.code) }
 
         saveButton =
-            if model.scriptEditor.id == Nothing then
+            if model.script.id == Nothing then
                 LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message CreateScript }
 
             else
@@ -823,7 +936,7 @@ viewEditor context model =
                 [ LanternUi.Input.text context.theme
                     [ Element.width Element.fill ]
                     { onChange = UpdateName >> Lantern.App.Message
-                    , text = model.scriptEditor.name
+                    , text = model.script.name
                     , placeholder = Nothing
                     , label = Element.Input.labelAbove [] (Element.text "Script name")
                     }
@@ -831,97 +944,11 @@ viewEditor context model =
                     [ Element.width Element.fill
                     ]
                     { onChange = UpdateCode >> Lantern.App.Message
-                    , value = model.scriptEditor.code
+                    , value = model.script.code
                     , language = LanternUi.Input.Enclojure
                     , label = Just <| Element.text "Code"
                     }
                 ]
-
-        consoleWithActiveUi =
-            activeUi model.interpreter
-                |> Maybe.map (\ui -> UiTrace ui :: model.console)
-                |> Maybe.withDefault model.console
-                |> List.take 20
-
-        console =
-            consoleWithActiveUi
-                |> List.indexedMap
-                    (\i entry ->
-                        let
-                            valueRow val =
-                                Element.paragraph
-                                    [ Element.width Element.fill ]
-                                    [ Element.text (Runtime.inspect val)
-                                    , LanternUi.Input.button context.theme
-                                        []
-                                        { onPress = Just (Lantern.App.Message <| InspectValue val)
-                                        , label = Element.text "Inspect"
-                                        }
-                                    ]
-                        in
-                        Element.el
-                            [ Element.width Element.fill
-                            , if i == 0 then
-                                Element.alpha 1.0
-
-                              else
-                                Element.alpha 0.6
-                            ]
-                            (case entry of
-                                ConsoleString s ->
-                                    Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
-
-                                Savepoint_ ( ( Located loc io, env ), thunk ) ->
-                                    let
-                                        newEnv =
-                                            case model.interpreter of
-                                                Done ( _, cEnv ) ->
-                                                    { cEnv | local = env.local }
-
-                                                Panic ( _, cEnv ) ->
-                                                    { cEnv | local = env.local }
-
-                                                _ ->
-                                                    env
-
-                                        rewindButton =
-                                            LanternUi.Input.button context.theme
-                                                []
-                                                { onPress = Just (Lantern.App.Message <| Rewind ( Ok ( Located loc io, newEnv ), thunk ))
-                                                , label = Element.text "Rewind"
-                                                }
-                                    in
-                                    Element.column
-                                        [ Element.width Element.fill ]
-                                        [ Element.paragraph [] [ Element.text "Savepoint", rewindButton ]
-                                        , case io of
-                                            Const v ->
-                                                valueRow v
-
-                                            _ ->
-                                                Element.none
-                                        ]
-
-                                Success val ->
-                                    Element.column
-                                        [ Element.width Element.fill ]
-                                        [ Element.paragraph [ Element.width Element.fill ] [ Element.text "Done" ]
-                                        , valueRow val
-                                        ]
-
-                                Failure ( e, _ ) ->
-                                    Element.text <| Runtime.inspectLocated (Located.map Throwable e)
-
-                                UiTrace ui ->
-                                    Element.column
-                                        [ Element.width Element.fill ]
-                                        [ renderUI context ui ]
-                            )
-                    )
-                |> Element.column
-                    [ Element.width Element.fill
-                    , Element.spacing 10
-                    ]
 
         handleKeyPress event =
             case ( event.keyCode, event.metaKey, event.altKey ) of
@@ -943,7 +970,7 @@ viewEditor context model =
                     , label = Just <| Element.text "REPL"
                     }
                 , Element.paragraph [] [ Element.text "Console" ]
-                , console
+                , viewConsole context model.interpreter model.console
                 ]
     in
     LanternUi.columnLayout
@@ -1012,6 +1039,11 @@ viewBrowser context model =
         ]
 
 
+viewRunner : Context -> EditorModel -> Element (Lantern.App.Message Message)
+viewRunner context model =
+    viewConsole context model.interpreter model.console
+
+
 view : Context -> Model -> Element (Lantern.App.Message Message)
 view context model =
     case model of
@@ -1020,6 +1052,9 @@ view context model =
 
         Editor editor ->
             viewEditor context editor
+
+        Runner runner ->
+            viewRunner context runner
 
 
 type alias Script =
@@ -1052,6 +1087,9 @@ liveQueries model =
             [ scriptsQuery UpdateScripts ]
 
         Editor _ ->
+            []
+
+        Runner _ ->
             []
 
 
