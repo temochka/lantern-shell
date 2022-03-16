@@ -111,7 +111,7 @@ launcherForId id =
             Just readerQuery
 
         "Scripts" ->
-            Just scripts
+            Just (scripts Nothing)
 
         "WriterQuery" ->
             Just writerQuery
@@ -145,7 +145,7 @@ lanternAppFor app =
             readerQuery
 
         ScriptsApp _ ->
-            scripts
+            scripts Nothing
 
         ValueInspectorApp _ ->
             valueInspector Nothing
@@ -159,7 +159,7 @@ all =
     [ echo
     , databaseExplorer
     , readerQuery
-    , scripts
+    , scripts Nothing
     , valueInspector Nothing
     , writerQuery
     , migrations
@@ -302,8 +302,8 @@ readerQuery context =
         ReaderQueryApp.lanternApp
 
 
-scripts : Context msg -> Lantern.App.App () () (App msg) (Message msg)
-scripts context =
+scripts : Maybe ScriptsApp.Script -> Context msg -> Lantern.App.App () () (App msg) (Message msg)
+scripts script context =
     Lantern.App.mount
         { unwrapMsg =
             \wrappedMsg ->
@@ -330,7 +330,7 @@ scripts context =
 
                     otherMsg ->
                         ScriptsMsg otherMsg
-        , flags = Nothing
+        , flags = script
         , context = \_ -> { theme = context.theme }
         }
         ScriptsApp.lanternApp
@@ -359,14 +359,17 @@ appLauncher context =
         , wrapMsg =
             \msg ->
                 case msg of
-                    AppLauncherApp.LaunchApp v ->
+                    AppLauncherApp.LaunchApp (AppLauncherApp.NativeApp v) ->
                         LaunchAppMsg v
+
+                    AppLauncherApp.LaunchApp (AppLauncherApp.UserScript v) ->
+                        LaunchAppMsg (scripts (Just v) context)
 
                     _ ->
                         AppLauncherMsg msg
         , flags =
             Just
-                { options =
+                { nativeApps =
                     all
                         |> List.map
                             (\launcher ->
@@ -374,7 +377,7 @@ appLauncher context =
                                     app =
                                         launcher context
                                 in
-                                ( app.name, app )
+                                ( app.name, AppLauncherApp.NativeApp app )
                             )
                 }
         , context = \_ -> { theme = context.theme }

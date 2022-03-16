@@ -62,6 +62,10 @@ type Model
     | Editor EditorModel
 
 
+type alias Flags =
+    Script
+
+
 stackLimit : Int
 stackLimit =
     100000
@@ -135,9 +139,19 @@ type Message
     | NoOp
 
 
-init : ( Model, Cmd (Lantern.App.Message Message) )
-init =
-    ( Browser { scripts = [], query = "" }
+init : Maybe Flags -> ( Model, Cmd (Lantern.App.Message Message) )
+init flags =
+    ( flags
+        |> Maybe.map
+            (\script ->
+                Editor
+                    { interpreter = Stopped
+                    , scriptEditor = script
+                    , console = []
+                    , repl = ""
+                    }
+            )
+        |> Maybe.withDefault (Browser { scripts = [], query = "" })
     , Cmd.none
     )
 
@@ -1016,8 +1030,8 @@ type alias Script =
     }
 
 
-tableDecoder : Json.Decode.Decoder Script
-tableDecoder =
+scriptDecoder : Json.Decode.Decoder Script
+scriptDecoder =
     Json.Decode.map4
         Script
         (Json.Decode.map Just (Json.Decode.field "id" Json.Decode.int))
@@ -1026,25 +1040,26 @@ tableDecoder =
         (Json.Decode.field "input" Json.Decode.string)
 
 
+scriptsQuery : (Result Lantern.Error (List Script) -> msg) -> LiveQuery msg
+scriptsQuery =
+    Lantern.LiveQuery.prepare ( Lantern.Query.Query "SELECT id, input, name, code FROM scripts ORDER BY name" Dict.empty, scriptDecoder )
+
+
 liveQueries : Model -> List (LiveQuery Message)
 liveQueries model =
     case model of
         Browser _ ->
-            let
-                tablesQuery =
-                    Lantern.LiveQuery.prepare ( Lantern.Query.Query "SELECT id, input, name, code FROM scripts ORDER BY name" Dict.empty, tableDecoder ) UpdateScripts
-            in
-            [ tablesQuery ]
+            [ scriptsQuery UpdateScripts ]
 
         Editor _ ->
             []
 
 
-lanternApp : Lantern.App.App Context () Model Message
+lanternApp : Lantern.App.App Context Flags Model Message
 lanternApp =
     Lantern.App.app
         { name = "Scripts"
-        , init = \_ -> init
+        , init = init
         , view = view
         , update = update
         , liveQueries = Just liveQueries

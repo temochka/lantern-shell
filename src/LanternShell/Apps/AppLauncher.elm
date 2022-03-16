@@ -1,39 +1,54 @@
-module LanternShell.Apps.AppLauncher exposing (Message(..), Model, init, lanternApp)
+module LanternShell.Apps.AppLauncher exposing (Launcher(..), Message(..), Model, init, lanternApp)
 
 import Element exposing (Element)
 import Element.Font
 import Element.Input
+import Lantern
 import Lantern.App
+import Lantern.LiveQuery exposing (LiveQuery)
+import LanternShell.Apps.Scripts exposing (Script)
 import LanternUi.FuzzySelect
 import LanternUi.Theme
 
 
 type alias Flags launcher =
-    { options : List ( String, launcher ) }
+    { nativeApps : List ( String, Launcher launcher ) }
 
 
 type alias Context =
     { theme : LanternUi.Theme.Theme }
 
 
+type Launcher launcher
+    = UserScript Script
+    | NativeApp launcher
+
+
 type alias Model launcher =
     { appLauncherQuery : String
     , fuzzySelect : LanternUi.FuzzySelect.FuzzySelect
-    , options : List ( String, launcher )
+    , nativeApps : List ( String, Launcher launcher )
+    , options : List ( String, Launcher launcher )
     }
 
 
 type Message launcher
     = FuzzySelectMessage LanternUi.FuzzySelect.Message
-    | LaunchApp launcher
+    | LaunchApp (Launcher launcher)
     | UpdateLauncherQuery String
+    | UpdateScripts (Result Lantern.Error (List Script))
 
 
 init : Maybe (Flags launcher) -> ( Model launcher, Cmd (Lantern.App.Message (Message launcher)) )
 init flags =
+    let
+        nativeApps =
+            flags |> Maybe.map .nativeApps |> Maybe.withDefault []
+    in
     ( { appLauncherQuery = ""
       , fuzzySelect = LanternUi.FuzzySelect.hidden
-      , options = flags |> Maybe.map .options |> Maybe.withDefault []
+      , nativeApps = nativeApps
+      , options = nativeApps
       }
     , Cmd.none
     )
@@ -50,6 +65,22 @@ update msg model =
 
         LaunchApp _ ->
             ( model, Cmd.none )
+
+        UpdateScripts result ->
+            case result of
+                Ok scripts ->
+                    ( { model
+                        | options =
+                            scripts
+                                |> List.map (\s -> ( s.name, UserScript s ))
+                                |> (++) model.nativeApps
+                                |> List.sortBy (Tuple.first >> String.toLower)
+                      }
+                    , Cmd.none
+                    )
+
+                Err _ ->
+                    ( model, Cmd.none )
 
 
 view : Context -> Model launcher -> Element (Lantern.App.Message (Message launcher))
@@ -75,11 +106,16 @@ view { theme } model =
         ]
 
 
+liveQueries : Model launcher -> List (LiveQuery (Message launcher))
+liveQueries _ =
+    [ LanternShell.Apps.Scripts.scriptsQuery UpdateScripts ]
+
+
 lanternApp : Lantern.App.App Context (Flags launcher) (Model launcher) (Message launcher)
 lanternApp =
     Lantern.App.app
         { name = "Launch app"
-        , liveQueries = Nothing
+        , liveQueries = Just liveQueries
         , init = init
         , view = view
         , update = update
