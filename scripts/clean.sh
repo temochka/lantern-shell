@@ -1,4 +1,4 @@
 #!/bin/bash
 set -eax
 
-rm dist/public/*.{js,map,css,gz}
+rm -f dist/public/*.{js,map,css,gz}

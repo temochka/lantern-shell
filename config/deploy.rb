@@ -9,8 +9,8 @@ set :linked_dirs, %w(.lantern)
 namespace :deploy do
   task :build do
     run_locally do
-      execute :npm, 'run', 'clean'
-      execute :npm, 'run', 'build:prod'
+      execute 'scripts/clean.sh'
+      execute 'scripts/build.sh'
     end
   end
 
