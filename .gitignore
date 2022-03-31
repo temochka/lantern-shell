@@ -1,4 +1,7 @@
-/dist/public
+/dist/public/*.js
+/dist/public/*.css
+/dist/public/*.map
+/dist/public/*.gz
 /dist/.lantern
 /elm-stuff
 /node_modules

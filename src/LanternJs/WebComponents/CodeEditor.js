@@ -13,22 +13,19 @@ customElements.define(
       return ["initvalue"];
     }
 
-    _instance?: Editor;
-    _value: string | null = null;
-
     constructor() {
       super();
     }
 
-    get fullValue(): string | null {
+    get fullValue() {
       return this._value;
     }
 
-    get initValue(): string | null {
+    get initValue() {
       return this.getAttribute("initvalue");
     }
 
-    set initValue(newValue: string | null) {
+    set initValue(newValue) {
       if (newValue !== null && newValue !== this.fullValue) {
         if (!this._instance) return;
 
@@ -41,23 +38,23 @@ customElements.define(
       }
     }
 
-    get mode(): string | null {
+    get mode() {
       return this.getAttribute("mode");
     }
 
-    set mode(value: string | null) {
+    set mode(value) {
       if (value === null) value = "sql";
       if (value === this.mode) return;
       if (!this._instance) return;
       this._instance.setOption("mode", value);
     }
 
-    get tabSize(): number | null {
+    get tabSize() {
       const str = this.getAttribute("tabSize");
       return str ? parseInt(str) : null;
     }
 
-    set tabSize(value: number | null) {
+    set tabSize(value) {
       if (value === null) value = 2;
       if (value === this.tabSize) return;
       this.tabSize = value;
@@ -67,9 +64,9 @@ customElements.define(
     }
 
     attributeChangedCallback(
-      _name: string,
-      _oldValue: string,
-      newValue: string
+      _name,
+      _oldValue,
+      newValue
     ) {
       this.initValue = newValue;
     }
@@ -93,7 +90,7 @@ customElements.define(
         extraKeys: {
           Tab(cm) {
             let x = "";
-            for (let i = cm.getOption("indentUnit")!; i > 0; i--) x += " ";
+            for (let i = cm.getOption("indentUnit"); i > 0; i--) x += " ";
             cm.replaceSelection(x);
           },
         },

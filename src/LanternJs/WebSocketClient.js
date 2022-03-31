@@ -1,12 +1,12 @@
 export default class WebSocketClient {
-  private endpoint: string;
-  private connection: WebSocket;
-  private messageQueue: Array<string>;
-  private reconnectInterval: number;
-  private msToReconnect: number;
-  private onMessage: (msg: string) => void;
+  #endpoint;
+  #connection;
+  #messageQueue;
+  #reconnectInterval;
+  #msToReconnect;
+  #onMessage;
 
-  constructor(endpoint: string, onMessage: (msg: string) => void) {
+  constructor(endpoint, onMessage) {
     this.endpoint = endpoint;
     this.messageQueue = [];
     this.reconnectInterval = 10;
@@ -17,12 +17,12 @@ export default class WebSocketClient {
     this.configureConnection(this.connection);
   }
 
-  send(message: string): void {
+  send(message) {
     this.messageQueue.push(message);
     this.flush();
   }
 
-  flush(): void {
+  flush() {
     if (this.connection.readyState == WebSocket.CONNECTING) {
       return;
     } else if (this.connection.readyState != WebSocket.OPEN) {
@@ -43,7 +43,7 @@ export default class WebSocketClient {
     }
   }
 
-  private reconnect() {
+  reconnect() {
     if (
       this.connection.readyState === WebSocket.CONNECTING ||
       this.connection.readyState === WebSocket.OPEN
@@ -56,7 +56,7 @@ export default class WebSocketClient {
     this.configureConnection(this.connection);
   }
 
-  private configureConnection(connection: WebSocket) {
+  configureConnection(connection) {
     connection.onopen = () => {
       this.msToReconnect = this.reconnectInterval;
       this.flush();

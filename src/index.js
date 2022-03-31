@@ -1,4 +1,3 @@
-import { Elm } from "LanternShell";
 import WebSocketClient from "./LanternJs/WebSocketClient";
 import "./LanternJs/WebComponents/CodeEditor";
 

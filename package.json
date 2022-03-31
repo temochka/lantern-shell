@@ -1,17 +1,9 @@
 {
   "name": "lantern-shell",
   "version": "1.0.0",
-  "description": "Development tools for the Lantern web server",
+  "description": "My Lantern shell.",
   "private": true,
   "scripts": {
-    "clean": "rm -rf dist/public",
-    "build": "webpack --config webpack.dev.js",
-    "build:prod": "webpack --config webpack.prod.js",
-    "start": "webpack-dev-server --inline --hot --config webpack.dev.js",
-    "test": "npm run test",
-    "lint": "eslint .",
-    "lint-fix": "eslint . --fix",
-    "prettier": "prettier"
   },
   "repository": {
     "type": "git",
@@ -24,42 +16,6 @@
   },
   "homepage": "https://github.com/temochka/lantern-shell#readme",
   "devDependencies": {
-    "@types/codemirror": "^5.60.2",
-    "@typescript-eslint/eslint-plugin": "^2.5.0",
-    "@typescript-eslint/parser": "^2.5.0",
-    "codemirror": "^5.62.2",
-    "copy-webpack-plugin": "^6.4.1",
-    "css-loader": "^5.2.7",
-    "elm-hot-webpack-loader": "^1.1.2",
-    "elm-webpack-loader": "^6.0.0",
-    "eslint": "^6.6.0",
-    "eslint-config-prettier": "^6.5.0",
-    "eslint-config-standard": "^14.1.0",
-    "eslint-plugin-import": "^2.18.2",
-    "eslint-plugin-node": "^10.0.0",
-    "eslint-plugin-prettier": "^3.1.1",
-    "eslint-plugin-promise": "^4.2.1",
-    "eslint-plugin-standard": "^4.0.1",
-    "husky": "^3.0.9",
-    "lint-staged": "^9.4.2",
-    "prettier": "2.3.2",
-    "style-loader": "^2.0.0",
-    "ts-loader": "^6.2.1",
-    "typescript": "^4.3.5",
-    "webpack": "^4.41.2",
-    "webpack-cli": "^3.3.9",
-    "webpack-dev-server": "^3.11.2",
-    "webpack-merge": "^4.2.2"
-  },
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged"
-    }
-  },
-  "lint-staged": {
-    "*.{ts,js,json}": [
-      "eslint --fix",
-      "git add"
-    ]
+    "codemirror": "^5.62.2"
   }
 }
