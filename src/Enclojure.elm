@@ -1,4 +1,4 @@
-module Enclojure exposing (eval, terminate)
+module Enclojure exposing (eval, evalPure, init, terminate)
 
 import Array exposing (Array)
 import Enclojure.Extra.Maybe exposing (orElse)
@@ -119,14 +119,11 @@ resolveSymbol env symbol =
                 "rest" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rest_))
 
-                "seq" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.seq))
-
-                "<o>" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.savepoint))
-
                 "second" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.second))
+
+                "seq" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.seq))
 
                 "sleep" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
@@ -151,6 +148,9 @@ resolveSymbol env symbol =
 
                 "val" ->
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.val_))
+
+                "<o>" ->
+                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.savepoint))
 
                 _ ->
                     Err (Exception ("Unknown symbol " ++ symbol))
@@ -226,11 +226,11 @@ evalExpression mutableExpr mutableEnv mutableK =
                         (Located _ (Symbol "def")) :: args ->
                             evalDef (Located loc args) env k
 
-                        (Located _ (Symbol "if")) :: args ->
-                            evalIf (Located loc args) env k
-
                         (Located _ (Symbol "do")) :: exprs ->
                             evalDo (Located loc exprs) env k
+
+                        (Located _ (Symbol "if")) :: args ->
+                            evalIf (Located loc args) env k
 
                         (Located _ (Symbol "quote")) :: exprs ->
                             evalQuote (Located loc exprs) env k
@@ -389,81 +389,110 @@ destructure arg template =
             Ok [ ( name, Located.getValue arg ) ]
 
         Located loc (Map templateMap) ->
-            case arg of
-                Located _ (Map map) ->
-                    let
-                        keywordKeys =
-                            templateMap
-                                |> ValueMap.get (Keyword "keys")
-                                |> Maybe.map Located.getValue
-                                |> Maybe.withDefault (List [])
-                                |> Runtime.trySequenceOf Runtime.trySymbol
-                                |> Result.fromMaybe (Located loc (Exception "type error: :keys must be a vector of symbols"))
-                                |> Result.map
-                                    (\keys ->
-                                        keys
-                                            |> List.map
-                                                (\key ->
-                                                    ( key
-                                                    , ValueMap.get (Keyword key) map
-                                                        |> Maybe.map Located.getValue
-                                                        |> Maybe.withDefault Nil
-                                                    )
-                                                )
-                                    )
-
-                        stringKeys =
-                            templateMap
-                                |> ValueMap.get (Keyword "strs")
-                                |> Maybe.map Located.getValue
-                                |> Maybe.withDefault (List [])
-                                |> Runtime.trySequenceOf Runtime.trySymbol
-                                |> Result.fromMaybe (Located loc (Exception "type error: :strs must be a vector of symbols"))
-                                |> Result.map
-                                    (\keys ->
-                                        keys
-                                            |> List.map
-                                                (\key ->
-                                                    ( key
-                                                    , ValueMap.get (String key) map
-                                                        |> Maybe.map Located.getValue
-                                                        |> Maybe.withDefault Nil
-                                                    )
-                                                )
-                                    )
-
-                        otherKeys =
-                            templateMap
-                                |> ValueMap.remove (Keyword "keys")
-                                |> ValueMap.remove (Keyword "strs")
-                                |> ValueMap.toList
-                                |> List.foldr
-                                    (\( keyTemplate, Located _ key ) allBindingsResult ->
-                                        allBindingsResult
-                                            |> Result.andThen
-                                                (\allBindings ->
-                                                    destructure
-                                                        (ValueMap.get key map
-                                                            |> Maybe.withDefault (Located loc Nil)
+            arg
+                |> Located.getValue
+                |> Runtime.toMap
+                |> Result.fromMaybe (Located loc (Exception "type error: destructured value is not associative"))
+                |> Result.andThen
+                    (\map ->
+                        let
+                            keywordKeys =
+                                templateMap
+                                    |> ValueMap.get (Keyword "keys")
+                                    |> Maybe.map Located.getValue
+                                    |> Maybe.withDefault (List [])
+                                    |> Runtime.trySequenceOf Runtime.trySymbol
+                                    |> Result.fromMaybe (Located loc (Exception "type error: :keys must be a vector of symbols"))
+                                    |> Result.map
+                                        (\keys ->
+                                            keys
+                                                |> List.map
+                                                    (\key ->
+                                                        ( key
+                                                        , ValueMap.get (Keyword key) map
+                                                            |> Maybe.map Located.getValue
+                                                            |> Maybe.withDefault Nil
                                                         )
-                                                        (Located loc keyTemplate)
-                                                        |> Result.map ((++) allBindings)
-                                                )
-                                    )
-                                    (Ok [])
-                    in
-                    Result.map3 (\a b c -> a ++ b ++ c)
-                        keywordKeys
-                        stringKeys
-                        otherKeys
+                                                    )
+                                        )
 
-                _ ->
-                    Err (Located loc (Exception "type error: destructured value is not a map"))
+                            stringKeys =
+                                templateMap
+                                    |> ValueMap.get (Keyword "strs")
+                                    |> Maybe.map Located.getValue
+                                    |> Maybe.withDefault (List [])
+                                    |> Runtime.trySequenceOf Runtime.trySymbol
+                                    |> Result.fromMaybe (Located loc (Exception "type error: :strs must be a vector of symbols"))
+                                    |> Result.map
+                                        (\keys ->
+                                            keys
+                                                |> List.map
+                                                    (\key ->
+                                                        ( key
+                                                        , ValueMap.get (String key) map
+                                                            |> Maybe.map Located.getValue
+                                                            |> Maybe.withDefault Nil
+                                                        )
+                                                    )
+                                        )
 
-        Located loc (Vector vec) ->
+                            otherKeys =
+                                templateMap
+                                    |> ValueMap.remove (Keyword "keys")
+                                    |> ValueMap.remove (Keyword "strs")
+                                    |> ValueMap.remove (Keyword "or")
+                                    |> ValueMap.toList
+                                    |> List.foldr
+                                        (\( keyTemplate, Located _ key ) allBindingsResult ->
+                                            allBindingsResult
+                                                |> Result.andThen
+                                                    (\allBindings ->
+                                                        destructure
+                                                            (ValueMap.get key map
+                                                                |> Maybe.withDefault (Located loc Nil)
+                                                            )
+                                                            (Located loc keyTemplate)
+                                                            |> Result.map ((++) allBindings)
+                                                    )
+                                        )
+                                        (Ok [])
+
+                            defaults =
+                                if ValueMap.member (Keyword "or") templateMap then
+                                    Err (Located loc (Exception ":or is not supported"))
+
+                                else
+                                    Ok []
+                        in
+                        Result.map4 (\a b c d -> a ++ b ++ c ++ d)
+                            defaults
+                            keywordKeys
+                            stringKeys
+                            otherKeys
+                    )
+
+        Located loc (Vector aliasedVector) ->
+            let
+                asKeyword =
+                    Array.get (Array.length aliasedVector - 2) aliasedVector
+                        |> Maybe.andThen (Located.getValue >> Runtime.tryKeyword)
+
+                asTemplate =
+                    Array.get (Array.length aliasedVector - 1) aliasedVector
+                        |> Maybe.andThen (Located.getValue >> Runtime.trySymbol)
+
+                ( vec, asBindings ) =
+                    Maybe.map2
+                        (\_ tmpl ->
+                            ( Array.slice 0 -2 aliasedVector, [ ( tmpl, Located.getValue arg ) ] )
+                        )
+                        asKeyword
+                        asTemplate
+                        |> Maybe.withDefault ( aliasedVector, [] )
+            in
             case Array.toList vec of
                 [] ->
-                    Ok []
+                    Ok asBindings
 
                 [ Located _ (Symbol "&"), nextTemplate ] ->
                     arg
@@ -474,6 +503,7 @@ destructure arg template =
                             (\seq ->
                                 destructure (Located.replace arg (List seq)) nextTemplate
                             )
+                        |> Result.map ((++) asBindings)
 
                 nextTemplate :: rest ->
                     arg
@@ -497,6 +527,7 @@ destructure arg template =
                                                     |> Located.fakeLoc
                                                 )
                                                 (Located loc (Vector (Array.fromList rest)))
+                                                |> Result.map ((++) asBindings)
                                                 |> Result.map ((++) boundArgs)
                                         )
                             )
@@ -897,10 +928,118 @@ terminate (Located pos v) env =
     ( Ok ( Located pos (Const v), env ), Nothing )
 
 
+trampolinePure : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Result (Located Exception) ( Value, Env )
+trampolinePure ( result, thunk ) =
+    case result of
+        Ok ( io, env ) ->
+            case Located.getValue io of
+                Const v ->
+                    case thunk of
+                        Just (Thunk continuation) ->
+                            trampolinePure (continuation (Located.replace io v) env)
+
+                        Nothing ->
+                            Ok ( v, env )
+
+                _ ->
+                    Err (Located.replace io (Exception "Interpreter error: An unexpected side effect during init"))
+
+        Err ( e, _ ) ->
+            Err e
+
+
+init : Env
+init =
+    prelude
+        |> Result.map (Located.fakeLoc >> wrapInDo)
+        |> Result.map (\program -> evalExpression program Runtime.emptyEnv terminate)
+        |> Result.mapError (always (Located.fakeLoc (Exception "Interpreter error: Dead end")))
+        |> Result.andThen trampolinePure
+        |> Result.map (\( _, env ) -> env)
+        |> Result.withDefault Runtime.emptyEnv
+
+
+deadEndsToString : List Parser.DeadEnd -> String
+deadEndsToString deadEnds =
+    String.concat (List.intersperse "; " (List.map deadEndToString deadEnds))
+
+
+deadEndToString : Parser.DeadEnd -> String
+deadEndToString deadend =
+    problemToString deadend.problem ++ " at row " ++ String.fromInt deadend.row ++ ", col " ++ String.fromInt deadend.col
+
+
+problemToString : Parser.Problem -> String
+problemToString p =
+    case p of
+        Parser.Expecting s ->
+            "expecting '" ++ s ++ "'"
+
+        Parser.ExpectingInt ->
+            "expecting int"
+
+        Parser.ExpectingHex ->
+            "expecting hex"
+
+        Parser.ExpectingOctal ->
+            "expecting octal"
+
+        Parser.ExpectingBinary ->
+            "expecting binary"
+
+        Parser.ExpectingFloat ->
+            "expecting float"
+
+        Parser.ExpectingNumber ->
+            "expecting number"
+
+        Parser.ExpectingVariable ->
+            "expecting variable"
+
+        Parser.ExpectingSymbol s ->
+            "expecting symbol '" ++ s ++ "'"
+
+        Parser.ExpectingKeyword s ->
+            "expecting keyword '" ++ s ++ "'"
+
+        Parser.ExpectingEnd ->
+            "expecting end"
+
+        Parser.UnexpectedChar ->
+            "unexpected char"
+
+        Parser.Problem s ->
+            s
+
+        Parser.BadRepeat ->
+            "bad repeat"
+
+
+evalPure : Env -> String -> Result (Located Exception) ( Value, Env )
+evalPure initEnv code =
+    Parser.parse code
+        |> Result.mapError (deadEndsToString >> Exception)
+        |> Result.andThen
+            (\exprs ->
+                exprs
+                    |> List.head
+                    |> Maybe.map ((\lv -> Located.replace lv exprs) >> wrapInDo)
+                    |> Result.fromMaybe (Exception "Empty program")
+            )
+        |> Result.map
+            (\program ->
+                evalExpression program
+                    initEnv
+                    terminate
+            )
+        |> Result.mapError Located.fakeLoc
+        |> Result.andThen trampolinePure
+
+
 eval : Env -> String -> Step
 eval initEnv code =
     Parser.parse code
-        |> Result.mapError (Debug.toString >> Exception)
+        |> Result.mapError (deadEndsToString >> Exception)
         |> Result.map2
             (\a b -> a ++ b)
             (prelude |> Result.mapError (always (Exception "Interpreter error: failed to load the prelude")))

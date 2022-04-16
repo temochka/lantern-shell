@@ -1,31 +1,32 @@
 module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, member, remove, toList)
 
-import Enclojure.Types exposing (Number(..), Value(..), ValueSet)
+import Enclojure.Types exposing (Number(..), Value(..), ValueSet(..))
 import Set
 
 
 empty : ValueSet
 empty =
-    { ints = Set.empty
-    , floats = Set.empty
-    , strings = Set.empty
-    , refs = []
-    , nil = Nothing
-    , bools = { true = False, false = False }
-    , symbols = Set.empty
-    , fns = []
-    , maps = []
-    , mapEntries = []
-    , lists = []
-    , vectors = []
-    , keywords = Set.empty
-    , sets = []
-    , throwables = []
-    }
+    ValueSet
+        { ints = Set.empty
+        , floats = Set.empty
+        , strings = Set.empty
+        , refs = []
+        , nil = Nothing
+        , bools = { true = False, false = False }
+        , symbols = Set.empty
+        , fns = []
+        , maps = []
+        , mapEntries = []
+        , lists = []
+        , vectors = []
+        , keywords = Set.empty
+        , sets = []
+        , throwables = []
+        }
 
 
 isEmpty : ValueSet -> Bool
-isEmpty m =
+isEmpty (ValueSet m) =
     Set.isEmpty m.ints
         && Set.isEmpty m.floats
         && Set.isEmpty m.strings
@@ -45,151 +46,153 @@ isEmpty m =
 
 
 insert : Value -> ValueSet -> ValueSet
-insert v set =
-    case v of
-        Number (Int int) ->
-            { set | ints = Set.insert int set.ints }
+insert v (ValueSet set) =
+    ValueSet <|
+        case v of
+            Number (Int int) ->
+                { set | ints = Set.insert int set.ints }
 
-        Number (Float float) ->
-            { set | floats = Set.insert float set.floats }
+            Number (Float float) ->
+                { set | floats = Set.insert float set.floats }
 
-        String string ->
-            { set | strings = Set.insert string set.strings }
+            String string ->
+                { set | strings = Set.insert string set.strings }
 
-        Ref _ _ ->
-            { set | refs = v :: set.refs }
+            Ref _ _ ->
+                { set | refs = v :: set.refs }
 
-        List _ ->
-            { set | lists = v :: set.lists }
+            List list ->
+                { set | lists = list :: set.lists }
 
-        Nil ->
-            { set | nil = Just v }
+            Nil ->
+                { set | nil = Just v }
 
-        Bool bool ->
-            let
-                oldBools =
-                    set.bools
+            Bool bool ->
+                let
+                    oldBools =
+                        set.bools
 
-                bools =
-                    if bool then
-                        { oldBools | true = True }
+                    bools =
+                        if bool then
+                            { oldBools | true = True }
 
-                    else
-                        { oldBools | false = True }
-            in
-            { set | bools = bools }
+                        else
+                            { oldBools | false = True }
+                in
+                { set | bools = bools }
 
-        Keyword keyword ->
-            { set | keywords = Set.insert keyword set.keywords }
+            Keyword keyword ->
+                { set | keywords = Set.insert keyword set.keywords }
 
-        Symbol symbol ->
-            { set | symbols = Set.insert symbol set.symbols }
+            Symbol symbol ->
+                { set | symbols = Set.insert symbol set.symbols }
 
-        Fn _ _ ->
-            { set | fns = v :: set.fns }
+            Fn _ _ ->
+                { set | fns = v :: set.fns }
 
-        Map _ ->
-            { set | maps = v :: set.maps }
+            Map m ->
+                { set | maps = m :: set.maps }
 
-        MapEntry _ ->
-            { set | mapEntries = v :: set.mapEntries }
+            MapEntry e ->
+                { set | mapEntries = e :: set.mapEntries }
 
-        Set _ ->
-            { set | sets = v :: set.sets }
+            Set s ->
+                { set | sets = s :: set.sets }
 
-        Throwable _ ->
-            { set | throwables = v :: set.throwables }
+            Throwable _ ->
+                { set | throwables = v :: set.throwables }
 
-        Vector _ ->
-            { set | vectors = v :: set.vectors }
+            Vector vector ->
+                { set | vectors = vector :: set.vectors }
 
 
 remove : Value -> ValueSet -> ValueSet
-remove v set =
-    case v of
-        Number (Int int) ->
-            { set | ints = Set.remove int set.ints }
+remove v (ValueSet set) =
+    ValueSet <|
+        case v of
+            Number (Int int) ->
+                { set | ints = Set.remove int set.ints }
 
-        Number (Float float) ->
-            { set | floats = Set.remove float set.floats }
+            Number (Float float) ->
+                { set | floats = Set.remove float set.floats }
 
-        String string ->
-            { set | strings = Set.remove string set.strings }
+            String string ->
+                { set | strings = Set.remove string set.strings }
 
-        Ref _ _ ->
-            let
-                newRefs =
-                    set.refs |> List.filter ((/=) v)
-            in
-            { set | refs = newRefs }
+            Ref _ _ ->
+                let
+                    newRefs =
+                        set.refs |> List.filter ((/=) v)
+                in
+                { set | refs = newRefs }
 
-        List _ ->
-            let
-                newLists =
-                    set.lists |> List.filter ((/=) v)
-            in
-            { set | lists = newLists }
+            List list ->
+                let
+                    newLists =
+                        set.lists |> List.filter ((/=) list)
+                in
+                { set | lists = newLists }
 
-        Nil ->
-            { set | nil = Nothing }
+            Nil ->
+                { set | nil = Nothing }
 
-        Bool bool ->
-            let
-                oldBools =
-                    set.bools
+            Bool bool ->
+                let
+                    oldBools =
+                        set.bools
 
-                bools =
-                    if bool then
-                        { oldBools | true = False }
+                    bools =
+                        if bool then
+                            { oldBools | true = False }
 
-                    else
-                        { oldBools | false = False }
-            in
-            { set | bools = bools }
+                        else
+                            { oldBools | false = False }
+                in
+                { set | bools = bools }
 
-        Keyword keyword ->
-            { set | keywords = Set.remove keyword set.keywords }
+            Keyword keyword ->
+                { set | keywords = Set.remove keyword set.keywords }
 
-        Symbol symbol ->
-            { set | symbols = Set.remove symbol set.symbols }
+            Symbol symbol ->
+                { set | symbols = Set.remove symbol set.symbols }
 
-        Fn _ _ ->
-            let
-                newFns =
-                    set.fns |> List.filter ((/=) v)
-            in
-            { set | fns = newFns }
+            Fn _ _ ->
+                let
+                    newFns =
+                        set.fns |> List.filter ((/=) v)
+                in
+                { set | fns = newFns }
 
-        Map _ ->
-            let
-                newMaps =
-                    set.maps |> List.filter ((/=) v)
-            in
-            { set | maps = newMaps }
+            Map m ->
+                let
+                    newMaps =
+                        set.maps |> List.filter ((/=) m)
+                in
+                { set | maps = newMaps }
 
-        MapEntry _ ->
-            let
-                newMapEntries =
-                    set.mapEntries |> List.filter ((/=) v)
-            in
-            { set | mapEntries = newMapEntries }
+            MapEntry e ->
+                let
+                    newMapEntries =
+                        set.mapEntries |> List.filter ((/=) e)
+                in
+                { set | mapEntries = newMapEntries }
 
-        Set _ ->
-            let
-                newSets =
-                    set.sets |> List.filter ((/=) v)
-            in
-            { set | sets = newSets }
+            Set s ->
+                let
+                    newSets =
+                        set.sets |> List.filter ((/=) s)
+                in
+                { set | sets = newSets }
 
-        Throwable _ ->
-            set
+            Throwable _ ->
+                set
 
-        Vector _ ->
-            let
-                newVectors =
-                    set.vectors |> List.filter ((/=) v)
-            in
-            { set | vectors = newVectors }
+            Vector vector ->
+                let
+                    newVectors =
+                        set.vectors |> List.filter ((/=) vector)
+                in
+                { set | vectors = newVectors }
 
 
 fromList : List Value -> ValueSet
@@ -199,7 +202,7 @@ fromList entries =
 
 
 toList : ValueSet -> List Value
-toList set =
+toList (ValueSet set) =
     let
         ints =
             Set.toList set.ints |> List.map (Int >> Number)
@@ -243,16 +246,16 @@ toList set =
         ++ symbols
         ++ set.refs
         ++ set.fns
-        ++ set.maps
-        ++ set.mapEntries
-        ++ set.lists
-        ++ set.sets
+        ++ List.map Map set.maps
+        ++ List.map MapEntry set.mapEntries
+        ++ List.map List set.lists
+        ++ List.map Set set.sets
         ++ set.throwables
-        ++ set.vectors
+        ++ List.map Vector set.vectors
 
 
 member : Value -> ValueSet -> Bool
-member v set =
+member v (ValueSet set) =
     case v of
         Number (Int int) ->
             Set.member int set.ints
@@ -266,8 +269,8 @@ member v set =
         Ref _ _ ->
             False
 
-        List _ ->
-            False
+        List otherList ->
+            List.member otherList set.lists
 
         Nil ->
             set.nil /= Nothing
@@ -288,17 +291,17 @@ member v set =
         Fn _ _ ->
             False
 
-        Map _ ->
-            False
+        Map otherMap ->
+            List.member otherMap set.maps
 
-        MapEntry _ ->
-            False
+        MapEntry otherMapEntry ->
+            List.member otherMapEntry set.mapEntries
 
-        Set _ ->
-            False
+        Set otherSet ->
+            List.member otherSet set.sets
 
         Throwable _ ->
             False
 
-        Vector _ ->
-            False
+        Vector vector ->
+            List.member vector set.vectors

@@ -66,6 +66,8 @@ isAllowedSymbolSpecialChar c =
         == '.'
         || c
         == '$'
+        || c
+        == '_'
 
 
 symbolLike : Parser String

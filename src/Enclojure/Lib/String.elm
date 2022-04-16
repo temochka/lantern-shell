@@ -42,14 +42,14 @@ join =
     let
         arity1 val =
             val
-                |> Runtime.trySequenceOf Runtime.tryString
+                |> Runtime.trySequenceOf (Runtime.toString >> Just)
                 |> Maybe.map (String.join "" >> Types.String >> Ok)
-                |> Maybe.withDefault (Err (Exception ("type error: expected a sequence of strings, got " ++ inspect val)))
+                |> Maybe.withDefault (Err (Exception ("type error: expected a sequence, got " ++ inspect val)))
 
         arity2 ( sepVal, collVal ) =
             Maybe.map2 (\sep coll -> String.join sep coll |> Types.String |> Ok)
                 (Runtime.tryString sepVal)
-                (Runtime.trySequenceOf Runtime.tryString collVal)
+                (Runtime.trySequenceOf (Runtime.toString >> Just) collVal)
                 |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings"))
     in
     { emptyCallable

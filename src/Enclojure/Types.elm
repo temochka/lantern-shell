@@ -110,23 +110,24 @@ type alias ValueMap =
     }
 
 
-type alias ValueSet =
-    { ints : Set.Set Int
-    , floats : Set.Set Float
-    , strings : Set.Set String
-    , nil : Maybe Value
-    , bools : { true : Bool, false : Bool }
-    , keywords : Set.Set String
-    , symbols : Set.Set String
-    , fns : List Value
-    , maps : List Value
-    , mapEntries : List Value
-    , lists : List Value
-    , refs : List Value
-    , sets : List Value
-    , throwables : List Value
-    , vectors : List Value
-    }
+type ValueSet
+    = ValueSet
+        { ints : Set.Set Int
+        , floats : Set.Set Float
+        , strings : Set.Set String
+        , nil : Maybe Value
+        , bools : { true : Bool, false : Bool }
+        , keywords : Set.Set String
+        , symbols : Set.Set String
+        , fns : List Value
+        , maps : List ValueMap
+        , mapEntries : List ValueMapEntry
+        , lists : List (List (Located Value))
+        , refs : List Value
+        , sets : List ValueSet
+        , throwables : List Value
+        , vectors : List (Array (Located Value))
+        }
 
 
 type Number

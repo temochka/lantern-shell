@@ -41,9 +41,18 @@ string =
     succeed identity
         |. token "\""
         |= loop [] stringHelp
+        |> Parser.andThen
+            (\v ->
+                case v of
+                    Ok val ->
+                        succeed val
+
+                    Err err ->
+                        problem err
+            )
 
 
-stringHelp : List String -> Parser (Step (List String) String)
+stringHelp : List String -> Parser (Step (List String) (Result String String))
 stringHelp revChunks =
     oneOf
         [ succeed (\chunk -> Loop (chunk :: revChunks))
@@ -51,6 +60,8 @@ stringHelp revChunks =
             |= oneOf
                 [ map (\_ -> "\n") (token "n")
                 , map (\_ -> "\t") (token "t")
+                , map (\_ -> "\"") (token "\"")
+                , map (\_ -> "\\") (token "\\")
                 , map (\_ -> "\u{000D}") (token "r")
                 , succeed String.fromChar
                     |. token "u{"
@@ -58,7 +69,9 @@ stringHelp revChunks =
                     |. token "}"
                 ]
         , token "\""
-            |> map (\_ -> Done (String.join "" (List.reverse revChunks)))
+            |> map (\_ -> Done <| Ok (String.join "" (List.reverse revChunks)))
+        , end
+            |> map (\_ -> Done <| Err "Missing closing quote for a string")
         , chompWhile isUninteresting
             |> getChompedString
             |> map (\chunk -> Loop (chunk :: revChunks))

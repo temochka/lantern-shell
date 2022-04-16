@@ -229,11 +229,30 @@ toSeq val =
         String s ->
             Ok <| List.map (String.fromChar >> String >> Located.fakeLoc) (String.toList s)
 
+        MapEntry ( k, v ) ->
+            Ok <| [ Located.replace v k, v ]
+
         Nil ->
             Ok []
 
         _ ->
             Err <| Exception (inspect val ++ " is not a sequence")
+
+
+toMap : Value -> Maybe Types.ValueMap
+toMap val =
+    case val of
+        Nil ->
+            Just ValueMap.empty
+
+        Vector vec ->
+            Array.toList vec |> List.indexedMap (\i e -> ( Number <| Int i, e )) |> ValueMap.fromList |> Just
+
+        Map m ->
+            Just m
+
+        _ ->
+            Nothing
 
 
 inspectLocated : Located Value -> String
@@ -356,6 +375,9 @@ getFn key =
                     else
                         Nothing
 
+                Nil ->
+                    Nothing
+
                 _ ->
                     Just Nil
             )
@@ -382,6 +404,17 @@ setLookupFn set =
     }
 
 
+mapLookupFn : Types.ValueMap -> Callable
+mapLookupFn map =
+    let
+        arity1 val =
+            ValueMap.get val map |> Maybe.map Located.getValue |> Maybe.withDefault Nil
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+    }
+
+
 apply : Located Value -> Located Value -> Env -> Continuation -> Types.Step
 apply ((Located fnLoc fnExpr) as fn) arg env k =
     case fnExpr of
@@ -390,6 +423,9 @@ apply ((Located fnLoc fnExpr) as fn) arg env k =
 
         Keyword key ->
             ( Ok ( Located.map Const arg, env ), Just (toContinuation (getFn key) { self = fnExpr, k = k }) )
+
+        Map map ->
+            ( Ok ( Located.map Const arg, env ), Just (toContinuation (mapLookupFn map) { self = fnExpr, k = k }) )
 
         Set set ->
             ( Ok ( Located.map Const arg, env ), Just (toContinuation (setLookupFn set) { self = fnExpr, k = k }) )

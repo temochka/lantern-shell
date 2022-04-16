@@ -602,7 +602,7 @@ isLessThanOrEqual =
 
 isGreaterThan : Callable
 isGreaterThan =
-    compOp { intOp = (>), floatOp = (>), stringOp = (<=) }
+    compOp { intOp = (>), floatOp = (>), stringOp = (>) }
 
 
 isGreaterThanOrEqual : Callable
@@ -664,6 +664,60 @@ compOp { intOp, floatOp, stringOp } =
     }
 
 
+areEqualValues : Value -> Value -> Bool
+areEqualValues a b =
+    let
+        compareLists listA listB =
+            case ( listA, listB ) of
+                ( headA :: restA, headB :: restB ) ->
+                    if areEqualValues (Located.getValue headA) (Located.getValue headB) then
+                        compareLists restA restB
+
+                    else
+                        False
+
+                ( [], [] ) ->
+                    True
+
+                _ ->
+                    False
+    in
+    -- referential equality
+    if a == b then
+        True
+        -- different metadata
+
+    else
+        case ( a, b ) of
+            ( List listA, List listB ) ->
+                compareLists listA listB
+
+            ( MapEntry ( keyA, Located _ valA ), Vector vB ) ->
+                case Array.toList vB of
+                    [ Located _ keyB, Located _ valB ] ->
+                        areEqualValues keyA keyB && areEqualValues valA valB
+
+                    _ ->
+                        False
+
+            ( Vector _, MapEntry _ ) ->
+                areEqualValues b a
+
+            ( MapEntry ( keyA, Located _ valA ), MapEntry ( keyB, Located _ valB ) ) ->
+                areEqualValues keyA keyB && areEqualValues valA valB
+
+            ( Vector vectorA, Vector vectorB ) ->
+                compareLists (Array.toList vectorA) (Array.toList vectorB)
+
+            ( Map mapA, Map mapB ) ->
+                compareLists
+                    (List.map (MapEntry >> Located.fakeLoc) (ValueMap.toList mapA))
+                    (List.map (MapEntry >> Located.fakeLoc) (ValueMap.toList mapB))
+
+            _ ->
+                False
+
+
 isEqual : Callable
 isEqual =
     let
@@ -677,10 +731,10 @@ isEqual =
             in
             case rest of
                 [] ->
-                    Ok (Bool (a == b))
+                    Ok (Bool (areEqualValues a b))
 
                 nextVal1 :: nextRest ->
-                    if a == b then
+                    if areEqualValues a b then
                         arity2 { args = ( b, nextVal1 ), rest = nextRest }
 
                     else
@@ -696,7 +750,7 @@ isNotEqual : Callable
 isNotEqual =
     let
         arity1 _ =
-            Ok (Bool True)
+            Ok (Bool False)
 
         arity2 { args, rest } =
             let
@@ -871,7 +925,7 @@ conj =
                 Vector a ->
                     xs
                         |> List.map Located.fakeLoc
-                        |> List.foldr Array.push a
+                        |> List.foldl Array.push a
                         |> Vector
                         |> Ok
 
@@ -1201,6 +1255,9 @@ get =
                     else
                         Nothing
 
+                Nil ->
+                    Nothing
+
                 _ ->
                     Just Nil
             )
@@ -1291,6 +1348,9 @@ dissoc =
                         |> List.foldr (\k a -> ValueMap.remove k a) m
                         |> Map
                         |> Ok
+
+                Nil ->
+                    Ok Nil
 
                 _ ->
                     Err (Exception (inspect val ++ " is not dissociable"))
