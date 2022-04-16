@@ -205,6 +205,9 @@ suite =
              , ( "(#(into #{} %&) 1 2 3)"
                , Ok <| Set <| ValueSet.fromList [ Number <| Int 1, Number <| Int 2, Number <| Int 3 ]
                )
+             , ( "#(map #(inc %) %)"
+               , Err (Exception "Parsing error: nested #() are not supported, use fn instead. at row 1, col 18")
+               )
              ]
            )
 
@@ -301,6 +304,110 @@ suite =
              , ( "(<= \"a\" \"a\")", Ok <| Bool True )
              , ( "(<= 4.0 2)", Ok <| Bool False )
              , ( "(<= 2.0 4.0)", Ok <| Bool True )
+             ]
+           )
+
+         -- built-in macros
+         , ( "and"
+           , [ ( "(and :foo :bar)", Ok <| Keyword "bar" )
+             , ( "(and (def a :foo) (def b :bar) #{a b})"
+               , Ok <| Set <| ValueSet.fromList [ Keyword "foo", Keyword "bar" ]
+               )
+             , ( "(and nil :bar)", Ok Nil )
+             , ( "(and true true true true true false :foo)", Ok <| Bool False )
+             ]
+           )
+         , ( "cond"
+           , [ ( "(cond (< 2 4) :foo)", Ok <| Keyword "foo" )
+             , ( "(cond (< 4 2) :foo (pos? 0) :bar (zero? 0) :buz)", Ok <| Keyword "buz" )
+             , ( "(cond (< 4 2) :foo :let [bar 42] (pos? bar) bar)", Ok <| Number <| Int 42 )
+             , ( "(cond (< 4 2) :foo :else :else)", Ok <| Keyword "else" )
+             ]
+           )
+         , ( "defn"
+           , [ ( """
+                 (defn foo
+                   [n]
+                   n)
+
+                 (foo :ret)
+                 """
+               , Ok <| Keyword "ret"
+               )
+             , ( """
+                 (defn weird-plus
+                   ([n]
+                    (weird-plus n 2))
+                   ([a b]
+                    (+ a b)))
+
+                 (+ (weird-plus 4) (weird-plus 6 1))
+                 """
+               , Ok <| Number <| Int 13
+               )
+             ]
+           )
+         , ( "if-let"
+           , [ ( "(if-let [a nil] a :else)", Ok <| Keyword "else" )
+             , ( "(if-let [a :then] a :else)", Ok <| Keyword "then" )
+             , ( "(if-let [a :then] a :else :or-else)", Err <| Exception "an if with too many forms" )
+             ]
+           )
+         , ( "or"
+           , [ ( "(or)", Ok Nil )
+             , ( "(or false)", Ok Nil )
+             , ( "(or false false false false true)", Ok <| Bool True )
+             , ( "(or true (def a 42)) a", Err <| Exception "Unknown symbol a" )
+             ]
+           )
+         , ( "some->"
+           , [ ( "(some-> :ret)", Ok <| Keyword "ret" )
+             , ( "(some-> false)", Ok <| Bool False )
+             , ( "(some-> nil inc)", Ok Nil )
+             , ( "(some-> 0 inc inc)", Ok <| Number <| Int 2 )
+             , ( "(some-> [] seq inc)", Ok Nil )
+             ]
+           )
+         , ( "some->>"
+           , [ ( "(some->> :ret)", Ok <| Keyword "ret" )
+             , ( "(some->> false)", Ok <| Bool False )
+             , ( "(some->> [1] (map inc) (reduce +)))", Ok <| Number <| Int 2 )
+             , ( "(some->> [1] (map inc) (drop 1))", Ok <| List [] )
+             , ( "(some->> [1] (map inc) (drop 1) seq (cons 1))", Ok Nil )
+             , ( "(some->> [1] (map inc) (drop 1) (cons 1) (into #{}))"
+               , Ok <| Set <| ValueSet.fromList [ Number <| Int 1 ]
+               )
+             ]
+           )
+         , ( "when"
+           , [ ( "(when true 1 2 3 4)", Ok <| Number <| Int 4 )
+             , ( "(when true (def a 1) (def b 2) (def c 3) (+ a b c))", Ok <| Number <| Int 6 )
+             , ( "(when false 42)", Ok Nil )
+             ]
+           )
+         , ( "when-let"
+           , [ ( "(when-let [a nil] 42 43)", Ok Nil )
+             , ( "(when-let [a :ret] 42 a)", Ok <| Keyword "ret" )
+             , ( "(when-let [a 3] (def b 2) (+ a b))", Ok <| Number <| Int 5 )
+             ]
+           )
+         , ( "when-not"
+           , [ ( "(when-not false 1 2 3 4)", Ok <| Number <| Int 4 )
+             , ( "(when-not false (def a 1) (def b 2) (def c 3) (+ a b c))", Ok <| Number <| Int 6 )
+             , ( "(when-not true 42)", Ok Nil )
+             ]
+           )
+         , ( "->"
+           , [ ( "(-> :ret)", Ok <| Keyword "ret" )
+             , ( "(-> {:foo :bar} (assoc :buz :boo) (dissoc :foo :buz))", Ok <| Map <| ValueMap.empty )
+             , ( "(-> [] seq)", Ok Nil )
+             , ( "(-> {} (-> (assoc :bar :buz)) (dissoc :bar) seq)", Ok Nil )
+             ]
+           )
+         , ( "->>"
+           , [ ( "(->> :ret)", Ok <| Keyword "ret" )
+             , ( "(->> [1 2 3] (map inc) (map inc) (map dec) (= (list 2 3 4)))", Ok <| Bool True )
+             , ( "(->> [] seq)", Ok Nil )
              ]
            )
 
