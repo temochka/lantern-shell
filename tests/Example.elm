@@ -442,7 +442,23 @@ suite =
                             , Located.fakeLoc <| Number <| Int 3
                             ]
                )
-             , ( "(assoc [] 1 2)", Ok <| Vector Array.empty )
+             , ( "(= (assoc [] 0 1) [1])", Ok <| Bool True )
+             , ( "(= (assoc [] 0 1 1 2 2 3 3 4) [1 2 3 4])", Ok <| Bool True )
+             , ( "(assoc [] 1 2)", Err <| Exception "index out of bounds" )
+             ]
+           )
+         , ( "assoc-in"
+           , [ ( "(= (assoc-in nil [:foo :bar :buz] 42) {:foo {:bar {:buz 42}}})", Ok <| Bool True )
+             , ( "(= (assoc-in nil [0 1 2] 42) {0 {1 {2 42}}})", Ok <| Bool True )
+             , ( "(= (assoc-in [] [0 1 2] 42) [{1 {2 42}}])", Ok <| Bool True )
+             , ( "(assoc-in [] [1 1 2] 42)", Err <| Exception "index out of bounds" )
+             , ( "(= (assoc-in {:foo {} :bar 42} [:foo :buz] 3) {:foo {:buz 3} :bar 42})", Ok <| Bool True )
+             ]
+           )
+         , ( "concat"
+           , [ ( "(= (concat [1] [2 3] [4]) (list 1 2 3 4))", Ok <| Bool True )
+             , ( "(= (concat [1 2 3] nil nil [4 5]) (list 1 2 3 4 5))", Ok <| Bool True )
+             , ( "(= (concat [1] () (list 2 3) {4 5}) (list 1 2 3 [4 5]))", Ok <| Bool True )
              ]
            )
          , ( "conj"
@@ -476,6 +492,76 @@ suite =
              , ( "(contains? [3 4] 1)", Ok <| Bool True )
              , ( "(contains? [3 4] 2)", Ok <| Bool False )
              , ( "(contains? nil 2)", Ok <| Bool False )
+             ]
+           )
+         , ( "complement"
+           , [ ( "((complement neg?) (- 3))", Ok <| Bool False )
+             , ( "((complement seq) [])", Ok <| Bool True )
+             ]
+           )
+         , ( "dec"
+           , [ ( "(dec 1)", Ok <| Number <| Int 0 )
+             , ( "(dec (- 1))", Ok <| Number <| Int -2 )
+             ]
+           )
+         , ( "drop"
+           , [ ( "(drop 0 [])", Ok <| List [] )
+             , ( "(drop 0 nil)", Ok <| List [] )
+             , ( "(drop 100 nil)", Ok <| List [] )
+             , ( "(= (drop 1 [1 2 3]) (list 2 3))", Ok <| Bool True )
+             , ( "(= (drop 2 [1 2 3]) (list 3))", Ok <| Bool True )
+             , ( "(= (drop 3 [1 2 3]) (list))", Ok <| Bool True )
+             , ( "(= (drop 30 [1 2 3]) (list))", Ok <| Bool True )
+             ]
+           )
+         , ( "drop-while"
+           , [ ( "(drop-while odd? [])", Ok <| List [] )
+             , ( "(drop-while odd? nil)", Ok <| List [] )
+             , ( "(drop-while even? nil)", Ok <| List [] )
+             , ( "(= (drop-while odd? [1 3 5 6 8]) (list 6 8))", Ok <| Bool True )
+             , ( "(= (drop-while odd? [1 2 3]) (list 2 3))", Ok <| Bool True )
+             , ( "(= (drop-while odd? [2 3]) (list 2 3))", Ok <| Bool True )
+             , ( "(= (drop-while even? [1 2 3]) (list 1 2 3))", Ok <| Bool True )
+             ]
+           )
+         , ( "even?"
+           , [ ( "(even? 2)", Ok <| Bool True )
+             , ( "(even? 3)", Ok <| Bool False )
+             , ( "(even? 2.0)", Err <| Exception "Argument must be an integer: 2" )
+             ]
+           )
+         , ( "every?"
+           , [ ( "(every? odd? nil)", Ok <| Bool True )
+             , ( "(every? odd? [])", Ok <| Bool True )
+             , ( "(every? (comp integer? key) {1 2 3 4 5 6})", Ok <| Bool True )
+             , ( "(every? odd? [1 3 5])", Ok <| Bool True )
+             , ( "(every? odd? [1 3 6])", Ok <| Bool False )
+             ]
+           )
+         , ( "filter"
+           , [ ( "(filter pos? nil)", Ok <| List [] )
+             , ( "(= (filter odd? [1 2 3 4 5]) (list 1 3 5))", Ok <| Bool True )
+             ]
+           )
+         , ( "identity"
+           , [ ( "(identity :ret)", Ok <| Keyword "ret" ) ]
+           )
+         , ( "inc"
+           , [ ( "(inc 0)", Ok <| Number <| Int 1 )
+             , ( "(inc (- 1))", Ok <| Number <| Int 0 )
+             ]
+           )
+         , ( "into"
+           , [ ( "(= (into [] (list 1 2 3 4)) [1 2 3 4])", Ok <| Bool True )
+             , ( "(= (into () (list 1 2 3 4)) (list 4 3 2 1))", Ok <| Bool True )
+             , ( "(= (into {} (list [1 2] [3 4])) {1 2 3 4})", Ok <| Bool True )
+             , ( "(= (into #{} (list 1 2 3 4)) #{1 2 3 4})", Ok <| Bool True )
+             ]
+           )
+         , ( "comp"
+           , [ ( "((comp) :ret)", Ok <| Keyword "ret" )
+             , ( "((comp inc inc dec) 3)", Ok <| Number <| Int 4 )
+             , ( "((comp #(* 2 %) inc #(* 3 %)) 3)", Ok <| Number <| Int 20 )
              ]
            )
          , ( "dissoc"
@@ -524,6 +610,20 @@ suite =
              , ( "(get #{0} 0 :default)", Ok <| Number <| Int 0 )
              ]
            )
+         , ( "get-in"
+           , [ ( "(get-in nil [:a 0 :b])", Ok Nil )
+             , ( "(get-in nil [:a])", Ok Nil )
+             , ( "(get-in nil [])", Ok Nil )
+             , ( "(get-in {} [:a 0 :b])", Ok Nil )
+             , ( "(get-in {} [:a])", Ok Nil )
+             , ( "(get-in {} [])", Ok <| Map <| ValueMap.empty )
+             , ( "(get-in [3 [{:foo 2}]] [1 0 :foo])", Ok <| Number <| Int 2 )
+             , ( "(get-in [3 [{:foo 2}]] [0])", Ok <| Number <| Int 3 )
+             , ( "(get-in [] [4])", Ok Nil )
+             , ( "(get-in [] [:foo])", Ok Nil )
+             , ( "(get-in {:foo {:bar {:buz [0 1 2 3]}}} [:foo :bar :buz 3])", Ok <| Number <| Int 3 )
+             ]
+           )
          , ( "json/encode"
            , [ ( "(json/encode {})", Ok <| String "{}" )
              , ( "(json/encode {\"key\" \"value\"})", Ok <| String "{\"key\":\"value\"}" )
@@ -563,13 +663,61 @@ suite =
          , ( "key"
            , [ ( "(key (first {1 2}))", Ok <| Number <| Int 1 ) ]
            )
+         , ( "last"
+           , [ ( "(last nil)", Ok Nil )
+             , ( "(last [])", Ok Nil )
+             , ( "(last #{})", Ok Nil )
+             , ( "(last ())", Ok Nil )
+             , ( "(last [:foo :bar :ret])", Ok <| Keyword "ret" )
+             , ( "(last (list :foo :bar :ret))", Ok <| Keyword "ret" )
+             ]
+           )
          , ( "list"
            , [ ( "(list nil nil)", Ok <| List [ Located.fakeLoc Nil, Located.fakeLoc Nil ] )
              , ( "(list)", Ok <| List [] )
              ]
            )
+         , ( "mod"
+           , [ ( "(mod 5 2)", Ok <| Number <| Int 1 )
+             , ( "(mod 7 (- 2))", Ok <| Number <| Int -1 )
+             , ( "(mod (- 9) (- 2))", Ok <| Number <| Int -1 )
+             ]
+           )
          , ( "Exception."
            , [ ( "(Exception. \"error\")", Ok <| Throwable <| Exception "error" ) ]
+           )
+         , ( "map"
+           , [ ( "(map inc nil)", Ok <| List [] )
+             , ( "(= (map inc [1 2 3]) (list 2 3 4))", Ok <| Bool True )
+             , ( "(= (map #(key %) {1 2}) (list 1))", Ok <| Bool True )
+             ]
+           )
+         , ( "mapcat"
+           , [ ( "(= (mapcat (fn [i] [i i]) [1 2 3]) (list 1 1 2 2 3 3))", Ok <| Bool True )
+             , ( "(= (mapcat identity [[1 2] nil [3 4]]) (list 1 2 3 4))", Ok <| Bool True )
+             ]
+           )
+         , ( "map-indexed"
+           , [ ( "(= (map-indexed (fn [i e] [i e]) [1 2 3]) (list [0 1] [1 2] [2 3]))", Ok <| Bool True ) ]
+           )
+         , ( "neg?"
+           , [ ( "(neg? 3)", Ok <| Bool False )
+             , ( "(neg? 0)", Ok <| Bool False )
+             , ( "(neg? (- 10))", Ok <| Bool True )
+             ]
+           )
+         , ( "next"
+           , [ ( "(next nil)", Ok Nil )
+             , ( "(next #{})", Ok Nil )
+             , ( "(next ())", Ok Nil )
+             , ( "(next [])", Ok Nil )
+             , ( "(next {})", Ok Nil )
+             , ( "(next [1])", Ok Nil )
+             , ( "(next #{1}))", Ok Nil )
+             , ( "(next (list 1))", Ok Nil )
+             , ( "(= (next [1 2 3]) (list 2 3))", Ok <| Bool True )
+             , ( "(= (next (list 1 2 3)) (list 2 3))", Ok <| Bool True )
+             ]
            )
          , ( "not"
            , [ ( "(not true)", Ok <| Bool False )
@@ -585,10 +733,22 @@ suite =
              , ( "(number? nil)", Ok <| Bool False )
              ]
            )
+         , ( "odd?"
+           , [ ( "(odd? 2)", Ok <| Bool False )
+             , ( "(odd? 3)", Ok <| Bool True )
+             , ( "(odd? 2.0)", Err <| Exception "Argument must be an integer: 2" )
+             ]
+           )
          , ( "peek"
            , [ ( "(peek (list 1 2 3))", Ok <| Number <| Int 1 )
              , ( "(peek [1 2 3])", Ok <| Number <| Int 3 )
              , ( "(peek nil)", Ok Nil )
+             ]
+           )
+         , ( "pos?"
+           , [ ( "(pos? 3)", Ok <| Bool True )
+             , ( "(pos? 0)", Ok <| Bool False )
+             , ( "(pos? (- 10))", Ok <| Bool False )
              ]
            )
          , ( "pr-str"
@@ -606,6 +766,16 @@ suite =
              , ( "(pr-str #{})", Ok <| String "#{}" )
              ]
            )
+         , ( "reduce"
+           , [ ( "(reduce + [])", Ok <| Number <| Int 0 )
+             , ( "(reduce + 2 [])", Ok <| Number <| Int 2 )
+             , ( "(reduce + [1 2 3 4 5])", Ok <| Number <| Int 15 )
+             , ( "(reduce + 3 [1 2 3 4 5])", Ok <| Number <| Int 18 )
+             ]
+           )
+         , ( "reduce-kv"
+           , [ ( "(= (reduce-kv (fn [a k v] (conj a k v)) #{} {1 2 3 4 5 6}) #{1 2 3 4 5 6})", Ok <| Bool True ) ]
+           )
          , ( "rem"
            , [ ( "(rem 8 3)", Ok <| Number <| Int 2 )
              , ( "(rem 8 2)", Ok <| Number <| Int 0 )
@@ -615,10 +785,28 @@ suite =
              , ( "(rem 8 3.0)", Ok <| Number <| Float 2.0 )
              ]
            )
+         , ( "remove"
+           , [ ( "(remove neg? nil)", Ok <| List [] )
+             , ( "(= (remove even? [1 2 3 4 5]) (list 1 3 5))", Ok <| Bool True )
+             ]
+           )
+         , ( "repeat"
+           , [ ( "(= (repeat 0 nil) ())", Ok <| Bool True )
+             , ( "(= (repeat (- 1) nil) ())", Ok <| Bool True )
+             , ( "(= (repeat 1 nil) (list nil))", Ok <| Bool True )
+             , ( "(= (repeat 5 1) (list 1 1 1 1 1))", Ok <| Bool True )
+             ]
+           )
          , ( "rest"
            , [ ( "(= (rest (list 1 2 3)) (list 2 3))", Ok <| Bool True )
              , ( "(= (rest [1 2 3]) (list 2 3))", Ok <| Bool True )
              , ( "(= (rest nil) (list))", Ok <| Bool True )
+             ]
+           )
+         , ( "reverse"
+           , [ ( "(= (reverse [1 2 3]) (list 3 2 1))", Ok <| Bool True )
+             , ( "(= (reverse [4 3 2]) (list 2 3 4))", Ok <| Bool True )
+             , ( "(reverse nil)", Ok <| List [] )
              ]
            )
          , ( "second"
@@ -682,6 +870,26 @@ suite =
              , ( "(= (string/split-lines \"\") (list \"\"))", Ok <| Bool True )
              ]
            )
+         , ( "take"
+           , [ ( "(take 0 [])", Ok <| List [] )
+             , ( "(take 0 nil)", Ok <| List [] )
+             , ( "(take 100 nil)", Ok <| List [] )
+             , ( "(= (take 1 [1 2 3]) (list 1))", Ok <| Bool True )
+             , ( "(= (take 2 [1 2 3]) (list 1 2))", Ok <| Bool True )
+             , ( "(= (take 3 [1 2 3]) (list 1 2 3))", Ok <| Bool True )
+             , ( "(= (take 30 [1 2 3]) (list 1 2 3))", Ok <| Bool True )
+             ]
+           )
+         , ( "take-while"
+           , [ ( "(take-while odd? [])", Ok <| List [] )
+             , ( "(take-while odd? nil)", Ok <| List [] )
+             , ( "(take-while even? nil)", Ok <| List [] )
+             , ( "(= (take-while odd? [1 3 5 6 8]) (list 1 3 5))", Ok <| Bool True )
+             , ( "(= (take-while odd? [1 2 3]) (list 1))", Ok <| Bool True )
+             , ( "(= (take-while odd? [2 3]) ())", Ok <| Bool True )
+             , ( "(= (take-while even? [1 2 3]) ())", Ok <| Bool True )
+             ]
+           )
          , ( "throw"
            , [ ( "(throw (Exception. \"hi\"))", Err <| Exception "hi" )
              , ( "(throw nil)", Err <| Exception "nil is not throwable" )
@@ -689,6 +897,12 @@ suite =
            )
          , ( "val"
            , [ ( "(val (first {1 2}))", Ok <| Number <| Int 2 )
+             ]
+           )
+         , ( "zero?"
+           , [ ( "(zero? 3)", Ok <| Bool False )
+             , ( "(zero? 0)", Ok <| Bool True )
+             , ( "(zero? (- 10))", Ok <| Bool False )
              ]
            )
          ]

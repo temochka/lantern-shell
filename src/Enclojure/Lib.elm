@@ -1317,7 +1317,24 @@ assoc =
                 Vector array ->
                     kvs
                         |> Result.andThen keysToInt
-                        |> Result.map (List.foldr (\( k, v ) a -> Array.set k (Located.fakeLoc v) a) array)
+                        |> Result.andThen
+                            (List.foldl
+                                (\( k, v ) a ->
+                                    a
+                                        |> Result.andThen
+                                            (\arr ->
+                                                if k == Array.length arr then
+                                                    Ok <| Array.push (Located.fakeLoc v) arr
+
+                                                else if k < Array.length arr then
+                                                    Ok <| Array.set k (Located.fakeLoc v) arr
+
+                                                else
+                                                    Err <| Exception "index out of bounds"
+                                            )
+                                )
+                                (Ok array)
+                            )
                         |> Result.map Vector
 
                 Nil ->
@@ -1417,11 +1434,12 @@ prelude =
   (reduce (fn [a e] (cons e a)) (list) coll))
 
 (defn concat [& colls]
-  (when-let [coll (first colls)]
-    (reduce
-     (fn [a e] (cons e a))
-     (apply concat (rest colls))
-     (reverse coll))))
+  (when (seq colls)
+   (let [coll (first colls)]
+     (reduce
+      (fn [a e] (cons e a))
+      (apply concat (rest colls))
+      (reverse coll)))))
 
 (defn into [to from]
   (reduce conj to from))
