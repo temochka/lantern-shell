@@ -1590,7 +1590,8 @@ prelude =
     (let [el (first coll)]
       (if (contains? seen el)
         (-dedupe seen (rest coll))
-        (cons el (-dedupe (conj seen el) (rest coll)))))))
+        (cons el (-dedupe (conj seen el) (rest coll)))))
+    ()))
 
 (defn dedupe
   [coll]
@@ -1608,4 +1609,8 @@ prelude =
 (defn update-vals
   [m f]
   (reduce-kv (fn [a k v] (assoc a k (f v))) {} m))
+
+(defn constantly
+  [x]
+  (fn [& _args] x))
 """

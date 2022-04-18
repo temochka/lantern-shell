@@ -494,6 +494,12 @@ suite =
              , ( "(contains? nil 2)", Ok <| Bool False )
              ]
            )
+         , ( "constantly"
+           , [ ( "((constantly :ret-a))", Ok <| Keyword "ret-a" )
+             , ( "((constantly :ret-b) 1)", Ok <| Keyword "ret-b" )
+             , ( "((constantly :ret-c) 1 2)", Ok <| Keyword "ret-c" )
+             ]
+           )
          , ( "complement"
            , [ ( "((complement neg?) (- 3))", Ok <| Bool False )
              , ( "((complement seq) [])", Ok <| Bool True )
@@ -502,6 +508,16 @@ suite =
          , ( "dec"
            , [ ( "(dec 1)", Ok <| Number <| Int 0 )
              , ( "(dec (- 1))", Ok <| Number <| Int -2 )
+             ]
+           )
+         , ( "dedupe"
+           , [ ( "(= (dedupe ()) ())", Ok <| Bool True )
+             , ( "(= (dedupe []) ())", Ok <| Bool True )
+             , ( "(= (dedupe #{}) ())", Ok <| Bool True )
+             , ( "(= (dedupe {}) ())", Ok <| Bool True )
+             , ( "(= (dedupe [1 2 3 4 5]) (list 1 2 3 4 5))", Ok <| Bool True )
+             , ( "(= (dedupe [1 1 1 1 1]) (list 1))", Ok <| Bool True )
+             , ( "(= (dedupe [1 1 1 2 2]) (list 1 2))", Ok <| Bool True )
              ]
            )
          , ( "drop"
@@ -524,6 +540,18 @@ suite =
              , ( "(= (drop-while even? [1 2 3]) (list 1 2 3))", Ok <| Bool True )
              ]
            )
+         , ( "empty?"
+           , [ ( "(empty? nil)", Ok <| Bool True )
+             , ( "(empty? [])", Ok <| Bool True )
+             , ( "(empty? ())", Ok <| Bool True )
+             , ( "(empty? {})", Ok <| Bool True )
+             , ( "(empty? #{})", Ok <| Bool True )
+             , ( "(empty? [1])", Ok <| Bool False )
+             , ( "(empty? (list 1))", Ok <| Bool False )
+             , ( "(empty? {1 2})", Ok <| Bool False )
+             , ( "(empty? #{1})", Ok <| Bool False )
+             ]
+           )
          , ( "even?"
            , [ ( "(even? 2)", Ok <| Bool True )
              , ( "(even? 3)", Ok <| Bool False )
@@ -542,6 +570,9 @@ suite =
            , [ ( "(filter pos? nil)", Ok <| List [] )
              , ( "(= (filter odd? [1 2 3 4 5]) (list 1 3 5))", Ok <| Bool True )
              ]
+           )
+         , ( "fnil"
+           , [ ( "((fnil inc 0) nil)", Ok <| Number <| Int 1 ) ]
            )
          , ( "identity"
            , [ ( "(identity :ret)", Ok <| Keyword "ret" ) ]
@@ -832,6 +863,18 @@ suite =
              , ( "(= (seq #{1}) (list 1))", Ok <| Bool True )
              ]
            )
+         , ( "some"
+           , [ ( "(some nil nil)", Ok Nil )
+             , ( "(some pos? nil)", Ok Nil )
+             , ( "(some pos? [])", Ok Nil )
+             , ( "(some pos? ())", Ok Nil )
+             , ( "(some pos? {})", Ok Nil )
+             , ( "(some pos? #{})", Ok Nil )
+             , ( "(some pos? [0 2])", Ok <| Bool True )
+             , ( "(some pos? [0])", Ok Nil )
+             , ( "(some #{5 4} [0 1 2 5])", Ok <| Number <| Int 5 )
+             ]
+           )
          , ( "str"
            , [ ( "(str)", Ok <| String "" )
              , ( "(str 42)", Ok <| String "42" )
@@ -893,6 +936,21 @@ suite =
          , ( "throw"
            , [ ( "(throw (Exception. \"hi\"))", Err <| Exception "hi" )
              , ( "(throw nil)", Err <| Exception "nil is not throwable" )
+             ]
+           )
+         , ( "update"
+           , [ ( "(= (update nil :foo assoc :bar 2) {:foo {:bar 2}})", Ok <| Bool True )
+             , ( "(:foo (update {:foo 42} :foo inc))", Ok <| Number <| Int 43 )
+             ]
+           )
+         , ( "update-in"
+           , [ ( "(= (update-in nil [:a :b] (constantly :foo)) {:a {:b :foo}})", Ok <| Bool True )
+             , ( "(= (update-in nil [] (constantly :foo)) {nil :foo})", Ok <| Bool True )
+             , ( "(= (update-in {:foo [1 2]} [:foo 1] inc) {:foo [1 3]})", Ok <| Bool True )
+             ]
+           )
+         , ( "update-vals"
+           , [ ( "(= (update-vals {:foo 1 :bar 2} inc) {:foo 2 :bar 3}))", Ok <| Bool True )
              ]
            )
          , ( "val"
