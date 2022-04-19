@@ -354,13 +354,13 @@ expandThreadFirst i (Located loc args) =
                             :: (case op of
                                     Located _ (List forms) ->
                                         (\fn restArgs ->
-                                            Located.replace fn (List (fn :: arg :: restArgs))
+                                            Located.sameAs fn (List (fn :: arg :: restArgs))
                                         )
                                             (List.head forms |> Maybe.withDefault (Located loc Nil))
                                             (List.tail forms |> Maybe.withDefault [])
 
                                     _ ->
-                                        Located.replace arg (List [ op, arg ])
+                                        Located.sameAs arg (List [ op, arg ])
                                )
                             :: rest
                         )
@@ -388,7 +388,7 @@ expandThreadLast i (Located loc args) =
                                         Located lloc (List (forms ++ [ arg ]))
 
                                     _ ->
-                                        Located.replace arg (List [ op, arg ])
+                                        Located.sameAs arg (List [ op, arg ])
                                )
                             :: rest
                         )
@@ -422,13 +422,13 @@ expandThreadSomeFirst i (Located loc args) =
                                     :: (case op of
                                             Located _ (List forms) ->
                                                 (\fn restArgs ->
-                                                    Located.replace fn (List (fn :: binding :: restArgs))
+                                                    Located.sameAs fn (List (fn :: binding :: restArgs))
                                                 )
                                                     (List.head forms |> Maybe.withDefault (Located loc Nil))
                                                     (List.tail forms |> Maybe.withDefault [])
 
                                             _ ->
-                                                Located.replace binding (List [ op, binding ])
+                                                Located.sameAs binding (List [ op, binding ])
                                        )
                                     :: rest
                                 )
@@ -466,7 +466,7 @@ expandThreadSomeLast i (Located loc args) =
                                                 Located lloc (List (forms ++ [ binding ]))
 
                                             _ ->
-                                                Located.replace binding (List [ op, binding ])
+                                                Located.sameAs binding (List [ op, binding ])
                                        )
                                     :: rest
                                 )

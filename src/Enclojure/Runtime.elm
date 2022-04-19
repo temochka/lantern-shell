@@ -230,7 +230,7 @@ toSeq val =
             Ok <| List.map (String.fromChar >> String >> Located.fakeLoc) (String.toList s)
 
         MapEntry ( k, v ) ->
-            Ok <| [ Located.replace v k, v ]
+            Ok <| [ Located.sameAs v k, v ]
 
         Nil ->
             Ok []

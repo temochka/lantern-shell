@@ -501,7 +501,7 @@ destructure arg template =
                         |> Result.mapError (Located loc)
                         |> Result.andThen
                             (\seq ->
-                                destructure (Located.replace arg (List seq)) nextTemplate
+                                destructure (Located.sameAs arg (List seq)) nextTemplate
                             )
                         |> Result.map ((++) asBindings)
 
@@ -533,7 +533,7 @@ destructure arg template =
                             )
 
         _ ->
-            Err (Located.replace arg (Exception "Parsing error: arguments didn't match the function definition"))
+            Err (Located.sameAs arg (Exception "Parsing error: arguments didn't match the function definition"))
 
 
 mapArgs : List (Located Value) -> List (Located Value) -> Result (Located Exception) (List ( String, Value ))
@@ -936,13 +936,13 @@ trampolinePure ( result, thunk ) =
                 Const v ->
                     case thunk of
                         Just (Thunk continuation) ->
-                            trampolinePure (continuation (Located.replace io v) env)
+                            trampolinePure (continuation (Located.sameAs io v) env)
 
                         Nothing ->
                             Ok ( v, env )
 
                 _ ->
-                    Err (Located.replace io (Exception "Interpreter error: An unexpected side effect during init"))
+                    Err (Located.sameAs io (Exception "Interpreter error: An unexpected side effect during init"))
 
         Err ( e, _ ) ->
             Err e
@@ -1023,7 +1023,7 @@ evalPure initEnv code =
             (\exprs ->
                 exprs
                     |> List.head
-                    |> Maybe.map ((\lv -> Located.replace lv exprs) >> wrapInDo)
+                    |> Maybe.map ((\lv -> Located.sameAs lv exprs) >> wrapInDo)
                     |> Result.fromMaybe (Exception "Empty program")
             )
         |> Result.map
@@ -1047,7 +1047,7 @@ eval initEnv code =
             (\exprs ->
                 exprs
                     |> List.head
-                    |> Maybe.map ((\lv -> Located.replace lv exprs) >> wrapInDo)
+                    |> Maybe.map ((\lv -> Located.sameAs lv exprs) >> wrapInDo)
                     |> Result.fromMaybe (Exception "Empty program")
             )
         |> Result.map

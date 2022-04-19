@@ -438,7 +438,7 @@ suite =
                , Ok <|
                     Vector <|
                         Array.fromList
-                            [ Located { end = ( 1, 11 ), start = ( 1, 11 ) } <| Number <| Int 1
+                            [ Located { end = ( 1, 11 ), start = ( 1, 9 ) } <| Number <| Int 1
                             , Located.fakeLoc <| Number <| Int 3
                             ]
                )
@@ -600,7 +600,7 @@ suite =
              , ( "(dissoc {:a nil} :b)"
                , Ok <|
                     Map <|
-                        ValueMap.fromList [ ( Keyword "a", Located { end = ( 1, 16 ), start = ( 1, 16 ) } Nil ) ]
+                        ValueMap.fromList [ ( Keyword "a", Located { end = ( 1, 16 ), start = ( 1, 13 ) } Nil ) ]
                )
              , ( "(dissoc nil :a)", Ok Nil )
              ]
@@ -612,7 +612,7 @@ suite =
              , ( "(first {})", Ok Nil )
              , ( "(first {1 2})"
                , Ok <|
-                    MapEntry ( Number <| Int 1, Located { end = ( 1, 12 ), start = ( 1, 12 ) } <| Number <| Int 2 )
+                    MapEntry ( Number <| Int 1, Located { end = ( 1, 12 ), start = ( 1, 11 ) } <| Number <| Int 2 )
                )
              , ( "(first #{})", Ok Nil )
              , ( "(first #{2})", Ok <| Number <| Int 2 )

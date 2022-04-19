@@ -13,9 +13,9 @@ import Set
 
 located : Parser a -> Parser (Located a)
 located p =
-    Parser.succeed (\v start end -> Located { start = start, end = end } v)
-        |= p
+    Parser.succeed (\start v end -> Located { start = start, end = end } v)
         |= Parser.getPosition
+        |= p
         |= Parser.getPosition
 
 

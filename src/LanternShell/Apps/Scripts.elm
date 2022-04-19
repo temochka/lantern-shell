@@ -203,14 +203,14 @@ trampoline ( result, thunk ) maxdepth =
                     Const v ->
                         case thunk of
                             Just (Thunk continuation) ->
-                                trampoline (continuation (Located.replace io v) env) (maxdepth - 1)
+                                trampoline (continuation (Located.sameAs io v) env) (maxdepth - 1)
 
                             Nothing ->
                                 ( Done ( v, env ), Cmd.none )
 
                     Savepoint v ->
                         ( Running
-                        , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.replace io (Const v), env ), thunk )))
+                        , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.sameAs io (Const v), env ), thunk )))
                         )
 
                     Http request ->
@@ -222,7 +222,7 @@ trampoline ( result, thunk ) maxdepth =
                             , body = request.body
                             , expect =
                                 \response ->
-                                    HandleIO ( Ok ( Located.replace io (Const (responseToValue response)), env ), thunk )
+                                    HandleIO ( Ok ( Located.sameAs io (Const (responseToValue response)), env ), thunk )
                             }
                             |> Lantern.App.call
                         )
@@ -232,7 +232,7 @@ trampoline ( result, thunk ) maxdepth =
                         , Process.sleep ms
                             |> Task.perform
                                 (\_ ->
-                                    Lantern.App.Message <| HandleIO ( Ok ( Located.replace io (Const Nil), env ), thunk )
+                                    Lantern.App.Message <| HandleIO ( Ok ( Located.sameAs io (Const Nil), env ), thunk )
                                 )
                         )
 
