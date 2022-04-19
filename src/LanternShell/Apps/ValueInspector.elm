@@ -128,7 +128,7 @@ view ctx model =
             model.hoveredPath
                 |> Maybe.map Just
                 |> Maybe.withDefault model.selectedPath
-                |> Maybe.map (\v -> Enclojure.Runtime.inspect (Vector (Array.map Enclojure.Located.fakeLoc v)))
+                |> Maybe.map (\v -> Enclojure.Runtime.inspect (Vector (Array.map Enclojure.Located.unknown v)))
                 |> Maybe.withDefault " "
     in
     LanternUi.columnLayout

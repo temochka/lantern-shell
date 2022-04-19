@@ -1,12 +1,17 @@
-module Enclojure.Located exposing (Located(..), fakeLoc, getPos, getValue, map, sameAs)
+module Enclojure.Located exposing (Located(..), at, getOffsets, getValue, map, sameAs, unknown)
 
 
-type alias Position =
+type alias Offsets =
     { start : ( Int, Int ), end : ( Int, Int ) }
 
 
+type Location
+    = Known Offsets
+    | Unknown
+
+
 type Located a
-    = Located Position a
+    = Located Location a
 
 
 sameAs : Located a -> b -> Located b
@@ -24,11 +29,21 @@ getValue (Located _ val) =
     val
 
 
-getPos : Located a -> Position
-getPos (Located pos _) =
-    pos
+getOffsets : Located a -> Maybe Offsets
+getOffsets (Located location _) =
+    case location of
+        Known offsets ->
+            Just offsets
+
+        Unknown ->
+            Nothing
 
 
-fakeLoc : a -> Located a
-fakeLoc v =
-    Located { start = ( 0, 0 ), end = ( 0, 0 ) } v
+unknown : a -> Located a
+unknown v =
+    Located Unknown v
+
+
+at : ( Int, Int ) -> ( Int, Int ) -> a -> Located a
+at start end val =
+    Located (Known { start = start, end = end }) val

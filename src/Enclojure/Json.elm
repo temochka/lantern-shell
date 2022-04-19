@@ -19,11 +19,11 @@ decode =
         , Json.Decode.int |> Json.Decode.map (Int >> Number)
         , Json.Decode.float |> Json.Decode.map (Float >> Number)
         , Json.Decode.null Nil
-        , Json.Decode.array (Json.Decode.lazy (\_ -> decode)) |> Json.Decode.map (Array.map Located.fakeLoc >> Vector)
+        , Json.Decode.array (Json.Decode.lazy (\_ -> decode)) |> Json.Decode.map (Array.map Located.unknown >> Vector)
         , Json.Decode.dict (Json.Decode.lazy (\_ -> decode))
             |> Json.Decode.map
                 (Dict.toList
-                    >> List.map (\( k, v ) -> ( String k, Located.fakeLoc v ))
+                    >> List.map (\( k, v ) -> ( String k, Located.unknown v ))
                     >> ValueMap.fromList
                     >> Map
                 )

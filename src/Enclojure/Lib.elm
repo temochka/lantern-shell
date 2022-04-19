@@ -360,7 +360,7 @@ ui =
                     Err (Exception "cell must be a vector")
 
         arity1 val =
-            toUi (Located.fakeLoc val)
+            toUi (Located.unknown val)
                 |> Result.map (\cell -> ShowUI { cell = cell, watchFn = Nil, state = ValueMap.empty })
 
         arity2 ( uiVal, defaultsMap ) =
@@ -369,7 +369,7 @@ ui =
         arity3 ( uiVal, watchFn, defaultsMap ) =
             case defaultsMap of
                 Map m ->
-                    toUi (Located.fakeLoc uiVal)
+                    toUi (Located.unknown uiVal)
                         |> Result.map (\cell -> ShowUI { cell = cell, watchFn = watchFn, state = m })
 
                 _ ->
@@ -397,7 +397,7 @@ list : Callable
 list =
     let
         arity0 { rest } =
-            Ok (Const (List (List.map (Located fakeLoc) rest)))
+            Ok (Const (List (List.map Located.unknown rest)))
     in
     { emptyCallable | arity0 = Just (Variadic (pure arity0)) }
 
@@ -711,8 +711,8 @@ areEqualValues a b =
 
             ( Map mapA, Map mapB ) ->
                 compareLists
-                    (List.map (MapEntry >> Located.fakeLoc) (ValueMap.toList mapA))
-                    (List.map (MapEntry >> Located.fakeLoc) (ValueMap.toList mapB))
+                    (List.map (MapEntry >> Located.unknown) (ValueMap.toList mapA))
+                    (List.map (MapEntry >> Located.unknown) (ValueMap.toList mapB))
 
             _ ->
                 False
@@ -827,21 +827,21 @@ seq =
                         Ok Nil
 
                     else
-                        Ok (List (ValueSet.toList s |> List.map Located.fakeLoc))
+                        Ok (List (ValueSet.toList s |> List.map Located.unknown))
 
                 String s ->
                     if String.length s == 0 then
                         Ok Nil
 
                     else
-                        Ok (List (String.toList s |> List.map (String.fromChar >> String >> Located.fakeLoc)))
+                        Ok (List (String.toList s |> List.map (String.fromChar >> String >> Located.unknown)))
 
                 Map m ->
                     if ValueMap.isEmpty m then
                         Ok Nil
 
                     else
-                        Ok (List (ValueMap.toList m |> List.map (MapEntry >> Located.fakeLoc)))
+                        Ok (List (ValueMap.toList m |> List.map (MapEntry >> Located.unknown)))
 
                 Nil ->
                     Ok Nil
@@ -885,15 +885,15 @@ cons =
                 (\(Located collLoc collSeq) env2 ->
                     case collSeq of
                         List l ->
-                            ( Ok ( Located collLoc (Const (List (Located.fakeLoc x :: l))), env2 ), Just (Thunk k) )
+                            ( Ok ( Located collLoc (Const (List (Located.unknown x :: l))), env2 ), Just (Thunk k) )
 
                         Nil ->
-                            ( Ok ( Located.fakeLoc (Const (List [ Located.fakeLoc x ])), env2 )
+                            ( Ok ( Located.unknown (Const (List [ Located.unknown x ])), env2 )
                             , Just (Thunk k)
                             )
 
                         _ ->
-                            ( Err ( Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"), env2 )
+                            ( Err ( Located.unknown (Exception "Interpreter error: seq returned a non-list"), env2 )
                             , Just (Thunk k)
                             )
                 )
@@ -917,20 +917,20 @@ conj =
             case coll of
                 List l ->
                     xs
-                        |> List.map Located.fakeLoc
+                        |> List.map Located.unknown
                         |> List.foldl (::) l
                         |> List
                         |> Ok
 
                 Vector a ->
                     xs
-                        |> List.map Located.fakeLoc
+                        |> List.map Located.unknown
                         |> List.foldl Array.push a
                         |> Vector
                         |> Ok
 
                 Nil ->
-                    Ok <| List (xs |> List.map Located.fakeLoc |> List.reverse)
+                    Ok <| List (xs |> List.map Located.unknown |> List.reverse)
 
                 Set s ->
                     xs
@@ -1132,12 +1132,12 @@ rest_ =
                             ( Ok ( Located collLoc (Const Nil), env2 ), Just (Thunk k) )
 
                         Nil ->
-                            ( Ok ( Located.fakeLoc (Const (List [])), env2 )
+                            ( Ok ( Located.unknown (Const (List [])), env2 )
                             , Just (Thunk k)
                             )
 
                         _ ->
-                            ( Err ( Located.fakeLoc (Exception "Interpreter error: seq returned a non-list"), env2 )
+                            ( Err ( Located.unknown (Exception "Interpreter error: seq returned a non-list"), env2 )
                             , Just (Thunk k)
                             )
                 )
@@ -1215,8 +1215,8 @@ apply =
             case listArgsResult of
                 Ok listArgs ->
                     Runtime.apply
-                        (Located.fakeLoc fn)
-                        (Located.fakeLoc (List (List.map Located.fakeLoc posArgs ++ listArgs)))
+                        (Located.unknown fn)
+                        (Located.unknown (List (List.map Located.unknown posArgs ++ listArgs)))
                         env
                         k
                         |> toRuntimeStep
@@ -1311,7 +1311,7 @@ assoc =
             case val of
                 Map m ->
                     kvs
-                        |> Result.map (List.foldr (\( k, v ) a -> ValueMap.insert k (Located.fakeLoc v) a) m)
+                        |> Result.map (List.foldr (\( k, v ) a -> ValueMap.insert k (Located.unknown v) a) m)
                         |> Result.map Map
 
                 Vector array ->
@@ -1324,10 +1324,10 @@ assoc =
                                         |> Result.andThen
                                             (\arr ->
                                                 if k == Array.length arr then
-                                                    Ok <| Array.push (Located.fakeLoc v) arr
+                                                    Ok <| Array.push (Located.unknown v) arr
 
                                                 else if k < Array.length arr then
-                                                    Ok <| Array.set k (Located.fakeLoc v) arr
+                                                    Ok <| Array.set k (Located.unknown v) arr
 
                                                 else
                                                     Err <| Exception "index out of bounds"
@@ -1339,7 +1339,7 @@ assoc =
 
                 Nil ->
                     kvs
-                        |> Result.map (List.foldr (\( k, v ) a -> ValueMap.insert k (Located.fakeLoc v) a) ValueMap.empty)
+                        |> Result.map (List.foldr (\( k, v ) a -> ValueMap.insert k (Located.unknown v) a) ValueMap.empty)
                         |> Result.map Map
 
                 _ ->

@@ -6,11 +6,6 @@ import Enclojure.Located exposing (Located)
 import Set
 
 
-fakeLoc : { start : ( number, number ), end : ( number, number ) }
-fakeLoc =
-    { start = ( 0, 0 ), end = ( 0, 0 ) }
-
-
 type Exception
     = Exception String
 

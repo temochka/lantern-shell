@@ -12,7 +12,7 @@ splitLines =
             case val of
                 String s ->
                     String.lines s
-                        |> List.map (String >> Located.fakeLoc)
+                        |> List.map (String >> Located.unknown)
                         |> Types.List
                         |> Ok
 

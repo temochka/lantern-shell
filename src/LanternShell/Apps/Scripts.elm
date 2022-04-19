@@ -180,13 +180,13 @@ responseToValue : Lantern.Http.Response -> Value
 responseToValue response =
     Map <|
         Enclojure.ValueMap.fromList
-            [ ( Keyword "status", Located.fakeLoc <| Number (Enclojure.Types.Int response.status) )
+            [ ( Keyword "status", Located.unknown <| Number (Enclojure.Types.Int response.status) )
             , ( Keyword "headers"
-              , Located.fakeLoc <|
-                    Map (response.headers |> List.map (\( k, v ) -> ( String k, Located.fakeLoc (String v) )) |> Enclojure.ValueMap.fromList)
+              , Located.unknown <|
+                    Map (response.headers |> List.map (\( k, v ) -> ( String k, Located.unknown (String v) )) |> Enclojure.ValueMap.fromList)
               )
             , ( Keyword "body"
-              , response.body |> Maybe.map String |> Maybe.withDefault Nil |> Located.fakeLoc
+              , response.body |> Maybe.map String |> Maybe.withDefault Nil |> Located.unknown
               )
             ]
 
@@ -196,7 +196,7 @@ trampoline ( result, thunk ) maxdepth =
     case result of
         Ok ( io, env ) ->
             if maxdepth <= 0 then
-                ( Panic ( Located.fakeLoc (Exception "Stack level too deep"), env ), Cmd.none )
+                ( Panic ( Located.unknown (Exception "Stack level too deep"), env ), Cmd.none )
 
             else
                 case Located.getValue io of
@@ -242,7 +242,7 @@ trampoline ( result, thunk ) maxdepth =
                         )
 
                     ReadField _ ->
-                        ( Panic ( Located.fakeLoc (Exception "Not implemented"), env ), Cmd.none )
+                        ( Panic ( Located.unknown (Exception "Not implemented"), env ), Cmd.none )
 
         Err e ->
             ( Panic e, Cmd.none )
@@ -316,8 +316,8 @@ runWatchFn env watchFn stateMap =
             let
                 ( interpreter, _ ) =
                     trampoline
-                        (Runtime.apply (Located.fakeLoc watchFn)
-                            (Located.fakeLoc (List [ Located.fakeLoc (Map stateMap) ]))
+                        (Runtime.apply (Located.unknown watchFn)
+                            (Located.unknown (List [ Located.unknown (Map stateMap) ]))
                             env
                             Enclojure.terminate
                         )
@@ -327,13 +327,13 @@ runWatchFn env watchFn stateMap =
                 Done ( val, _ ) ->
                     val
                         |> Runtime.tryMap
-                        |> Result.fromMaybe (Located.fakeLoc (Exception "type error: watch returned a non-map"))
+                        |> Result.fromMaybe (Located.unknown (Exception "type error: watch returned a non-map"))
 
                 Panic ( err, _ ) ->
                     Err err
 
                 _ ->
-                    Err (Located.fakeLoc (Exception "runtime error: watch fn tried to run a side effect"))
+                    Err (Located.unknown (Exception "runtime error: watch fn tried to run a side effect"))
 
 
 runScript : EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) )
@@ -478,7 +478,7 @@ update msg appModel =
             updateEditor appModel
                 (\model ->
                     ( { model
-                        | interpreter = Panic ( Located.fakeLoc (Exception "Terminated"), Runtime.emptyEnv )
+                        | interpreter = Panic ( Located.unknown (Exception "Terminated"), Runtime.emptyEnv )
                       }
                     , Cmd.none
                     )
@@ -519,10 +519,10 @@ update msg appModel =
                                 Button _ ->
                                     let
                                         exitCode =
-                                            Located.fakeLoc <| Keyword name
+                                            Located.unknown <| Keyword name
 
                                         state =
-                                            Located.fakeLoc <| Map enclojureUi.state
+                                            Located.unknown <| Map enclojureUi.state
 
                                         console =
                                             model.console
@@ -532,13 +532,13 @@ update msg appModel =
                                     ( { model | interpreter = Running, console = console }
                                     , Task.perform
                                         identity
-                                        (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.fakeLoc (Const (List [ exitCode, state ])), env ), thunk )))
+                                        (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.unknown (Const (List [ exitCode, state ])), env ), thunk )))
                                     )
 
                                 _ ->
                                     let
                                         updatedState =
-                                            Enclojure.ValueMap.insert (Keyword name) (Located.fakeLoc (String v)) ui.enclojureUi.state
+                                            Enclojure.ValueMap.insert (Keyword name) (Located.unknown (String v)) ui.enclojureUi.state
                                                 |> runWatchFn env ui.enclojureUi.watchFn
 
                                         ( interpreter, console ) =

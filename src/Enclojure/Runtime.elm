@@ -15,7 +15,6 @@ import Enclojure.Types as Types
         , Number(..)
         , Thunk(..)
         , Value(..)
-        , fakeLoc
         )
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
@@ -221,13 +220,13 @@ toSeq val =
             Ok <| Array.toList v
 
         Set s ->
-            Ok <| List.map Located.fakeLoc <| ValueSet.toList s
+            Ok <| List.map Located.unknown <| ValueSet.toList s
 
         Map m ->
             Ok <| List.map (\(( _, Located loc _ ) as entry) -> Located loc (MapEntry entry)) (ValueMap.toList m)
 
         String s ->
-            Ok <| List.map (String.fromChar >> String >> Located.fakeLoc) (String.toList s)
+            Ok <| List.map (String.fromChar >> String >> Located.unknown) (String.toList s)
 
         MapEntry ( k, v ) ->
             Ok <| [ Located.sameAs v k, v ]
@@ -256,15 +255,15 @@ toMap val =
 
 
 inspectLocated : Located Value -> String
-inspectLocated (Located { start } value) =
+inspectLocated locatedValue =
     let
-        ( line, offset ) =
-            start
-
         suffix =
-            ":" ++ String.fromInt line ++ ":" ++ String.fromInt offset
+            locatedValue
+                |> Located.getOffsets
+                |> Maybe.map (\{ start } -> ":" ++ String.fromInt (Tuple.first start) ++ ":" ++ String.fromInt (Tuple.second start))
+                |> Maybe.withDefault ""
     in
-    inspect value ++ suffix
+    inspect (Located.getValue locatedValue) ++ suffix
 
 
 inspect : Value -> String
@@ -310,7 +309,7 @@ inspect value =
                 |> (\r -> "{" ++ r ++ "}")
 
         MapEntry ( k, v ) ->
-            inspect (Vector (Array.fromList [ Located fakeLoc k, v ]))
+            inspect (Vector (Array.fromList [ Located.unknown k, v ]))
 
         Set set ->
             List.map (\v -> inspect v) (ValueSet.toList set)

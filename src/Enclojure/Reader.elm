@@ -1,7 +1,7 @@
 module Enclojure.Reader exposing (parse)
 
 import Array
-import Enclojure.Located exposing (Located(..))
+import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
 import Enclojure.Types exposing (..)
@@ -13,7 +13,7 @@ import Set
 
 located : Parser a -> Parser (Located a)
 located p =
-    Parser.succeed (\start v end -> Located { start = start, end = end } v)
+    Parser.succeed (\start v end -> Located.at start end v)
         |= Parser.getPosition
         |= p
         |= Parser.getPosition

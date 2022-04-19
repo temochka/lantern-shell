@@ -332,7 +332,7 @@ evalMap (Located mapLoc map) env k =
 
 evalMapEntry : Located Enclojure.Types.ValueMapEntry -> Env -> Continuation -> Step
 evalMapEntry (Located loc ( key, value )) env k =
-    evalExpression (Located Enclojure.Types.fakeLoc key)
+    evalExpression (Located.unknown key)
         env
         (\keyRet keyEnv ->
             evalExpression value
@@ -514,7 +514,7 @@ destructure arg template =
                             (\argAsList ->
                                 let
                                     newArg =
-                                        argAsList |> List.head |> Maybe.withDefault (Located.fakeLoc Nil)
+                                        argAsList |> List.head |> Maybe.withDefault (Located.unknown Nil)
                                 in
                                 destructure newArg nextTemplate
                                     |> Result.andThen
@@ -524,7 +524,7 @@ destructure arg template =
                                                     |> List.tail
                                                     |> Maybe.map List
                                                     |> Maybe.withDefault Nil
-                                                    |> Located.fakeLoc
+                                                    |> Located.unknown
                                                 )
                                                 (Located loc (Vector (Array.fromList rest)))
                                                 |> Result.map ((++) asBindings)
@@ -951,9 +951,9 @@ trampolinePure ( result, thunk ) =
 init : Env
 init =
     prelude
-        |> Result.map (Located.fakeLoc >> wrapInDo)
+        |> Result.map (Located.unknown >> wrapInDo)
         |> Result.map (\program -> evalExpression program Runtime.emptyEnv terminate)
-        |> Result.mapError (always (Located.fakeLoc (Exception "Interpreter error: Dead end")))
+        |> Result.mapError (always (Located.unknown (Exception "Interpreter error: Dead end")))
         |> Result.andThen trampolinePure
         |> Result.map (\( _, env ) -> env)
         |> Result.withDefault Runtime.emptyEnv
@@ -1032,7 +1032,7 @@ evalPure initEnv code =
                     initEnv
                     terminate
             )
-        |> Result.mapError Located.fakeLoc
+        |> Result.mapError Located.unknown
         |> Result.andThen trampolinePure
 
 
@@ -1062,7 +1062,7 @@ eval initEnv code =
                         v
 
                     Err e ->
-                        ( Err ( Located { start = ( 0, 0 ), end = ( 0, 0 ) } e, initEnv )
+                        ( Err ( Located.unknown e, initEnv )
                         , Nothing
                         )
            )

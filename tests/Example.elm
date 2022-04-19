@@ -421,25 +421,25 @@ suite =
            )
          , ( "assoc"
            , [ ( "(assoc nil :a 1)"
-               , Ok <| Map <| ValueMap.fromList [ ( Keyword "a", Located.fakeLoc <| Number <| Int 1 ) ]
+               , Ok <| Map <| ValueMap.fromList [ ( Keyword "a", Located.unknown <| Number <| Int 1 ) ]
                )
              , ( "(assoc {} :a 1 :b 2)"
                , Ok <|
                     Map <|
                         ValueMap.fromList
-                            [ ( Keyword "a", Located.fakeLoc <| Number <| Int 1 )
-                            , ( Keyword "b", Located.fakeLoc <| Number <| Int 2 )
+                            [ ( Keyword "a", Located.unknown <| Number <| Int 1 )
+                            , ( Keyword "b", Located.unknown <| Number <| Int 2 )
                             ]
                )
              , ( "(assoc {:a 1} :a 2)"
-               , Ok <| Map <| ValueMap.fromList [ ( Keyword "a", Located.fakeLoc <| Number <| Int 2 ) ]
+               , Ok <| Map <| ValueMap.fromList [ ( Keyword "a", Located.unknown <| Number <| Int 2 ) ]
                )
              , ( "(assoc [1 2] 1 3)"
                , Ok <|
                     Vector <|
                         Array.fromList
-                            [ Located { end = ( 1, 11 ), start = ( 1, 9 ) } <| Number <| Int 1
-                            , Located.fakeLoc <| Number <| Int 3
+                            [ Located.at ( 1, 9 ) ( 1, 11 ) <| Number <| Int 1
+                            , Located.unknown <| Number <| Int 3
                             ]
                )
              , ( "(= (assoc [] 0 1) [1])", Ok <| Bool True )
@@ -600,7 +600,7 @@ suite =
              , ( "(dissoc {:a nil} :b)"
                , Ok <|
                     Map <|
-                        ValueMap.fromList [ ( Keyword "a", Located { end = ( 1, 16 ), start = ( 1, 13 ) } Nil ) ]
+                        ValueMap.fromList [ ( Keyword "a", Located.at ( 1, 13 ) ( 1, 16 ) Nil ) ]
                )
              , ( "(dissoc nil :a)", Ok Nil )
              ]
@@ -612,7 +612,7 @@ suite =
              , ( "(first {})", Ok Nil )
              , ( "(first {1 2})"
                , Ok <|
-                    MapEntry ( Number <| Int 1, Located { end = ( 1, 12 ), start = ( 1, 11 ) } <| Number <| Int 2 )
+                    MapEntry ( Number <| Int 1, Located.at ( 1, 11 ) ( 1, 12 ) <| Number <| Int 2 )
                )
              , ( "(first #{})", Ok Nil )
              , ( "(first #{2})", Ok <| Number <| Int 2 )
@@ -704,7 +704,7 @@ suite =
              ]
            )
          , ( "list"
-           , [ ( "(list nil nil)", Ok <| List [ Located.fakeLoc Nil, Located.fakeLoc Nil ] )
+           , [ ( "(list nil nil)", Ok <| List [ Located.unknown Nil, Located.unknown Nil ] )
              , ( "(list)", Ok <| List [] )
              ]
            )
