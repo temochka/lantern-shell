@@ -148,7 +148,7 @@ expandDefn i (Located loc args) =
                 )
 
         _ ->
-            Err (Exception "Argument error: invalid arguments to defn")
+            Err (Exception "Argument error: invalid arguments to defn" [])
 
 
 expandIfLet : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -169,10 +169,10 @@ expandIfLet i (Located loc args) =
                         )
 
                 _ ->
-                    Err (Exception "Argument error: more than 2 elements in bindings array to if-let")
+                    Err (Exception "Argument error: more than 2 elements in bindings array to if-let" [])
 
         _ ->
-            Err (Exception "Argument error: invalid arguments to if-let")
+            Err (Exception "Argument error: invalid arguments to if-let" [])
 
 
 expandWhenLet : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -193,10 +193,10 @@ expandWhenLet i (Located loc args) =
                         )
 
                 _ ->
-                    Err (Exception "Argument error: more than 2 elements in bindings array to if-let")
+                    Err (Exception "Argument error: more than 2 elements in bindings array to if-let" [])
 
         _ ->
-            Err (Exception "Argument error: invalid arguments to when-let")
+            Err (Exception "Argument error: invalid arguments to when-let" [])
 
 
 expandAnd : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -282,7 +282,7 @@ expandWhen i (Located loc args) =
                 )
 
         [] ->
-            Err (Exception "Argument error: wrong number of arguments (0) passed to when")
+            Err (Exception "Argument error: wrong number of arguments (0) passed to when" [])
 
 
 expandWhenNot : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -304,7 +304,7 @@ expandWhenNot i (Located loc args) =
                 )
 
         [] ->
-            Err (Exception "Argument error: wrong number of arguments (0) passed to when-not")
+            Err (Exception "Argument error: wrong number of arguments (0) passed to when-not" [])
 
 
 expandCond : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -336,7 +336,7 @@ expandCond i (Located loc args) =
                 )
 
         [ _ ] ->
-            Err (Exception "compilation error: cond has uneven number of forms")
+            Err (Exception "compilation error: cond has uneven number of forms" [])
 
         [] ->
             Ok <| ( i, Located loc Nil )
@@ -371,7 +371,7 @@ expandThreadFirst i (Located loc args) =
             Ok ( i, arg )
 
         [] ->
-            Err (Exception "Argument error: wrong number of arguments (0) passed to ->")
+            Err (Exception "Argument error: wrong number of arguments (0) passed to ->" [])
 
 
 expandThreadLast : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -399,7 +399,7 @@ expandThreadLast i (Located loc args) =
             Ok ( i, arg )
 
         [] ->
-            Err (Exception "Argument error: wrong number of arguments (0) passed to ->>")
+            Err (Exception "Argument error: wrong number of arguments (0) passed to ->>" [])
 
 
 expandThreadSomeFirst : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -441,7 +441,7 @@ expandThreadSomeFirst i (Located loc args) =
             Ok ( i, arg )
 
         [] ->
-            Err (Exception "Argument error: wrong number of arguments (0) passed to some->")
+            Err (Exception "Argument error: wrong number of arguments (0) passed to some->" [])
 
 
 expandThreadSomeLast : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
@@ -479,7 +479,7 @@ expandThreadSomeLast i (Located loc args) =
             Ok ( i, arg )
 
         [] ->
-            Err (Exception "Argument error: wrong number of arguments (0) passed to some->>")
+            Err (Exception "Argument error: wrong number of arguments (0) passed to some->>" [])
 
 
 walk : a -> (a -> Located Value -> Result (Located Exception) ( a, Located Value )) -> Located Value -> Result (Located Exception) ( a, Located Value )
@@ -578,7 +578,7 @@ substituteLambdaArgsWalker : ( Int, Arguments ) -> Located Value -> Result (Loca
 substituteLambdaArgsWalker ( i, args ) (Located loc expr) =
     case expr of
         Symbol "__lambda" ->
-            Err (Located loc (Exception "Parsing error: nested #() are not supported, use fn instead."))
+            Err (Located loc (Exception "Parsing error: nested #() are not supported, use fn instead." []))
 
         Symbol "%&" ->
             let

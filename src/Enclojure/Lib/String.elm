@@ -17,7 +17,7 @@ splitLines =
                         |> Ok
 
                 _ ->
-                    Err (Exception ("type error: expected string, got " ++ inspect val))
+                    Err (Exception ("type error: expected string, got " ++ inspect val) [])
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
@@ -30,7 +30,7 @@ length =
         arity1 val =
             Runtime.tryString val
                 |> Maybe.map (String.length >> Types.Int >> Types.Number >> Ok)
-                |> Maybe.withDefault (Err (Exception ("type error: expected string, got " ++ inspect val)))
+                |> Maybe.withDefault (Err (Exception ("type error: expected string, got " ++ inspect val) []))
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
@@ -44,13 +44,13 @@ join =
             val
                 |> Runtime.trySequenceOf (Runtime.toString >> Just)
                 |> Maybe.map (String.join "" >> Types.String >> Ok)
-                |> Maybe.withDefault (Err (Exception ("type error: expected a sequence, got " ++ inspect val)))
+                |> Maybe.withDefault (Err (Exception ("type error: expected a sequence, got " ++ inspect val) []))
 
         arity2 ( sepVal, collVal ) =
             Maybe.map2 (\sep coll -> String.join sep coll |> Types.String |> Ok)
                 (Runtime.tryString sepVal)
                 (Runtime.trySequenceOf (Runtime.toString >> Just) collVal)
-                |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings"))
+                |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings" []))
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)

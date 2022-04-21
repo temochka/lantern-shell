@@ -196,7 +196,7 @@ trampoline ( result, thunk ) maxdepth =
     case result of
         Ok ( io, env ) ->
             if maxdepth <= 0 then
-                ( Panic ( Located.unknown (Exception "Stack level too deep"), env ), Cmd.none )
+                ( Panic ( Located.unknown (Exception "Stack level too deep" []), env ), Cmd.none )
 
             else
                 case Located.getValue io of
@@ -242,7 +242,7 @@ trampoline ( result, thunk ) maxdepth =
                         )
 
                     ReadField _ ->
-                        ( Panic ( Located.unknown (Exception "Not implemented"), env ), Cmd.none )
+                        ( Panic ( Located.unknown (Exception "Not implemented" []), env ), Cmd.none )
 
         Err e ->
             ( Panic e, Cmd.none )
@@ -327,13 +327,13 @@ runWatchFn env watchFn stateMap =
                 Done ( val, _ ) ->
                     val
                         |> Runtime.tryMap
-                        |> Result.fromMaybe (Located.unknown (Exception "type error: watch returned a non-map"))
+                        |> Result.fromMaybe (Located.unknown (Exception "type error: watch returned a non-map" []))
 
                 Panic ( err, _ ) ->
                     Err err
 
                 _ ->
-                    Err (Located.unknown (Exception "runtime error: watch fn tried to run a side effect"))
+                    Err (Located.unknown (Exception "runtime error: watch fn tried to run a side effect" []))
 
 
 runScript : EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) )
@@ -478,7 +478,7 @@ update msg appModel =
             updateEditor appModel
                 (\model ->
                     ( { model
-                        | interpreter = Panic ( Located.unknown (Exception "Terminated"), Runtime.emptyEnv )
+                        | interpreter = Panic ( Located.unknown (Exception "Terminated" []), Runtime.emptyEnv )
                       }
                     , Cmd.none
                     )

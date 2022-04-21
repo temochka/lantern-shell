@@ -28,6 +28,7 @@ emptyEnv : Env
 emptyEnv =
     { global = Dict.empty
     , local = Dict.empty
+    , stack = [ { name = "user", location = Located.Unknown } ]
     }
 
 
@@ -83,7 +84,7 @@ dispatch callable args env k =
                             Variadic fn ->
                                 fn { args = (), rest = [] } env k
                     )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 0", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( exception env "Invalid arity 0", env ), Just (Thunk k) )
 
         [ a0 ] ->
             extractVariadic callable.arity0
@@ -101,7 +102,7 @@ dispatch callable args env k =
                                             fn { args = a0, rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 1", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( exception env "Invalid arity 1", env ), Just (Thunk k) )
 
         [ a0, a1 ] ->
             extractVariadic callable.arity0
@@ -124,7 +125,7 @@ dispatch callable args env k =
                                             fn { args = ( a0, a1 ), rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 2", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( exception env "Invalid arity 2", env ), Just (Thunk k) )
 
         [ a0, a1, a2 ] ->
             extractVariadic callable.arity0
@@ -152,7 +153,7 @@ dispatch callable args env k =
                                             fn { args = ( a0, a1, a2 ), rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err ( Exception "Invalid arity 3", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( exception env "Invalid arity 3", env ), Just (Thunk k) )
 
         a0 :: a1 :: a2 :: rest ->
             extractVariadic callable.arity0
@@ -173,7 +174,7 @@ dispatch callable args env k =
                             |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest } env k)
                     )
                 |> Maybe.withDefault
-                    ( Err ( Exception ("Invalid arity " ++ String.fromInt (List.length args)), env )
+                    ( Err ( exception env ("Invalid arity " ++ String.fromInt (List.length args)), env )
                     , Nothing
                     )
 
@@ -193,7 +194,7 @@ toContinuation callable { k } =
                             )
 
                 _ ->
-                    ( Err ( Located pos (Exception "Foo"), env ), Nothing )
+                    ( Err ( Located pos (exception env "Foo"), env ), Nothing )
         )
 
 
@@ -235,7 +236,7 @@ toSeq val =
             Ok []
 
         _ ->
-            Err <| Exception (inspect val ++ " is not a sequence")
+            Err <| Exception (inspect val ++ " is not a sequence") []
 
 
 toMap : Value -> Maybe Types.ValueMap
@@ -319,7 +320,7 @@ inspect value =
         Symbol name ->
             name
 
-        Throwable (Exception str) ->
+        Throwable (Exception str _) ->
             "Exception: " ++ str
 
 
@@ -351,7 +352,7 @@ pure fn =
     \v env k ->
         ( fn v
             |> Result.map (\io -> ( io, env ))
-            |> Result.mapError (\err -> ( err, env ))
+            |> Result.mapError (\err -> ( setStackTrace env.stack err, env ))
         , Just (Thunk k)
         )
 
@@ -415,22 +416,72 @@ mapLookupFn map =
 
 
 apply : Located Value -> Located Value -> Env -> Continuation -> Types.Step
-apply ((Located fnLoc fnExpr) as fn) arg env k =
+apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
+    let
+        currentStack =
+            inputEnv.stack
+                |> List.head
+                |> Maybe.map (\frame -> { frame | location = fnLoc } :: List.drop 1 inputEnv.stack)
+                |> Maybe.withDefault inputEnv.stack
+
+        k =
+            \v kEnv -> inputK v { kEnv | stack = List.drop 1 kEnv.stack }
+    in
     case fnExpr of
-        Fn _ callable ->
+        Fn name callable ->
+            let
+                env =
+                    { inputEnv
+                        | stack =
+                            { name = name |> Maybe.withDefault "fn"
+                            , location = fnLoc
+                            }
+                                :: currentStack
+                    }
+            in
             ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
 
         Keyword key ->
+            let
+                env =
+                    { inputEnv
+                        | stack =
+                            { name = key
+                            , location = fnLoc
+                            }
+                                :: currentStack
+                    }
+            in
             ( Ok ( Located.map Const arg, env ), Just (toContinuation (getFn key) { self = fnExpr, k = k }) )
 
         Map map ->
+            let
+                env =
+                    { inputEnv
+                        | stack =
+                            { name = "Map"
+                            , location = fnLoc
+                            }
+                                :: currentStack
+                    }
+            in
             ( Ok ( Located.map Const arg, env ), Just (toContinuation (mapLookupFn map) { self = fnExpr, k = k }) )
 
         Set set ->
+            let
+                env =
+                    { inputEnv
+                        | stack =
+                            { name = "Set"
+                            , location = fnLoc
+                            }
+                                :: currentStack
+                    }
+            in
             ( Ok ( Located.map Const arg, env ), Just (toContinuation (setLookupFn set) { self = fnExpr, k = k }) )
 
         _ ->
-            ( Err ( Located fnLoc (Exception (inspectLocated fn ++ " is not a valid callable.")), env )
+            ( Err ( Located fnLoc (exception inputEnv (inspectLocated fn ++ " is not a valid callable.")), inputEnv )
             , Just (Thunk k)
             )
 
@@ -521,3 +572,41 @@ tryDictOf extractKey extractValue value =
 
         _ ->
             Nothing
+
+
+exception : Env -> String -> Exception
+exception env message =
+    Exception message env.stack
+
+
+setStackTrace : List Types.StackFrame -> Exception -> Exception
+setStackTrace stack (Exception msg _) =
+    Exception msg stack
+
+
+setCurrentStackFrameLocation : Located.Location -> Env -> Env
+setCurrentStackFrameLocation location env =
+    let
+        newStack =
+            env.stack
+                |> List.head
+                |> Maybe.map (\currentFrame -> { currentFrame | location = location } :: List.drop 1 env.stack)
+                |> Maybe.withDefault env.stack
+    in
+    { env | stack = newStack }
+
+
+prettyTrace : Exception -> List String
+prettyTrace (Exception msg trace) =
+    trace
+        |> List.map
+            (\frame ->
+                frame.name
+                    ++ (case frame.location of
+                            Located.Unknown ->
+                                ""
+
+                            Located.Known { start } ->
+                                ":" ++ (Tuple.first start |> String.fromInt)
+                       )
+            )
