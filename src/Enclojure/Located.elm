@@ -1,4 +1,4 @@
-module Enclojure.Located exposing (Located(..), at, getOffsets, getValue, map, sameAs, unknown)
+module Enclojure.Located exposing (Located(..), Location(..), at, getLocation, getOffsets, getValue, map, sameAs, unknown)
 
 
 type alias Offsets =
@@ -37,6 +37,11 @@ getOffsets (Located location _) =
 
         Unknown ->
             Nothing
+
+
+getLocation : Located a -> Location
+getLocation (Located location _) =
+    location
 
 
 unknown : a -> Located a

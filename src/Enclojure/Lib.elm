@@ -66,7 +66,7 @@ sleep =
                     Ok (Sleep i)
 
                 _ ->
-                    Err (Exception "type error: sleep expects one integer argument")
+                    Err (Exception "type error: sleep expects one integer argument" [])
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
@@ -88,12 +88,16 @@ decodeHttpRequest : Value -> Result Exception HttpRequest
 decodeHttpRequest value =
     value
         |> Runtime.tryMap
-        |> Result.fromMaybe (Exception "type error: request must be a map")
+        |> Result.fromMaybe (Exception "type error: request must be a map" [])
         |> Result.andThen
             (\requestMap ->
                 let
                     urlResult =
-                        requestMap |> ValueMap.get (Keyword "url") |> Maybe.map Located.getValue |> Maybe.andThen Runtime.tryString |> Result.fromMaybe (Exception "type error: :url must be a string")
+                        requestMap
+                            |> ValueMap.get (Keyword "url")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.andThen Runtime.tryString
+                            |> Result.fromMaybe (Exception "type error: :url must be a string" [])
 
                     headers =
                         requestMap
@@ -104,7 +108,11 @@ decodeHttpRequest value =
                             |> Maybe.withDefault []
 
                     methodResult =
-                        requestMap |> ValueMap.get (Keyword "method") |> Maybe.map Located.getValue |> Maybe.andThen Runtime.tryKeyword |> Result.fromMaybe (Exception "type error: method must be a keyword")
+                        requestMap
+                            |> ValueMap.get (Keyword "method")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.andThen Runtime.tryKeyword
+                            |> Result.fromMaybe (Exception "type error: method must be a keyword" [])
 
                     bodyResult =
                         requestMap
@@ -122,7 +130,7 @@ decodeHttpRequest value =
                                         _ ->
                                             Nothing
                                )
-                            |> Result.fromMaybe (Exception "type error: body must be nil or string")
+                            |> Result.fromMaybe (Exception "type error: body must be nil or string" [])
                 in
                 Result.map3
                     (\url method body ->
@@ -168,7 +176,7 @@ jsonDecode =
     let
         arity1 v =
             Runtime.tryString v
-                |> Result.fromMaybe (Exception "type error: json/decode expects a string")
+                |> Result.fromMaybe (Exception "type error: json/decode expects a string" [])
                 |> Result.andThen Enclojure.Json.decodeFromString
                 |> Result.map Const
     in
@@ -193,7 +201,7 @@ readField =
                     )
 
                 _ ->
-                    ( Err ( Exception "type error: read-field expects one string argument", env )
+                    ( Err ( Exception "type error: read-field expects one string argument" [], env )
                     , Just (Thunk k)
                     )
     in
@@ -216,10 +224,10 @@ ui =
                             Ok (TextRef key)
 
                         _ ->
-                            Err (Exception "type error: invalid text formatter")
+                            Err (Exception "type error: invalid text formatter" [])
 
                 _ ->
-                    Err (Exception "text parts must be plain strings")
+                    Err (Exception "text parts must be plain strings" [])
 
         toUi (Located _ val) =
             case val of
@@ -285,7 +293,7 @@ ui =
                                     Ok (Input key (TextInput { suggestions = suggestions }))
 
                                 _ ->
-                                    Err (Exception "type error: invalid arguments to text-input cell")
+                                    Err (Exception "type error: invalid arguments to text-input cell" [])
 
                         (Located _ (Keyword "button")) :: args ->
                             case args of
@@ -308,7 +316,7 @@ ui =
                                     Ok (Input key (Button { title = title }))
 
                                 _ ->
-                                    Err (Exception "type error: invalid arguments to button cell")
+                                    Err (Exception "type error: invalid arguments to button cell" [])
 
                         (Located _ (Keyword "download")) :: args ->
                             case args of
@@ -345,19 +353,19 @@ ui =
                                         )
 
                                 _ ->
-                                    Err (Exception "type error: invalid arguments to download cell")
+                                    Err (Exception "type error: invalid arguments to download cell" [])
 
                         (Located _ (Keyword cellType)) :: _ ->
-                            Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type"))
+                            Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type") [])
 
                         _ :: _ ->
-                            Err (Exception "type error: cell type must be a keyword")
+                            Err (Exception "type error: cell type must be a keyword" [])
 
                         [] ->
-                            Err (Exception "type error: empty vector is not a valid cell")
+                            Err (Exception "type error: empty vector is not a valid cell" [])
 
                 _ ->
-                    Err (Exception "cell must be a vector")
+                    Err (Exception "cell must be a vector" [])
 
         arity1 val =
             toUi (Located.unknown val)
@@ -373,7 +381,7 @@ ui =
                         |> Result.map (\cell -> ShowUI { cell = cell, watchFn = watchFn, state = m })
 
                 _ ->
-                    Err (Exception ("type error: expected a map of defaults, got " ++ inspect defaultsMap))
+                    Err (Exception ("type error: expected a map of defaults, got " ++ inspect defaultsMap) [])
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure arity1))
@@ -587,7 +595,7 @@ toNumber val =
             Ok n
 
         _ ->
-            Err <| Exception (inspect val ++ " is not a number")
+            Err <| Exception (inspect val ++ " is not a number") []
 
 
 isLessThan : Callable
@@ -641,7 +649,7 @@ compOp { intOp, floatOp, stringOp } =
                             Ok (stringOp a b)
 
                         ( a, b ) ->
-                            Err (Exception ("can't compare " ++ inspect a ++ " and " ++ inspect b))
+                            Err (Exception ("can't compare " ++ inspect a ++ " and " ++ inspect b) [])
             in
             case rest of
                 [] ->
@@ -847,7 +855,7 @@ seq =
                     Ok Nil
 
                 _ ->
-                    Err (Exception (inspect coll ++ " is not sequable"))
+                    Err (Exception (inspect coll ++ " is not sequable") [])
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
@@ -868,7 +876,7 @@ fixedCall mArity =
             )
         |> Maybe.withDefault
             (\_ env k ->
-                ( Err ( Exception "Interpreter error: undefined internal call arity", env )
+                ( Err ( Runtime.exception env "Interpreter error: undefined internal call arity", env )
                 , Just (Thunk k)
                 )
             )
@@ -893,7 +901,10 @@ cons =
                             )
 
                         _ ->
-                            ( Err ( Located.unknown (Exception "Interpreter error: seq returned a non-list"), env2 )
+                            ( Err
+                                ( Located.unknown (Exception "Interpreter error: seq returned a non-list" [])
+                                , env2
+                                )
                             , Just (Thunk k)
                             )
                 )
@@ -952,16 +963,16 @@ conj =
                                                 a |> Result.map (ValueMap.insert (Located.getValue k) v)
 
                                             _ ->
-                                                Err (Exception "Vector arg to map conj must be a pair")
+                                                Err (Exception "Vector arg to map conj must be a pair" [])
 
                                     _ ->
-                                        Err <| Exception (inspect e ++ " is not a valid map entry")
+                                        Err <| Exception (inspect e ++ " is not a valid map entry") []
                             )
                             (Ok m)
                         |> Result.map Map
 
                 _ ->
-                    Err (Exception ("don't know how to conj to " ++ inspect coll))
+                    Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
         | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const)
@@ -974,7 +985,7 @@ contains =
         arity2 ( coll, x ) =
             case coll of
                 List _ ->
-                    Err (Exception "contains? not supported on lists")
+                    Err (Exception "contains? not supported on lists" [])
 
                 Vector a ->
                     case x of
@@ -994,7 +1005,7 @@ contains =
                     ValueMap.member x m |> Bool |> Ok
 
                 _ ->
-                    Err (Exception ("don't know how to conj to " ++ inspect coll))
+                    Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
         | arity2 = Just <| Fixed <| pure (arity2 >> Result.map Const)
@@ -1060,7 +1071,7 @@ peek =
                     Ok Nil
 
                 _ ->
-                    Err <| Exception ("Cannot use " ++ inspect val ++ " as a queue")
+                    Err <| Exception ("Cannot use " ++ inspect val ++ " as a queue") []
     in
     { emptyCallable
         | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
@@ -1137,7 +1148,7 @@ rest_ =
                             )
 
                         _ ->
-                            ( Err ( Located.unknown (Exception "Interpreter error: seq returned a non-list"), env2 )
+                            ( Err ( Located.unknown (Runtime.exception env2 "Interpreter error: seq returned a non-list"), env2 )
                             , Just (Thunk k)
                             )
                 )
@@ -1156,7 +1167,7 @@ throw =
                     Err e
 
                 _ ->
-                    Err (Exception (inspect v ++ " is not throwable"))
+                    Err (Exception (inspect v ++ " is not throwable") [])
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| pure arity1
@@ -1169,10 +1180,10 @@ newException =
         arity1 v =
             case v of
                 String s ->
-                    Ok (Throwable (Exception s))
+                    Ok (Throwable (Exception s []))
 
                 _ ->
-                    Err (Exception "exception message must be a string")
+                    Err (Exception "exception message must be a string" [])
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
@@ -1209,7 +1220,7 @@ apply =
                     args
                         |> List.drop (numArgs - 1)
                         |> List.head
-                        |> Result.fromMaybe (Exception "Interpreter error: arity2 function doesn't have a 2nd argument")
+                        |> Result.fromMaybe (Exception "Interpreter error: arity2 function doesn't have a 2nd argument" [])
                         |> Result.andThen Runtime.toSeq
             in
             case listArgsResult of
@@ -1293,7 +1304,7 @@ assoc =
                 kvs =
                     listToPairs signature.rest
                         |> Maybe.map ((::) ( firstK, firstV ))
-                        |> Result.fromMaybe (Exception "invalid number of key/value args to assoc")
+                        |> Result.fromMaybe (Exception "invalid number of key/value args to assoc" [])
 
                 keysToInt l =
                     case l of
@@ -1306,7 +1317,7 @@ assoc =
                                     keysToInt rest |> Result.map ((::) ( i, v ))
 
                                 _ ->
-                                    Err (Exception "Key must be integer")
+                                    Err (Exception "Key must be integer" [])
             in
             case val of
                 Map m ->
@@ -1330,7 +1341,7 @@ assoc =
                                                     Ok <| Array.set k (Located.unknown v) arr
 
                                                 else
-                                                    Err <| Exception "index out of bounds"
+                                                    Err <| Exception "index out of bounds" []
                                             )
                                 )
                                 (Ok array)
@@ -1343,7 +1354,7 @@ assoc =
                         |> Result.map Map
 
                 _ ->
-                    Err (Exception (inspect val ++ " is not associable"))
+                    Err (Exception (inspect val ++ " is not associable") [])
     in
     { emptyCallable | arity3 = Just <| Variadic <| pure (arity3 >> Result.map Const) }
 
@@ -1370,7 +1381,7 @@ dissoc =
                     Ok Nil
 
                 _ ->
-                    Err (Exception (inspect val ++ " is not dissociable"))
+                    Err (Exception (inspect val ++ " is not dissociable") [])
     in
     { emptyCallable | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const) }
 
@@ -1384,7 +1395,7 @@ key_ =
                     Ok (Const k)
 
                 _ ->
-                    Err (Exception (inspect v ++ " is not a map entry"))
+                    Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| pure arity1
@@ -1400,7 +1411,7 @@ val_ =
                     Ok (Const value)
 
                 _ ->
-                    Err (Exception (inspect v ++ " is not a map entry"))
+                    Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| pure arity1

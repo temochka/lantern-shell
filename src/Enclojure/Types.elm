@@ -2,12 +2,12 @@ module Enclojure.Types exposing (..)
 
 import Array exposing (Array)
 import Dict exposing (Dict)
-import Enclojure.Located exposing (Located)
+import Enclojure.Located as Located exposing (Located)
 import Set
 
 
 type Exception
-    = Exception String
+    = Exception String (List StackFrame)
 
 
 type alias Continuation =
@@ -147,7 +147,14 @@ type Value
     | Throwable Exception
 
 
+type alias StackFrame =
+    { name : String
+    , location : Located.Location
+    }
+
+
 type alias Env =
     { global : Dict String Value
     , local : Dict String Value
+    , stack : List StackFrame
     }

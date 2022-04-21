@@ -153,7 +153,7 @@ resolveSymbol env symbol =
                     Ok (Fn (Just symbol) (Runtime.toContinuation Lib.savepoint))
 
                 _ ->
-                    Err (Exception ("Unknown symbol " ++ symbol))
+                    Err (Runtime.exception env ("Unknown symbol " ++ symbol))
             )
 
 
@@ -174,7 +174,11 @@ evalExpression mutableExpr mutableEnv mutableK =
         mutableExpr
         mutableEnv
         mutableK
-        (\(Located loc expr) env k ->
+        (\(Located loc expr) inputEnv k ->
+            let
+                env =
+                    Runtime.setCurrentStackFrameLocation loc inputEnv
+            in
             case expr of
                 Vector v ->
                     evalVector (Located loc v) env k
@@ -272,7 +276,7 @@ evalVector (Located loc vecV) env k =
                                 )
 
                         _ ->
-                            ( Err ( Located loc (Exception "Interpreter error: vector evaluation yielded a non-vector"), envNow )
+                            ( Err ( Located loc (Runtime.exception envNow "Interpreter error: vector evaluation yielded a non-vector"), envNow )
                             , Just (Thunk a)
                             )
             )
@@ -306,8 +310,7 @@ evalMap (Located mapLoc map) env k =
                                             )
 
                                         _ ->
-                                            ( "Interpreter error: Map entry evaluation yielded a non-map entry"
-                                                |> Exception
+                                            ( Runtime.exception mapEntryEnv "Interpreter error: Map entry evaluation yielded a non-map entry"
                                                 |> Located loc
                                                 |> (\ex -> ( ex, mapEntryEnv ))
                                                 |> Err
@@ -316,8 +319,7 @@ evalMap (Located mapLoc map) env k =
                                 )
 
                         _ ->
-                            ( "Interpreter error: Map evaluation yielded a non-map"
-                                |> Exception
+                            ( Runtime.exception renv "Interpreter error: Map evaluation yielded a non-map"
                                 |> Located loc
                                 |> (\ex -> ( ex, renv ))
                                 |> Err
@@ -368,8 +370,7 @@ evalSet (Located setLoc set) env k =
                                 )
 
                         _ ->
-                            ( "Interpreter error: Set evaluation yielded a non-set"
-                                |> Exception
+                            ( Runtime.exception renv "Interpreter error: Set evaluation yielded a non-set"
                                 |> Located loc
                                 |> (\ex -> ( ex, renv ))
                                 |> Err
@@ -392,7 +393,7 @@ destructure arg template =
             arg
                 |> Located.getValue
                 |> Runtime.toMap
-                |> Result.fromMaybe (Located loc (Exception "type error: destructured value is not associative"))
+                |> Result.fromMaybe (Located loc (Exception "type error: destructured value is not associative" []))
                 |> Result.andThen
                     (\map ->
                         let
@@ -402,7 +403,7 @@ destructure arg template =
                                     |> Maybe.map Located.getValue
                                     |> Maybe.withDefault (List [])
                                     |> Runtime.trySequenceOf Runtime.trySymbol
-                                    |> Result.fromMaybe (Located loc (Exception "type error: :keys must be a vector of symbols"))
+                                    |> Result.fromMaybe (Located loc (Exception "type error: :keys must be a vector of symbols" []))
                                     |> Result.map
                                         (\keys ->
                                             keys
@@ -422,7 +423,7 @@ destructure arg template =
                                     |> Maybe.map Located.getValue
                                     |> Maybe.withDefault (List [])
                                     |> Runtime.trySequenceOf Runtime.trySymbol
-                                    |> Result.fromMaybe (Located loc (Exception "type error: :strs must be a vector of symbols"))
+                                    |> Result.fromMaybe (Located loc (Exception "type error: :strs must be a vector of symbols" []))
                                     |> Result.map
                                         (\keys ->
                                             keys
@@ -459,7 +460,7 @@ destructure arg template =
 
                             defaults =
                                 if ValueMap.member (Keyword "or") templateMap then
-                                    Err (Located loc (Exception ":or is not supported"))
+                                    Err (Located loc (Exception ":or is not supported" []))
 
                                 else
                                     Ok []
@@ -533,7 +534,7 @@ destructure arg template =
                             )
 
         _ ->
-            Err (Located.sameAs arg (Exception "Parsing error: arguments didn't match the function definition"))
+            Err (Located.sameAs arg (Exception "Parsing error: arguments didn't match the function definition" []))
 
 
 mapArgs : List (Located Value) -> List (Located Value) -> Result (Located Exception) (List ( String, Value ))
@@ -543,13 +544,13 @@ mapArgs args bindings =
             Ok [ ( name, List args ) ]
 
         ( _, (Located loc (Symbol "&")) :: [] ) ->
-            Err (Located loc (Exception "Parsing error: no symbol after &"))
+            Err (Located loc (Exception "Parsing error: no symbol after &" []))
 
         ( (Located loc _) :: _, [] ) ->
-            Err (Located loc (Exception "Argument error: Too many arguments"))
+            Err (Located loc (Exception "Argument error: Too many arguments" []))
 
         ( [], (Located loc (Symbol _)) :: _ ) ->
-            Err (Located loc (Exception "Argument error: Too few arguments"))
+            Err (Located loc (Exception "Argument error: Too few arguments" []))
 
         ( arg :: restArgs, template :: restBindings ) ->
             destructure arg template
@@ -559,7 +560,7 @@ mapArgs args bindings =
                     )
 
         ( _, (Located loc _) :: _ ) ->
-            Err (Located loc (Exception "Parsing error: arguments didn't match the function definition"))
+            Err (Located loc (Exception "Parsing error: arguments didn't match the function definition" []))
 
         ( [], [] ) ->
             Ok []
@@ -574,7 +575,7 @@ bindArgs (Located loc argsExpr) bindings env =
                     (List.foldl (\( k, v ) aEnv -> Runtime.setLocalEnv k v aEnv) env)
 
         _ ->
-            Err (Located loc (Exception "Interpreter error: applied arguments are not a list"))
+            Err (Located loc (Exception "Interpreter error: applied arguments are not a list" []))
 
 
 mapBindingsToBodies : List (Located Value) -> Result (Located Exception) (List ( List (Located Value), Located Value ))
@@ -584,7 +585,7 @@ mapBindingsToBodies signatures =
             mapBindingsToBodies rest |> Result.map (\r -> ( Array.toList argBindings, wrapInDo (Located loc body) ) :: r)
 
         (Located loc _) :: _ ->
-            Err (Located loc (Exception "Parsing error: malformed function arity"))
+            Err (Located loc (Exception "Parsing error: malformed function arity" []))
 
         [] ->
             Ok []
@@ -629,7 +630,7 @@ evalFn (Located loc exprs) fnEnv k =
                         (\args callsiteEnv ->
                             let
                                 callEnvResult =
-                                    { fnEnv | global = callsiteEnv.global }
+                                    { callsiteEnv | local = fnEnv.local }
                                         |> (name
                                                 |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self)
                                                 |> Maybe.withDefault identity
@@ -660,7 +661,7 @@ evalFn (Located loc exprs) fnEnv k =
                     (\args callsiteEnv ->
                         let
                             callEnvBodyResult =
-                                { fnEnv | global = callsiteEnv.global }
+                                { callsiteEnv | local = fnEnv.local }
                                     |> (name
                                             |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self)
                                             |> Maybe.withDefault identity
@@ -679,6 +680,7 @@ evalFn (Located loc exprs) fnEnv k =
                                                             (Located loc
                                                                 (Exception
                                                                     "Argument error: no matching arity"
+                                                                    []
                                                                 )
                                                             )
                                                     )
@@ -724,7 +726,7 @@ evalLet (Located loc body) env k =
                     Ok []
 
                 _ ->
-                    Err (Located loc (Exception "Syntax error: let received an uneven number of binding pairs"))
+                    Err (Located loc (Runtime.exception env "Syntax error: let received an uneven number of binding pairs"))
     in
     case body of
         (Located bodyLoc (Vector bindings)) :: doBody ->
@@ -772,7 +774,7 @@ evalLet (Located loc body) env k =
             )
 
         _ ->
-            ( Err ( Located loc (Exception "Syntax error: let expects a vector of bindings"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "Syntax error: let expects a vector of bindings"), env ), Just (Thunk k) )
 
 
 evalApply : Located Value -> Located (List (Located Value)) -> Env -> Continuation -> Step
@@ -794,8 +796,7 @@ evalApply fnExpr (Located loc argExprs) env k =
                                                 a (Located loc (List (ea ++ [ arg ]))) argEnv
 
                                             _ ->
-                                                ( "Impossible interpreter state: list evaluation yielded a non-list"
-                                                    |> Exception
+                                                ( Runtime.exception argEnv "Impossible interpreter state: list evaluation yielded a non-list"
                                                     |> Located loc
                                                     |> (\ex -> ( ex, argEnv ))
                                                     |> Err
@@ -821,7 +822,7 @@ evalQuote (Located loc exprs) env k =
         _ ->
             ( Err
                 ( Located loc
-                    (Exception
+                    (Runtime.exception env
                         ("Argument error: Wrong number of arguments ("
                             ++ String.fromInt (List.length exprs)
                             ++ ") passed to quote"
@@ -851,7 +852,7 @@ evalIf : Located (List (Located Value)) -> Env -> Continuation -> Step
 evalIf (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ :: _ ->
-            ( Err ( Located loc (Exception "an if with too many forms"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "an if with too many forms"), env ), Just (Thunk k) )
 
         [ eIf, eThen, eElse ] ->
             evalExpression eIf
@@ -876,17 +877,17 @@ evalIf (Located loc args) env k =
                 )
 
         [ _ ] ->
-            ( Err ( Located loc (Exception "an if without then"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "an if without then"), env ), Just (Thunk k) )
 
         [] ->
-            ( Err ( Located loc (Exception "an empty if"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "an empty if"), env ), Just (Thunk k) )
 
 
 evalDef : Located (List (Located Value)) -> Env -> Continuation -> Step
 evalDef (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ ->
-            ( Err ( Located loc (Exception "too many arguments to def"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "too many arguments to def"), env ), Just (Thunk k) )
 
         [ Located _ (Symbol name), e ] ->
             evalExpression e
@@ -901,16 +902,16 @@ evalDef (Located loc args) env k =
                 )
 
         [ _, _ ] ->
-            ( Err ( Located loc (Exception "def accepts a symbol and an expression"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "def accepts a symbol and an expression"), env ), Just (Thunk k) )
 
         [ Located _ (Symbol name) ] ->
-            ( Err ( Located loc (Exception ("empty def " ++ name)), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env ("empty def " ++ name)), env ), Just (Thunk k) )
 
         [ _ ] ->
-            ( Err ( Located loc (Exception "def expects a symbol as its first argument"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "def expects a symbol as its first argument"), env ), Just (Thunk k) )
 
         [] ->
-            ( Err ( Located loc (Exception "no arguments to def"), env ), Just (Thunk k) )
+            ( Err ( Located loc (Runtime.exception env "no arguments to def"), env ), Just (Thunk k) )
 
 
 wrapInDo : Located (List (Located Value)) -> Located Value
@@ -918,9 +919,10 @@ wrapInDo (Located loc vs) =
     Located loc (List (Located loc (Symbol "do") :: vs))
 
 
-prelude : Result (List Parser.DeadEnd) (List (Located Value))
+prelude : Result (Located Exception) (List (Located Value))
 prelude =
     Parser.parse Lib.prelude
+        |> Result.mapError (deadEndsToString >> Runtime.exception Runtime.emptyEnv >> Located.unknown)
 
 
 terminate : Continuation
@@ -942,7 +944,7 @@ trampolinePure ( result, thunk ) =
                             Ok ( v, env )
 
                 _ ->
-                    Err (Located.sameAs io (Exception "Interpreter error: An unexpected side effect during init"))
+                    Err (Located.sameAs io (Runtime.exception env "Interpreter error: An unexpected side effect during init"))
 
         Err ( e, _ ) ->
             Err e
@@ -953,7 +955,6 @@ init =
     prelude
         |> Result.map (Located.unknown >> wrapInDo)
         |> Result.map (\program -> evalExpression program Runtime.emptyEnv terminate)
-        |> Result.mapError (always (Located.unknown (Exception "Interpreter error: Dead end")))
         |> Result.andThen trampolinePure
         |> Result.map (\( _, env ) -> env)
         |> Result.withDefault Runtime.emptyEnv
@@ -1018,13 +1019,13 @@ problemToString p =
 evalPure : Env -> String -> Result (Located Exception) ( Value, Env )
 evalPure initEnv code =
     Parser.parse code
-        |> Result.mapError (deadEndsToString >> Exception)
+        |> Result.mapError (deadEndsToString >> Runtime.exception initEnv)
         |> Result.andThen
             (\exprs ->
                 exprs
                     |> List.head
                     |> Maybe.map ((\lv -> Located.sameAs lv exprs) >> wrapInDo)
-                    |> Result.fromMaybe (Exception "Empty program")
+                    |> Result.fromMaybe (Runtime.exception initEnv "Empty program")
             )
         |> Result.map
             (\program ->
@@ -1039,16 +1040,16 @@ evalPure initEnv code =
 eval : Env -> String -> Step
 eval initEnv code =
     Parser.parse code
-        |> Result.mapError (deadEndsToString >> Exception)
+        |> Result.mapError (deadEndsToString >> Runtime.exception initEnv >> Located.unknown)
         |> Result.map2
             (\a b -> a ++ b)
-            (prelude |> Result.mapError (always (Exception "Interpreter error: failed to load the prelude")))
+            prelude
         |> Result.andThen
             (\exprs ->
                 exprs
                     |> List.head
                     |> Maybe.map ((\lv -> Located.sameAs lv exprs) >> wrapInDo)
-                    |> Result.fromMaybe (Exception "Empty program")
+                    |> Result.fromMaybe (Located.unknown (Exception "Empty program" []))
             )
         |> Result.map
             (\program ->
@@ -1062,7 +1063,7 @@ eval initEnv code =
                         v
 
                     Err e ->
-                        ( Err ( Located.unknown e, initEnv )
+                        ( Err ( e, initEnv )
                         , Nothing
                         )
            )

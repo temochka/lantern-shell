@@ -253,7 +253,7 @@ parser =
                                 Ok v ->
                                     Parser.succeed v
 
-                                Err (Exception e) ->
+                                Err (Exception e _) ->
                                     Parser.problem e
                        )
             )

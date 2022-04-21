@@ -33,7 +33,11 @@ decode =
 decodeFromString : String -> Result Exception Value
 decodeFromString json =
     Json.Decode.decodeString decode json
-        |> Result.mapError (Json.Decode.errorToString >> String.append "JSON parsing error: " >> Exception)
+        |> Result.mapError
+            (Json.Decode.errorToString
+                >> String.append "JSON parsing error: "
+                >> (\msg -> Exception msg [])
+            )
 
 
 toDict : ValueMap -> Dict String Json.Encode.Value
