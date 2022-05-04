@@ -24,15 +24,35 @@ parse code =
     Parser.run parser code
 
 
-number : Parser Value
-number =
+negateNumber : Number -> Number
+negateNumber num =
+    case num of
+        Int v ->
+            Int -v
+
+        Float v ->
+            Float -v
+
+
+positiveNumber : Parser Number
+positiveNumber =
     Parser.number
-        { int = Just (Int >> Number)
-        , float = Just (Float >> Number)
+        { int = Just Int
+        , float = Just Float
         , hex = Nothing
         , octal = Nothing
         , binary = Nothing
         }
+
+
+number : Parser Value
+number =
+    Parser.oneOf
+        [ Parser.succeed (Number << negateNumber)
+            |. Parser.symbol "-"
+            |= positiveNumber
+        , Parser.map Number positiveNumber
+        ]
         |> Parser.backtrackable
 
 

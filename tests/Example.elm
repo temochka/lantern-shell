@@ -73,6 +73,8 @@ suite =
         , describe "numbers"
             [ "42" |> expectValue (Number <| Int 42)
             , "42.0" |> expectValue (Number <| Float 42.0)
+            , "-42" |> expectValue (Number <| Int -42)
+            , "-42.0" |> expectValue (Number <| Float -42.0)
             ]
         , describe "strings"
             [ "\"\"" |> (expectValue <| String "")
@@ -489,12 +491,12 @@ suite =
             , "((constantly :ret-c) 1 2)" |> (expectValue <| Keyword "ret-c")
             ]
         , describe "complement"
-            [ "((complement neg?) (- 3))" |> (expectValue <| Bool False)
+            [ "((complement neg?) -3)" |> (expectValue <| Bool False)
             , "((complement seq) [])" |> (expectValue <| Bool True)
             ]
         , describe "dec"
             [ "(dec 1)" |> (expectValue <| Number <| Int 0)
-            , "(dec (- 1))" |> (expectValue <| Number <| Int -2)
+            , "(dec -1)" |> (expectValue <| Number <| Int -2)
             ]
         , describe "dedupe"
             [ "(= (dedupe ()) ())" |> (expectValue <| Bool True)
@@ -556,7 +558,7 @@ suite =
             [ "(identity :ret)" |> (expectValue <| Keyword "ret") ]
         , describe "inc"
             [ "(inc 0)" |> (expectValue <| Number <| Int 1)
-            , "(inc (- 1))" |> (expectValue <| Number <| Int 0)
+            , "(inc -1)" |> (expectValue <| Number <| Int 0)
             ]
         , describe "into"
             [ "(= (into [] (list 1 2 3 4)) [1 2 3 4])" |> (expectValue <| Bool True)
@@ -673,8 +675,8 @@ suite =
             ]
         , describe "mod"
             [ "(mod 5 2)" |> (expectValue <| Number <| Int 1)
-            , "(mod 7 (- 2))" |> (expectValue <| Number <| Int -1)
-            , "(mod (- 9) (- 2))" |> (expectValue <| Number <| Int -1)
+            , "(mod 7 -2)" |> (expectValue <| Number <| Int -1)
+            , "(mod -9 -2)" |> (expectValue <| Number <| Int -1)
             ]
         , describe "Exception."
             [ "(Exception. \"error\")" |> (expectValue <| Throwable <| Exception "error" []) ]
@@ -692,7 +694,7 @@ suite =
         , describe "neg?"
             [ "(neg? 3)" |> (expectValue <| Bool False)
             , "(neg? 0)" |> (expectValue <| Bool False)
-            , "(neg? (- 10))" |> (expectValue <| Bool True)
+            , "(neg? -10)" |> (expectValue <| Bool True)
             ]
         , describe "next"
             [ "(next nil)" |> expectValue Nil
@@ -736,7 +738,7 @@ suite =
         , describe "pos?"
             [ "(pos? 3)" |> (expectValue <| Bool True)
             , "(pos? 0)" |> (expectValue <| Bool False)
-            , "(pos? (- 10))" |> (expectValue <| Bool False)
+            , "(pos? -10)" |> (expectValue <| Bool False)
             ]
         , describe "pr-str"
             [ "(pr-str 42)" |> (expectValue <| String "42")
@@ -774,7 +776,7 @@ suite =
             ]
         , describe "repeat"
             [ "(= (repeat 0 nil) ())" |> (expectValue <| Bool True)
-            , "(= (repeat (- 1) nil) ())" |> (expectValue <| Bool True)
+            , "(= (repeat -1 nil) ())" |> (expectValue <| Bool True)
             , "(= (repeat 1 nil) (list nil))" |> (expectValue <| Bool True)
             , "(= (repeat 5 1) (list 1 1 1 1 1))" |> (expectValue <| Bool True)
             ]
@@ -894,7 +896,7 @@ suite =
         , describe "zero?"
             [ "(zero? 3)" |> (expectValue <| Bool False)
             , "(zero? 0)" |> (expectValue <| Bool True)
-            , "(zero? (- 10))" |> (expectValue <| Bool False)
+            , "(zero? -10)" |> (expectValue <| Bool False)
             ]
         , describe "stack traces"
             [ """
