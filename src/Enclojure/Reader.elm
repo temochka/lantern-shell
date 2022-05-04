@@ -147,8 +147,8 @@ lineComment =
     Parser.lineComment ";"
 
 
-expression : Parser Value
-expression =
+uncommentedExpression : Parser Value
+uncommentedExpression =
     Parser.succeed identity
         |. Parser.spaces
         |= Parser.oneOf
@@ -163,6 +163,20 @@ expression =
             , keyword
             ]
         |. Parser.spaces
+
+
+expression : Parser Value
+expression =
+    Parser.oneOf
+        [ Parser.backtrackable <|
+            Parser.succeed identity
+                |. Parser.spaces
+                |. Parser.token "#_"
+                |. Parser.spaces
+                |. uncommentedExpression
+                |= uncommentedExpression
+        , uncommentedExpression
+        ]
 
 
 spaces : Parser ()

@@ -235,6 +235,12 @@ suite =
             , "#(map #(inc %) %)"
                 |> expectException "Parsing error: nested #() are not supported, use fn instead. at row 1, col 18"
             ]
+        , describe "#_"
+            [ "#_() nil" |> (expectValue <| Nil)
+            , "#_ () nil" |> (expectValue <| Nil)
+            , "#_ (42 43 44) nil" |> (expectValue <| Nil)
+            , "(+ 3 #_4 5)" |> (expectValue <| Number <| Int 8)
+            ]
 
         -- operators
         , describe "+"
