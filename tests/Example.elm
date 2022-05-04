@@ -92,6 +92,15 @@ suite =
             , "(:foo #{})" |> expectValue Nil
             , "(:foo #{:foo})" |> (expectValue <| Keyword "foo")
             ]
+        , describe "symbols"
+            [ "(quote symbol)" |> (expectValue <| Symbol "symbol")
+            , "(quote nil-symbol)" |> (expectValue <| Symbol "nil-symbol")
+            , "(quote false-symbol)" |> (expectValue <| Symbol "false-symbol")
+            , "(quote true-symbol)" |> (expectValue <| Symbol "true-symbol")
+            , "(quote symbol-nil)" |> (expectValue <| Symbol "symbol-nil")
+            , "(quote symbol-false)" |> (expectValue <| Symbol "symbol-false")
+            , "(quote symbol-true)" |> (expectValue <| Symbol "symbol-true")
+            ]
         , describe "lists"
             [ "()" |> (expectValue <| List [])
             ]
@@ -696,6 +705,11 @@ suite =
             , "(next (list 1))" |> expectValue Nil
             , "(= (next [1 2 3]) (list 2 3))" |> (expectValue <| Bool True)
             , "(= (next (list 1 2 3)) (list 2 3))" |> (expectValue <| Bool True)
+            ]
+        , describe "nil?"
+            [ "(nil? nil)" |> (expectValue <| Bool True)
+            , "(nil? false)" |> (expectValue <| Bool False)
+            , "(nil? \"nil\")" |> (expectValue <| Bool False)
             ]
         , describe "not"
             [ "(not true)" |> (expectValue <| Bool False)

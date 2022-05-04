@@ -84,7 +84,21 @@ symbolLike =
 
 symbol : Parser Value
 symbol =
-    Parser.succeed Symbol
+    Parser.succeed
+        (\token ->
+            case token of
+                "nil" ->
+                    Nil
+
+                "true" ->
+                    Bool True
+
+                "false" ->
+                    Bool False
+
+                _ ->
+                    Symbol token
+        )
         |= symbolLike
 
 
@@ -124,8 +138,6 @@ expression =
             , vector
             , valueMap
             , valueSet
-            , bool
-            , nil
             , number
             , symbol
             , keyword
@@ -139,26 +151,6 @@ spaces =
         [ Parser.spaces
         , Parser.chompIf (\c -> c == ',')
         ]
-
-
-nil : Parser Value
-nil =
-    Parser.keyword "nil" |> Parser.map (always Nil)
-
-
-true : Parser Value
-true =
-    Parser.keyword "true" |> Parser.map (always (Bool True))
-
-
-bool : Parser Value
-bool =
-    Parser.oneOf [ true, false ]
-
-
-false : Parser Value
-false =
-    Parser.keyword "false" |> Parser.map (always (Bool False))
 
 
 vector : Parser Value

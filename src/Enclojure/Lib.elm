@@ -1624,4 +1624,9 @@ prelude =
 (defn constantly
   [x]
   (fn [& _args] x))
+
+(defn nil?
+  [x]
+  (= nil x))
+
 """
