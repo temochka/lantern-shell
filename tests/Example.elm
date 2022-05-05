@@ -327,6 +327,12 @@ suite =
             , "(<= 4.0 2)" |> (expectValue <| Bool False)
             , "(<= 2.0 4.0)" |> (expectValue <| Bool True)
             ]
+        , describe "'"
+            [ "'(foo)" |> (expectValue <| List [ Located.at ( 1, 3 ) ( 1, 6 ) (Symbol "foo") ])
+            , "'symbol" |> (expectValue <| Symbol "symbol")
+            , "' symbol" |> (expectValue <| Symbol "symbol")
+            , "'()" |> (expectValue <| List [])
+            ]
 
         -- built-in macros
         , describe "and"

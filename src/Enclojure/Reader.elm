@@ -165,6 +165,11 @@ uncommentedExpression =
         |. Parser.spaces
 
 
+wrapInQuote : Value -> Value
+wrapInQuote val =
+    List [ Located.unknown (Symbol "quote"), Located.unknown val ]
+
+
 expression : Parser Value
 expression =
     Parser.oneOf
@@ -174,6 +179,12 @@ expression =
                 |. Parser.token "#_"
                 |. Parser.spaces
                 |. uncommentedExpression
+                |= uncommentedExpression
+        , Parser.backtrackable <|
+            Parser.succeed wrapInQuote
+                |. Parser.spaces
+                |. Parser.symbol "'"
+                |. Parser.spaces
                 |= uncommentedExpression
         , uncommentedExpression
         ]
