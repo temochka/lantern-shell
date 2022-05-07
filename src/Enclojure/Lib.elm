@@ -1,47 +1,4 @@
-module Enclojure.Lib exposing
-    ( apply
-    , assoc
-    , conj
-    , cons
-    , contains
-    , dissoc
-    , div
-    , first
-    , get
-    , http
-    , isEqual
-    , isFloat
-    , isGreaterThan
-    , isGreaterThanOrEqual
-    , isInteger
-    , isLessThan
-    , isLessThanOrEqual
-    , isNotEqual
-    , isNumber
-    , jsonDecode
-    , jsonEncode
-    , key_
-    , list
-    , minus
-    , mul
-    , newException
-    , not_
-    , peek
-    , plus
-    , prStr
-    , prelude
-    , readField
-    , rem
-    , rest_
-    , savepoint
-    , second
-    , seq
-    , sleep
-    , str
-    , throw
-    , ui
-    , val_
-    )
+module Enclojure.Lib exposing (init, prelude)
 
 import Array
 import Dict
@@ -52,6 +9,93 @@ import Enclojure.Types exposing (..)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
+
+
+init : Env -> Env
+init env =
+    env
+        |> Runtime.setGlobalEnv "+"
+            (Fn (Just "+") (Runtime.toContinuation plus))
+        |> Runtime.setGlobalEnv "-"
+            (Fn (Just "-") (Runtime.toContinuation minus))
+        |> Runtime.setGlobalEnv "/"
+            (Fn (Just "/") (Runtime.toContinuation div))
+        |> Runtime.setGlobalEnv "*"
+            (Fn (Just "*") (Runtime.toContinuation mul))
+        |> Runtime.setGlobalEnv "="
+            (Fn (Just "=") (Runtime.toContinuation isEqual))
+        |> Runtime.setGlobalEnv "not="
+            (Fn (Just "not=") (Runtime.toContinuation isNotEqual))
+        |> Runtime.setGlobalEnv ">"
+            (Fn (Just ">") (Runtime.toContinuation isGreaterThan))
+        |> Runtime.setGlobalEnv ">="
+            (Fn (Just ">=") (Runtime.toContinuation isGreaterThanOrEqual))
+        |> Runtime.setGlobalEnv "<"
+            (Fn (Just "<") (Runtime.toContinuation isLessThan))
+        |> Runtime.setGlobalEnv "<="
+            (Fn (Just "<=") (Runtime.toContinuation isLessThanOrEqual))
+        |> Runtime.setGlobalEnv "apply"
+            (Fn (Just "apply") (Runtime.toContinuation apply))
+        |> Runtime.setGlobalEnv "assoc"
+            (Fn (Just "assoc") (Runtime.toContinuation assoc))
+        |> Runtime.setGlobalEnv "conj"
+            (Fn (Just "conj") (Runtime.toContinuation conj))
+        |> Runtime.setGlobalEnv "cons"
+            (Fn (Just "cons") (Runtime.toContinuation cons))
+        |> Runtime.setGlobalEnv "contains?"
+            (Fn (Just "contains?") (Runtime.toContinuation contains))
+        |> Runtime.setGlobalEnv "dissoc"
+            (Fn (Just "dissoc") (Runtime.toContinuation dissoc))
+        |> Runtime.setGlobalEnv "first"
+            (Fn (Just "first") (Runtime.toContinuation first))
+        |> Runtime.setGlobalEnv "float?"
+            (Fn (Just "float?") (Runtime.toContinuation isFloat))
+        |> Runtime.setGlobalEnv "get"
+            (Fn (Just "get") (Runtime.toContinuation get))
+        |> Runtime.setGlobalEnv "json/encode"
+            (Fn (Just "json/encode") (Runtime.toContinuation jsonEncode))
+        |> Runtime.setGlobalEnv "json/decode"
+            (Fn (Just "json/decode") (Runtime.toContinuation jsonDecode))
+        |> Runtime.setGlobalEnv "http/request"
+            (Fn (Just "http/request") (Runtime.toContinuation http))
+        |> Runtime.setGlobalEnv "integer?"
+            (Fn (Just "integer?") (Runtime.toContinuation isInteger))
+        |> Runtime.setGlobalEnv "key"
+            (Fn (Just "key") (Runtime.toContinuation key_))
+        |> Runtime.setGlobalEnv "list"
+            (Fn (Just "list") (Runtime.toContinuation list))
+        |> Runtime.setGlobalEnv "Exception."
+            (Fn (Just "Exception.") (Runtime.toContinuation newException))
+        |> Runtime.setGlobalEnv "not"
+            (Fn (Just "not") (Runtime.toContinuation not_))
+        |> Runtime.setGlobalEnv "number?"
+            (Fn (Just "number?") (Runtime.toContinuation isNumber))
+        |> Runtime.setGlobalEnv "peek"
+            (Fn (Just "peek") (Runtime.toContinuation peek))
+        |> Runtime.setGlobalEnv "pr-str"
+            (Fn (Just "pr-str") (Runtime.toContinuation prStr))
+        |> Runtime.setGlobalEnv "read-field"
+            (Fn (Just "read-field") (Runtime.toContinuation readField))
+        |> Runtime.setGlobalEnv "rem"
+            (Fn (Just "rem") (Runtime.toContinuation rem))
+        |> Runtime.setGlobalEnv "rest"
+            (Fn (Just "rest") (Runtime.toContinuation rest_))
+        |> Runtime.setGlobalEnv "second"
+            (Fn (Just "second") (Runtime.toContinuation second))
+        |> Runtime.setGlobalEnv "seq"
+            (Fn (Just "seq") (Runtime.toContinuation seq))
+        |> Runtime.setGlobalEnv "sleep"
+            (Fn (Just "sleep") (Runtime.toContinuation sleep))
+        |> Runtime.setGlobalEnv "str"
+            (Fn (Just "str") (Runtime.toContinuation str))
+        |> Runtime.setGlobalEnv "throw"
+            (Fn (Just "throw") (Runtime.toContinuation throw))
+        |> Runtime.setGlobalEnv "ui"
+            (Fn (Just "ui") (Runtime.toContinuation ui))
+        |> Runtime.setGlobalEnv "val"
+            (Fn (Just "val") (Runtime.toContinuation val_))
+        |> Runtime.setGlobalEnv "<o>"
+            (Fn (Just "<o>") (Runtime.toContinuation savepoint))
 
 
 sleep : Callable

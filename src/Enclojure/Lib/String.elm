@@ -1,8 +1,19 @@
-module Enclojure.Lib.String exposing (join, length, splitLines)
+module Enclojure.Lib.String exposing (init)
 
 import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, pure)
 import Enclojure.Types as Types exposing (Arity(..), Exception(..), IO(..), Value(..))
+
+
+init : Types.Env -> Types.Env
+init env =
+    env
+        |> Runtime.setGlobalEnv "string/join"
+            (Fn (Just "string/join") (Runtime.toContinuation join))
+        |> Runtime.setGlobalEnv "string/length"
+            (Fn (Just "string/length") (Runtime.toContinuation length))
+        |> Runtime.setGlobalEnv "string/split-lines"
+            (Fn (Just "string/split-lines") (Runtime.toContinuation splitLines))
 
 
 splitLines : Types.Callable

@@ -17,144 +17,7 @@ resolveSymbol : Env -> String -> Result Exception Value
 resolveSymbol env symbol =
     Runtime.fetchEnv symbol env.local
         |> orElse (\_ -> Runtime.fetchEnv symbol env.global)
-        |> Maybe.map Ok
-        |> Maybe.withDefault
-            (case symbol of
-                "+" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.plus))
-
-                "-" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.minus))
-
-                "/" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.div))
-
-                "*" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.mul))
-
-                "=" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isEqual))
-
-                "not=" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isNotEqual))
-
-                ">" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isGreaterThan))
-
-                ">=" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isGreaterThanOrEqual))
-
-                "<" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThan))
-
-                "<=" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isLessThanOrEqual))
-
-                "apply" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.apply))
-
-                "assoc" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.assoc))
-
-                "conj" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.conj))
-
-                "cons" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.cons))
-
-                "contains?" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.contains))
-
-                "dissoc" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.dissoc))
-
-                "first" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.first))
-
-                "float?" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isFloat))
-
-                "get" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.get))
-
-                "json/encode" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.jsonEncode))
-
-                "json/decode" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.jsonDecode))
-
-                "http/request" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.http))
-
-                "integer?" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isInteger))
-
-                "key" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.key_))
-
-                "list" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.list))
-
-                "Exception." ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.newException))
-
-                "not" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.not_))
-
-                "number?" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.isNumber))
-
-                "peek" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.peek))
-
-                "pr-str" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.prStr))
-
-                "read-field" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.readField))
-
-                "rem" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rem))
-
-                "rest" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.rest_))
-
-                "second" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.second))
-
-                "seq" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.seq))
-
-                "sleep" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.sleep))
-
-                "str" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.str))
-
-                "string/join" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation LibString.join))
-
-                "string/length" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation LibString.length))
-
-                "string/split-lines" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation LibString.splitLines))
-
-                "throw" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.throw))
-
-                "ui" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.ui))
-
-                "val" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.val_))
-
-                "<o>" ->
-                    Ok (Fn (Just symbol) (Runtime.toContinuation Lib.savepoint))
-
-                _ ->
-                    Err (Runtime.exception env ("Unknown symbol " ++ symbol))
-            )
+        |> Result.fromMaybe (Runtime.exception env ("Unknown symbol " ++ symbol))
 
 
 {-| Introduce a redundant closure to prevent closure shadowing via tail-call optimization
@@ -922,7 +785,7 @@ wrapInDo (Located loc vs) =
 prelude : Result (Located Exception) (List (Located Value))
 prelude =
     Parser.parse Lib.prelude
-        |> Result.mapError (deadEndsToString >> Runtime.exception Runtime.emptyEnv >> Located.unknown)
+        |> Result.mapError (deadEndsToString >> Runtime.exception defaultEnv >> Located.unknown)
 
 
 terminate : Continuation
@@ -950,14 +813,21 @@ trampolinePure ( result, thunk ) =
             Err e
 
 
+defaultEnv : Env
+defaultEnv =
+    Runtime.emptyEnv
+        |> Lib.init
+        |> LibString.init
+
+
 init : Env
 init =
     prelude
         |> Result.map (Located.unknown >> wrapInDo)
-        |> Result.map (\program -> evalExpression program Runtime.emptyEnv terminate)
+        |> Result.map (\program -> evalExpression program defaultEnv terminate)
         |> Result.andThen trampolinePure
         |> Result.map (\( _, env ) -> env)
-        |> Result.withDefault Runtime.emptyEnv
+        |> Result.withDefault defaultEnv
 
 
 deadEndsToString : List Parser.DeadEnd -> String
