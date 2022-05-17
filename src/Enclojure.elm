@@ -1,4 +1,4 @@
-module Enclojure exposing (eval, evalPure, init, terminate)
+module Enclojure exposing (defaultEnv, eval, evalPure, init, terminate)
 
 import Array exposing (Array)
 import Enclojure.Extra.Maybe exposing (orElse)
@@ -13,7 +13,7 @@ import Enclojure.ValueSet as ValueSet
 import Parser
 
 
-resolveSymbol : Env -> String -> Result Exception Value
+resolveSymbol : Env io -> String -> Result Exception (Value io)
 resolveSymbol env symbol =
     Runtime.fetchEnv symbol env.local
         |> orElse (\_ -> Runtime.fetchEnv symbol env.global)
@@ -31,7 +31,7 @@ closureHack3 a b c f =
     f a b c
 
 
-evalExpression : Located Value -> Env -> Continuation -> Step
+evalExpression : Located (Value io) -> Env io -> Continuation io -> Step io
 evalExpression mutableExpr mutableEnv mutableK =
     closureHack3
         mutableExpr
@@ -121,7 +121,7 @@ evalExpression mutableExpr mutableEnv mutableK =
         )
 
 
-evalVector : Located (Array (Located Value)) -> Env -> Continuation -> Step
+evalVector : Located (Array (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalVector (Located loc vecV) env k =
     ( Ok ( Located loc (Const (Vector Array.empty)), env )
     , vecV
@@ -149,7 +149,7 @@ evalVector (Located loc vecV) env k =
     )
 
 
-evalMap : Located Enclojure.Types.ValueMap -> Env -> Continuation -> Step
+evalMap : Located (Enclojure.Types.ValueMap io) -> Env io -> Continuation io -> Step io
 evalMap (Located mapLoc map) env k =
     ( Ok ( Located mapLoc (Const (Map ValueMap.empty)), env )
     , map
@@ -195,7 +195,7 @@ evalMap (Located mapLoc map) env k =
     )
 
 
-evalMapEntry : Located Enclojure.Types.ValueMapEntry -> Env -> Continuation -> Step
+evalMapEntry : Located (Enclojure.Types.ValueMapEntry io) -> Env io -> Continuation io -> Step io
 evalMapEntry (Located loc ( key, value )) env k =
     evalExpression (Located.unknown key)
         env
@@ -210,7 +210,7 @@ evalMapEntry (Located loc ( key, value )) env k =
         )
 
 
-evalSet : Located Enclojure.Types.ValueSet -> Env -> Continuation -> Step
+evalSet : Located (Enclojure.Types.ValueSet io) -> Env io -> Continuation io -> Step io
 evalSet (Located setLoc set) env k =
     ( Ok ( Located setLoc (Const (Set ValueSet.empty)), env )
     , set
@@ -246,7 +246,7 @@ evalSet (Located setLoc set) env k =
     )
 
 
-destructure : Located Value -> Located Value -> Result (Located Exception) (List ( String, Value ))
+destructure : Located (Value io) -> Located (Value io) -> Result (Located Exception) (List ( String, Value io ))
 destructure arg template =
     case template of
         Located _ (Symbol name) ->
@@ -400,7 +400,7 @@ destructure arg template =
             Err (Located.sameAs arg (Exception "Parsing error: arguments didn't match the function definition" []))
 
 
-mapArgs : List (Located Value) -> List (Located Value) -> Result (Located Exception) (List ( String, Value ))
+mapArgs : List (Located (Value io)) -> List (Located (Value io)) -> Result (Located Exception) (List ( String, Value io ))
 mapArgs args bindings =
     case ( args, bindings ) of
         ( _, (Located _ (Symbol "&")) :: (Located _ (Symbol name)) :: [] ) ->
@@ -429,7 +429,7 @@ mapArgs args bindings =
             Ok []
 
 
-bindArgs : Located Value -> List (Located Value) -> Env -> Result (Located Exception) Env
+bindArgs : Located (Value io) -> List (Located (Value io)) -> Env io -> Result (Located Exception) (Env io)
 bindArgs (Located loc argsExpr) bindings env =
     case argsExpr of
         List args ->
@@ -441,7 +441,7 @@ bindArgs (Located loc argsExpr) bindings env =
             Err (Located loc (Exception "Interpreter error: applied arguments are not a list" []))
 
 
-mapBindingsToBodies : List (Located Value) -> Result (Located Exception) (List ( List (Located Value), Located Value ))
+mapBindingsToBodies : List (Located (Value io)) -> Result (Located Exception) (List ( List (Located (Value io)), Located (Value io) ))
 mapBindingsToBodies signatures =
     case signatures of
         (Located _ (List ((Located loc (Vector argBindings)) :: body))) :: rest ->
@@ -469,7 +469,7 @@ listLocate pFn l =
                     listLocate pFn rest
 
 
-exctractFnName : List (Located Value) -> ( Maybe String, List (Located Value) )
+exctractFnName : List (Located (Value io)) -> ( Maybe String, List (Located (Value io)) )
 exctractFnName exprs =
     case exprs of
         (Located _ (Symbol name)) :: rest ->
@@ -479,7 +479,7 @@ exctractFnName exprs =
             ( Nothing, exprs )
 
 
-evalFn : Located (List (Located Value)) -> Env -> Continuation -> Step
+evalFn : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalFn (Located loc exprs) fnEnv k =
     let
         ( name, arity ) =
@@ -570,13 +570,13 @@ evalFn (Located loc exprs) fnEnv k =
             )
 
 
-scrubLocalEnv : Env -> Continuation -> Continuation
+scrubLocalEnv : Env io -> Continuation io -> Continuation io
 scrubLocalEnv priorEnv k =
     \v env ->
         ( Ok ( Located.map Const v, { env | local = priorEnv.local } ), Just (Thunk k) )
 
 
-evalLet : Located (List (Located Value)) -> Env -> Continuation -> Step
+evalLet : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalLet (Located loc body) env k =
     let
         parseBindings bindings =
@@ -640,7 +640,7 @@ evalLet (Located loc body) env k =
             ( Err ( Located loc (Runtime.exception env "Syntax error: let expects a vector of bindings"), env ), Just (Thunk k) )
 
 
-evalApply : Located Value -> Located (List (Located Value)) -> Env -> Continuation -> Step
+evalApply : Located (Value io) -> Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalApply fnExpr (Located loc argExprs) env k =
     evalExpression fnExpr
         env
@@ -674,7 +674,7 @@ evalApply fnExpr (Located loc argExprs) env k =
         )
 
 
-evalQuote : Located (List (Located Value)) -> Env -> Continuation -> Step
+evalQuote : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalQuote (Located loc exprs) env k =
     case exprs of
         [ arg ] ->
@@ -697,7 +697,7 @@ evalQuote (Located loc exprs) env k =
             )
 
 
-evalDo : Located (List (Located Value)) -> Env -> Continuation -> Step
+evalDo : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalDo (Located loc exprs) env k =
     ( Ok ( Located loc (Const Nil), env )
     , Just
@@ -711,7 +711,7 @@ evalDo (Located loc exprs) env k =
     )
 
 
-evalIf : Located (List (Located Value)) -> Env -> Continuation -> Step
+evalIf : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalIf (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ :: _ ->
@@ -746,7 +746,7 @@ evalIf (Located loc args) env k =
             ( Err ( Located loc (Runtime.exception env "an empty if"), env ), Just (Thunk k) )
 
 
-evalDef : Located (List (Located Value)) -> Env -> Continuation -> Step
+evalDef : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalDef (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ ->
@@ -777,23 +777,23 @@ evalDef (Located loc args) env k =
             ( Err ( Located loc (Runtime.exception env "no arguments to def"), env ), Just (Thunk k) )
 
 
-wrapInDo : Located (List (Located Value)) -> Located Value
+wrapInDo : Located (List (Located (Value io))) -> Located (Value io)
 wrapInDo (Located loc vs) =
     Located loc (List (Located loc (Symbol "do") :: vs))
 
 
-prelude : Result (Located Exception) (List (Located Value))
+prelude : Result (Located Exception) (List (Located (Value io)))
 prelude =
     Parser.parse Lib.prelude
         |> Result.mapError (deadEndsToString >> Runtime.exception defaultEnv >> Located.unknown)
 
 
-terminate : Continuation
+terminate : Continuation io
 terminate (Located pos v) env =
     ( Ok ( Located pos (Const v), env ), Nothing )
 
 
-trampolinePure : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Result (Located Exception) ( Value, Env )
+trampolinePure : ( Result ( Located Exception, Env io ) ( Located (IO io), Env io ), Maybe (Thunk io) ) -> Result (Located Exception) ( Value io, Env io )
 trampolinePure ( result, thunk ) =
     case result of
         Ok ( io, env ) ->
@@ -813,14 +813,14 @@ trampolinePure ( result, thunk ) =
             Err e
 
 
-defaultEnv : Env
+defaultEnv : Env io
 defaultEnv =
     Runtime.emptyEnv
         |> Lib.init
         |> LibString.init
 
 
-init : Env
+init : Env io
 init =
     prelude
         |> Result.map (Located.unknown >> wrapInDo)
@@ -886,7 +886,7 @@ problemToString p =
             "bad repeat"
 
 
-evalPure : Env -> String -> Result (Located Exception) ( Value, Env )
+evalPure : Env io -> String -> Result (Located Exception) ( Value io, Env io )
 evalPure initEnv code =
     Parser.parse code
         |> Result.mapError (deadEndsToString >> Runtime.exception initEnv)
@@ -907,7 +907,7 @@ evalPure initEnv code =
         |> Result.andThen trampolinePure
 
 
-eval : Env -> String -> Step
+eval : Env io -> String -> Step io
 eval initEnv code =
     Parser.parse code
         |> Result.mapError (deadEndsToString >> Runtime.exception initEnv >> Located.unknown)

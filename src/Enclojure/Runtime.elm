@@ -20,11 +20,11 @@ import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 
 
-type alias Step =
-    ( Result ( Exception, Env ) ( IO, Env ), Maybe Thunk )
+type alias Step io =
+    ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) )
 
 
-emptyEnv : Env
+emptyEnv : Env io
 emptyEnv =
     { global = Dict.empty
     , local = Dict.empty
@@ -32,22 +32,22 @@ emptyEnv =
     }
 
 
-setLocalEnv : String -> Value -> Env -> Env
+setLocalEnv : String -> Value io -> Env io -> Env io
 setLocalEnv key value env =
     { env | local = Dict.insert key value env.local }
 
 
-setGlobalEnv : String -> Value -> Env -> Env
+setGlobalEnv : String -> Value io -> Env io -> Env io
 setGlobalEnv key value env =
     { env | global = Dict.insert key value env.global }
 
 
-fetchEnv : String -> Dict.Dict String Value -> Maybe Value
+fetchEnv : String -> Dict.Dict String (Value io) -> Maybe (Value io)
 fetchEnv =
     Dict.get
 
 
-emptyCallable : Callable
+emptyCallable : Callable io
 emptyCallable =
     { arity0 = Nothing
     , arity1 = Nothing
@@ -56,7 +56,7 @@ emptyCallable =
     }
 
 
-extractVariadic : Maybe (Arity a) -> Maybe ({ args : a, rest : List Value } -> Env -> Continuation -> Step)
+extractVariadic : Maybe (Arity io a) -> Maybe ({ args : a, rest : List (Value io) } -> Env io -> Continuation io -> Step io)
 extractVariadic arity =
     arity
         |> Maybe.andThen
@@ -70,7 +70,7 @@ extractVariadic arity =
             )
 
 
-dispatch : Callable -> List Value -> Env -> Continuation -> Step
+dispatch : Callable io -> List (Value io) -> Env io -> Continuation io -> Step io
 dispatch callable args env k =
     case args of
         [] ->
@@ -179,7 +179,7 @@ dispatch callable args env k =
                     )
 
 
-toContinuation : Callable -> { self : Value, k : Continuation } -> Thunk
+toContinuation : Callable io -> { self : Value io, k : Continuation io } -> Thunk io
 toContinuation callable { k } =
     Thunk
         (\(Located pos arg) env ->
@@ -198,7 +198,7 @@ toContinuation callable { k } =
         )
 
 
-isTruthy : Value -> Bool
+isTruthy : Value io -> Bool
 isTruthy val =
     case val of
         Nil ->
@@ -211,7 +211,7 @@ isTruthy val =
             True
 
 
-toSeq : Value -> Result Exception (List (Located Value))
+toSeq : Value io -> Result Exception (List (Located (Value io)))
 toSeq val =
     case val of
         List l ->
@@ -239,7 +239,7 @@ toSeq val =
             Err <| Exception (inspect val ++ " is not a sequence") []
 
 
-toMap : Value -> Maybe Types.ValueMap
+toMap : Value io -> Maybe (Types.ValueMap io)
 toMap val =
     case val of
         Nil ->
@@ -255,7 +255,7 @@ toMap val =
             Nothing
 
 
-inspectLocated : Located Value -> String
+inspectLocated : Located (Value io) -> String
 inspectLocated locatedValue =
     let
         suffix =
@@ -267,7 +267,7 @@ inspectLocated locatedValue =
     inspect (Located.getValue locatedValue) ++ suffix
 
 
-inspect : Value -> String
+inspect : Value io -> String
 inspect value =
     case value of
         Ref name _ ->
@@ -324,7 +324,7 @@ inspect value =
             "Exception: " ++ str
 
 
-print : Value -> String
+print : Value io -> String
 print value =
     case value of
         String string ->
@@ -337,7 +337,7 @@ print value =
             inspect value
 
 
-toString : Value -> String
+toString : Value io -> String
 toString value =
     case value of
         String s ->
@@ -347,7 +347,7 @@ toString value =
             print value
 
 
-pure : (a -> Result Exception IO) -> (a -> Env -> Continuation -> Step)
+pure : (a -> Result Exception (IO io)) -> (a -> Env io -> Continuation io -> Step io)
 pure fn =
     \v env k ->
         ( fn v
@@ -357,7 +357,7 @@ pure fn =
         )
 
 
-getFn : String -> Callable
+getFn : String -> Callable io
 getFn key =
     let
         arity1 mapVal =
@@ -389,7 +389,7 @@ getFn key =
     }
 
 
-setLookupFn : Types.ValueSet -> Callable
+setLookupFn : Types.ValueSet io -> Callable io
 setLookupFn set =
     let
         arity1 val =
@@ -404,7 +404,7 @@ setLookupFn set =
     }
 
 
-mapLookupFn : Types.ValueMap -> Callable
+mapLookupFn : Types.ValueMap io -> Callable io
 mapLookupFn map =
     let
         arity1 val =
@@ -415,7 +415,7 @@ mapLookupFn map =
     }
 
 
-apply : Located Value -> Located Value -> Env -> Continuation -> Types.Step
+apply : Located (Value io) -> Located (Value io) -> Env io -> Continuation io -> Types.Step io
 apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
     let
         currentStack =
@@ -486,7 +486,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
             )
 
 
-tryString : Value -> Maybe String
+tryString : Value io -> Maybe String
 tryString value =
     case value of
         String s ->
@@ -496,7 +496,7 @@ tryString value =
             Nothing
 
 
-tryKeyword : Value -> Maybe String
+tryKeyword : Value io -> Maybe String
 tryKeyword value =
     case value of
         Keyword s ->
@@ -506,7 +506,7 @@ tryKeyword value =
             Nothing
 
 
-trySymbol : Value -> Maybe String
+trySymbol : Value io -> Maybe String
 trySymbol value =
     case value of
         Symbol s ->
@@ -516,7 +516,7 @@ trySymbol value =
             Nothing
 
 
-tryMap : Value -> Maybe Types.ValueMap
+tryMap : Value io -> Maybe (Types.ValueMap io)
 tryMap value =
     case value of
         Map s ->
@@ -526,7 +526,7 @@ tryMap value =
             Nothing
 
 
-trySequenceOf : (Value -> Maybe a) -> Value -> Maybe (List a)
+trySequenceOf : (Value io -> Maybe a) -> Value io -> Maybe (List a)
 trySequenceOf extract value =
     let
         extractAll sequence =
@@ -548,7 +548,7 @@ trySequenceOf extract value =
         |> Maybe.andThen extractAll
 
 
-tryDictOf : (Value -> Maybe comparable) -> (Value -> Maybe b) -> Value -> Maybe (Dict.Dict comparable b)
+tryDictOf : (Value io -> Maybe comparable) -> (Value io -> Maybe b) -> Value io -> Maybe (Dict.Dict comparable b)
 tryDictOf extractKey extractValue value =
     let
         extractAll kvSequence =
@@ -574,7 +574,7 @@ tryDictOf extractKey extractValue value =
             Nothing
 
 
-exception : Env -> String -> Exception
+exception : Env io -> String -> Exception
 exception env message =
     Exception message env.stack
 
@@ -584,7 +584,7 @@ setStackTrace stack (Exception msg _) =
     Exception msg stack
 
 
-setCurrentStackFrameLocation : Located.Location -> Env -> Env
+setCurrentStackFrameLocation : Located.Location -> Env io -> Env io
 setCurrentStackFrameLocation location env =
     let
         newStack =

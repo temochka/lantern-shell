@@ -44,7 +44,7 @@ type App msg
     | MigrationsApp MigrationsApp.Model
     | ReaderQueryApp ReaderQueryApp.Model
     | ScriptsApp ScriptsApp.Model
-    | ValueInspectorApp ValueInspectorApp.Model
+    | ValueInspectorApp (ValueInspectorApp.Model ScriptsApp.MyIO)
     | WriterQueryApp WriterQueryApp.Model
 
 
@@ -56,7 +56,7 @@ type Message msg
     | MigrationsMsg MigrationsApp.Message
     | ReaderQueryMsg ReaderQueryApp.Message
     | ScriptsMsg ScriptsApp.Message
-    | ValueInspectorMsg ValueInspectorApp.Message
+    | ValueInspectorMsg (ValueInspectorApp.Message ScriptsApp.MyIO)
     | WriterQueryMsg WriterQueryApp.Message
     | LaunchAppMsg (Lantern.App.App () () (App msg) (Message msg))
 
@@ -412,7 +412,7 @@ writerQuery context =
         WriterQueryApp.lanternApp
 
 
-valueInspector : Maybe ValueInspectorApp.Flags -> Context msg -> Lantern.App.App () () (App msg) (Message msg)
+valueInspector : Maybe (ValueInspectorApp.Flags ScriptsApp.MyIO) -> Context msg -> Lantern.App.App () () (App msg) (Message msg)
 valueInspector flags context =
     Lantern.App.mount
         { unwrapMsg =

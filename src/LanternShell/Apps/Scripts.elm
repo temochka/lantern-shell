@@ -1,13 +1,14 @@
 module LanternShell.Apps.Scripts exposing (..)
 
+import Array
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
 import Element.Input
 import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Cell(..), Env, Exception(..), IO(..), InputCell(..), InputKey, TextFormat(..), Thunk(..), UI, Value(..))
+import Enclojure.Runtime as Runtime exposing (emptyCallable)
+import Enclojure.Types exposing (Cell(..), Env, Exception(..), IO(..), InputCell(..), InputKey, TextFormat(..), Thunk(..), Value(..))
 import Enclojure.ValueMap
 import File.Download
 import Html.Events
@@ -34,9 +35,9 @@ type alias Context =
 type ConsoleEntry
     = ConsoleString String
     | UiTrace UiModel
-    | Savepoint_ ( ( Located IO, Env ), Maybe Thunk )
-    | Success Value
-    | Failure ( Located Exception, Env )
+    | Savepoint_ ( ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) )
+    | Success (Value MyIO)
+    | Failure ( Located Exception, Env MyIO )
 
 
 type alias Console =
@@ -95,7 +96,7 @@ traceUi model console =
     UiTrace model :: console
 
 
-recordSavepoint : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Console -> Console
+recordSavepoint : ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) ) -> Console -> Console
 recordSavepoint ( ret, thunk ) console =
     ret
         |> Result.map (\val -> Savepoint_ ( val, thunk ) :: console)
@@ -115,15 +116,326 @@ scriptName { name } =
         "unnamed script"
 
 
+sleep : Enclojure.Types.Callable MyIO
+sleep =
+    let
+        arity1 val =
+            case val of
+                Number (Enclojure.Types.Int i) ->
+                    Process.sleep (toFloat i)
+                        |> Task.map (\_ -> Nil)
+                        |> IOTask
+                        |> SideEffect
+                        |> Ok
+
+                Number (Enclojure.Types.Float i) ->
+                    Process.sleep i
+                        |> Task.map (\_ -> Nil)
+                        |> IOTask
+                        |> SideEffect
+                        |> Ok
+
+                _ ->
+                    Err (Exception "type error: sleep expects one integer argument" [])
+    in
+    { emptyCallable
+        | arity1 = Just (Enclojure.Types.Fixed (Runtime.pure arity1))
+    }
+
+
+savepoint : Enclojure.Types.Callable MyIO
+savepoint =
+    let
+        arity1 val =
+            Ok (SideEffect (Savepoint val))
+    in
+    { emptyCallable
+        | arity1 = Just (Enclojure.Types.Fixed (Runtime.pure arity1))
+    }
+
+
+type alias HttpRequest =
+    { method : String
+    , headers : List ( String, String )
+    , url : String
+    , body : Maybe String
+    }
+
+
+decodeHttpRequest : Value MyIO -> Result Exception HttpRequest
+decodeHttpRequest value =
+    value
+        |> Runtime.tryMap
+        |> Result.fromMaybe (Exception "type error: request must be a map" [])
+        |> Result.andThen
+            (\requestMap ->
+                let
+                    urlResult =
+                        requestMap
+                            |> Enclojure.ValueMap.get (Keyword "url")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.andThen Runtime.tryString
+                            |> Result.fromMaybe (Exception "type error: :url must be a string" [])
+
+                    headers =
+                        requestMap
+                            |> Enclojure.ValueMap.get (Keyword "headers")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.andThen (Runtime.tryDictOf Runtime.tryString Runtime.tryString)
+                            |> Maybe.map Dict.toList
+                            |> Maybe.withDefault []
+
+                    methodResult =
+                        requestMap
+                            |> Enclojure.ValueMap.get (Keyword "method")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.andThen Runtime.tryKeyword
+                            |> Result.fromMaybe (Exception "type error: method must be a keyword" [])
+
+                    bodyResult =
+                        requestMap
+                            |> Enclojure.ValueMap.get (Keyword "body")
+                            |> Maybe.map Located.getValue
+                            |> Maybe.withDefault Nil
+                            |> (\bodyValue ->
+                                    case bodyValue of
+                                        String s ->
+                                            Just (Just s)
+
+                                        Nil ->
+                                            Just Nothing
+
+                                        _ ->
+                                            Nothing
+                               )
+                            |> Result.fromMaybe (Exception "type error: body must be nil or string" [])
+                in
+                Result.map3
+                    (\url method body ->
+                        { method = String.toUpper method
+                        , headers = headers
+                        , url = url
+                        , body = body
+                        }
+                    )
+                    urlResult
+                    methodResult
+                    bodyResult
+            )
+
+
+http : Enclojure.Types.Callable MyIO
+http =
+    let
+        arity1 request env k =
+            case decodeHttpRequest request of
+                Ok req ->
+                    ( Ok ( SideEffect (Http req), env )
+                    , Just (Thunk (\v rEnv -> ( Ok ( Located.map Const v, rEnv ), Just (Thunk k) )))
+                    )
+
+                Err exception ->
+                    ( Err ( exception, env ), Just (Thunk k) )
+    in
+    { emptyCallable | arity1 = Just (Enclojure.Types.Fixed arity1) }
+
+
+ui : Enclojure.Types.Callable MyIO
+ui =
+    let
+        toTextPart (Located _ val) =
+            case val of
+                String s ->
+                    Ok (Plain s)
+
+                Vector v ->
+                    case Array.toList v of
+                        [ Located _ (Keyword "$"), Located _ (Keyword key) ] ->
+                            Ok (TextRef key)
+
+                        _ ->
+                            Err (Exception "type error: invalid text formatter" [])
+
+                _ ->
+                    Err (Exception "text parts must be plain strings" [])
+
+        toUi (Located _ val) =
+            case val of
+                Vector v ->
+                    case Array.toList v of
+                        (Located _ (Keyword "v-stack")) :: cells ->
+                            cells
+                                |> List.foldl
+                                    (\e acc ->
+                                        acc
+                                            |> Result.andThen
+                                                (\l ->
+                                                    toUi e
+                                                        |> Result.map
+                                                            (\retCell ->
+                                                                retCell :: l
+                                                            )
+                                                )
+                                    )
+                                    (Ok [])
+                                |> Result.map (List.reverse >> VStack)
+
+                        (Located _ (Keyword "h-stack")) :: cells ->
+                            cells
+                                |> List.foldl
+                                    (\e acc ->
+                                        acc
+                                            |> Result.andThen
+                                                (\l ->
+                                                    toUi e
+                                                        |> Result.map
+                                                            (\retCell ->
+                                                                retCell :: l
+                                                            )
+                                                )
+                                    )
+                                    (Ok [])
+                                |> Result.map (List.reverse >> HStack)
+
+                        (Located _ (Keyword "text")) :: parts ->
+                            parts
+                                |> List.foldr (\e a -> toTextPart e |> Result.map2 (\x y -> y :: x) a) (Ok [])
+                                |> Result.map Text
+
+                        (Located _ (Keyword "text-input")) :: args ->
+                            case args of
+                                (Located _ (Keyword key)) :: restArgs ->
+                                    let
+                                        options =
+                                            restArgs
+                                                |> List.head
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryMap
+                                                |> Maybe.withDefault Enclojure.ValueMap.empty
+
+                                        suggestions =
+                                            options
+                                                |> Enclojure.ValueMap.get (Keyword "suggestions")
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen (Runtime.trySequenceOf Runtime.tryString)
+                                                |> Maybe.withDefault []
+                                    in
+                                    Ok (Input key (TextInput { suggestions = suggestions }))
+
+                                _ ->
+                                    Err (Exception "type error: invalid arguments to text-input cell" [])
+
+                        (Located _ (Keyword "button")) :: args ->
+                            case args of
+                                (Located _ (Keyword key)) :: restArgs ->
+                                    let
+                                        options =
+                                            case restArgs of
+                                                (Located _ (Map m)) :: _ ->
+                                                    m
+
+                                                _ ->
+                                                    Enclojure.ValueMap.empty
+
+                                        title =
+                                            Enclojure.ValueMap.get (Keyword "title") options
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.withDefault key
+                                    in
+                                    Ok (Input key (Button { title = title }))
+
+                                _ ->
+                                    Err (Exception "type error: invalid arguments to button cell" [])
+
+                        (Located _ (Keyword "download")) :: args ->
+                            case args of
+                                (Located _ (Keyword key)) :: (Located _ (String content)) :: restArgs ->
+                                    let
+                                        options =
+                                            case restArgs of
+                                                (Located _ (Map m)) :: _ ->
+                                                    m
+
+                                                _ ->
+                                                    Enclojure.ValueMap.empty
+
+                                        contentType =
+                                            Enclojure.ValueMap.get (Keyword "content-type") options
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.withDefault "text/plain"
+
+                                        name =
+                                            Enclojure.ValueMap.get (Keyword "name") options
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.withDefault "download.txt"
+                                    in
+                                    Ok
+                                        (Input key
+                                            (Download
+                                                { name = name
+                                                , content = content
+                                                , contentType = contentType
+                                                }
+                                            )
+                                        )
+
+                                _ ->
+                                    Err (Exception "type error: invalid arguments to download cell" [])
+
+                        (Located _ (Keyword cellType)) :: _ ->
+                            Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type") [])
+
+                        _ :: _ ->
+                            Err (Exception "type error: cell type must be a keyword" [])
+
+                        [] ->
+                            Err (Exception "type error: empty vector is not a valid cell" [])
+
+                _ ->
+                    Err (Exception "cell must be a vector" [])
+
+        arity1 val =
+            toUi (Located.unknown val)
+                |> Result.map (\cell -> SideEffect <| ShowUI { cell = cell, watchFn = Nil, state = Enclojure.ValueMap.empty })
+
+        arity2 ( uiVal, defaultsMap ) =
+            arity3 ( uiVal, Nil, defaultsMap )
+
+        arity3 ( uiVal, watchFn, defaultsMap ) =
+            case defaultsMap of
+                Map m ->
+                    toUi (Located.unknown uiVal)
+                        |> Result.map (\cell -> SideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
+
+                _ ->
+                    Err (Exception ("type error: expected a map of defaults, got " ++ Runtime.inspect defaultsMap) [])
+    in
+    { emptyCallable
+        | arity1 = Just (Enclojure.Types.Fixed (Runtime.pure arity1))
+        , arity2 = Just (Enclojure.Types.Fixed (Runtime.pure arity2))
+        , arity3 = Just (Enclojure.Types.Fixed (Runtime.pure arity3))
+    }
+
+
+type MyIO
+    = IOTask (Task.Task Exception (Value MyIO))
+    | ShowUI (UI MyIO)
+    | Savepoint (Value MyIO)
+    | Http HttpRequest
+
+
 type Message
     = FuzzySelectMessage String LanternUi.FuzzySelect.Message
     | Run
     | Stop
     | UpdateInputRequest InputKey InputCell String
     | UpdateScripts (Result Lantern.Error (List Script))
-    | HandleIO ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
-    | Rewind ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
-    | InspectValue Value
+    | HandleIO ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) )
+    | Rewind ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) )
+    | InspectValue (Value MyIO)
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
     | SaveScript
@@ -163,20 +475,27 @@ unsavedScript =
     { id = Nothing, code = "", name = "", input = "" }
 
 
+type alias UI io =
+    { state : Enclojure.Types.ValueMap io
+    , cell : Cell
+    , watchFn : Value io
+    }
+
+
 type alias UiModel =
-    { fuzzySelects : Dict String FuzzySelect, enclojureUi : UI }
+    { fuzzySelects : Dict String FuzzySelect, enclojureUi : UI MyIO }
 
 
 type Interpreter
     = Stopped
     | Blocked
-    | UI UiModel ( Env, Maybe Thunk )
+    | ShowingUI UiModel ( Env MyIO, Maybe (Thunk MyIO) )
     | Running
-    | Done ( Value, Env )
-    | Panic ( Located Exception, Env )
+    | Done ( Value MyIO, Env MyIO )
+    | Panic ( Located Exception, Env MyIO )
 
 
-responseToValue : Lantern.Http.Response -> Value
+responseToValue : Lantern.Http.Response -> Value MyIO
 responseToValue response =
     Map <|
         Enclojure.ValueMap.fromList
@@ -191,7 +510,7 @@ responseToValue response =
             ]
 
 
-trampoline : ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk ) -> Int -> ( Interpreter, Cmd (Lantern.App.Message Message) )
+trampoline : ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) ) -> Int -> ( Interpreter, Cmd (Lantern.App.Message Message) )
 trampoline ( result, thunk ) maxdepth =
     case result of
         Ok ( io, env ) ->
@@ -208,41 +527,46 @@ trampoline ( result, thunk ) maxdepth =
                             Nothing ->
                                 ( Done ( v, env ), Cmd.none )
 
-                    Savepoint v ->
-                        ( Running
-                        , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.sameAs io (Const v), env ), thunk )))
-                        )
-
-                    Http request ->
-                        ( Running
-                        , Lantern.httpRequest
-                            { method = request.method
-                            , headers = request.headers
-                            , url = request.url
-                            , body = request.body
-                            , expect =
-                                \response ->
-                                    HandleIO ( Ok ( Located.sameAs io (Const (responseToValue response)), env ), thunk )
-                            }
-                            |> Lantern.App.call
-                        )
-
-                    Sleep ms ->
-                        ( Running
-                        , Process.sleep ms
-                            |> Task.perform
-                                (\_ ->
-                                    Lantern.App.Message <| HandleIO ( Ok ( Located.sameAs io (Const Nil), env ), thunk )
+                    SideEffect se ->
+                        case se of
+                            Http request ->
+                                ( Running
+                                , Lantern.httpRequest
+                                    { method = request.method
+                                    , headers = request.headers
+                                    , url = request.url
+                                    , body = request.body
+                                    , expect =
+                                        \response ->
+                                            HandleIO ( Ok ( Located.sameAs io (Const (responseToValue response)), env ), thunk )
+                                    }
+                                    |> Lantern.App.call
                                 )
-                        )
 
-                    ShowUI ui ->
-                        ( UI { enclojureUi = ui, fuzzySelects = Dict.empty } ( env, thunk )
-                        , Cmd.none
-                        )
+                            IOTask task ->
+                                ( Running
+                                , task
+                                    |> Task.attempt
+                                        (\r ->
+                                            ( r
+                                                |> Result.mapError (\e -> ( Located.sameAs io e, env ))
+                                                |> Result.map (\v -> ( Located.sameAs io (Const v), env ))
+                                            , thunk
+                                            )
+                                                |> HandleIO
+                                                |> Lantern.App.Message
+                                        )
+                                )
 
-                    ReadField _ ->
-                        ( Panic ( Located.unknown (Exception "Not implemented" []), env ), Cmd.none )
+                            ShowUI uiState ->
+                                ( ShowingUI { enclojureUi = uiState, fuzzySelects = Dict.empty } ( env, thunk )
+                                , Cmd.none
+                                )
+
+                            Savepoint v ->
+                                ( Running
+                                , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.sameAs io (Const v), env ), thunk )))
+                                )
 
         Err e ->
             ( Panic e, Cmd.none )
@@ -306,7 +630,7 @@ updateRunner model updateFn =
             ( model, Cmd.none )
 
 
-runWatchFn : Env -> Value -> Enclojure.Types.ValueMap -> Result (Located Exception) Enclojure.Types.ValueMap
+runWatchFn : Env MyIO -> Value MyIO -> Enclojure.Types.ValueMap MyIO -> Result (Located Exception) (Enclojure.Types.ValueMap MyIO)
 runWatchFn env watchFn stateMap =
     case watchFn of
         Nil ->
@@ -336,11 +660,24 @@ runWatchFn env watchFn stateMap =
                     Err (Located.unknown (Exception "runtime error: watch fn tried to run a side effect" []))
 
 
+defaultEnv : Env MyIO
+defaultEnv =
+    Enclojure.defaultEnv
+        |> Runtime.setGlobalEnv "http/request"
+            (Fn (Just "http/request") (Runtime.toContinuation http))
+        |> Runtime.setGlobalEnv "sleep"
+            (Fn (Just "sleep") (Runtime.toContinuation sleep))
+        |> Runtime.setGlobalEnv "ui"
+            (Fn (Just "ui") (Runtime.toContinuation ui))
+        |> Runtime.setGlobalEnv "<o>"
+            (Fn (Just "<o>") (Runtime.toContinuation savepoint))
+
+
 runScript : EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) )
 runScript model =
     let
         ( interpreter, retMsg ) =
-            trampoline (Enclojure.eval Runtime.emptyEnv model.script.code) stackLimit
+            trampoline (Enclojure.eval defaultEnv model.script.code) stackLimit
     in
     ( { model
         | interpreter = interpreter
@@ -378,7 +715,7 @@ update msg appModel =
             updateRunner appModel
                 (\model ->
                     case model.interpreter of
-                        UI ({ fuzzySelects } as ui) args ->
+                        ShowingUI ({ fuzzySelects } as uiState) args ->
                             let
                                 updatedFuzzySelects =
                                     Dict.update id
@@ -388,7 +725,7 @@ update msg appModel =
                                         )
                                         fuzzySelects
                             in
-                            ( { model | interpreter = UI { ui | fuzzySelects = updatedFuzzySelects } args }
+                            ( { model | interpreter = ShowingUI { uiState | fuzzySelects = updatedFuzzySelects } args }
                             , Cmd.none
                             )
 
@@ -514,7 +851,7 @@ update msg appModel =
                 appModel
                 (\model ->
                     case model.interpreter of
-                        UI ({ enclojureUi } as ui) ( env, thunk ) ->
+                        ShowingUI ({ enclojureUi } as uiState) ( env, thunk ) ->
                             case inputType of
                                 Button _ ->
                                     let
@@ -526,7 +863,7 @@ update msg appModel =
 
                                         console =
                                             model.console
-                                                |> traceUi ui
+                                                |> traceUi uiState
                                                 |> printResult model.interpreter
                                     in
                                     ( { model | interpreter = Running, console = console }
@@ -538,8 +875,8 @@ update msg appModel =
                                 _ ->
                                     let
                                         updatedState =
-                                            Enclojure.ValueMap.insert (Keyword name) (Located.unknown (String v)) ui.enclojureUi.state
-                                                |> runWatchFn env ui.enclojureUi.watchFn
+                                            Enclojure.ValueMap.insert (Keyword name) (Located.unknown (String v)) uiState.enclojureUi.state
+                                                |> runWatchFn env uiState.enclojureUi.watchFn
 
                                         ( interpreter, console ) =
                                             case updatedState of
@@ -548,7 +885,7 @@ update msg appModel =
                                                         updatedUi =
                                                             { enclojureUi | state = st }
                                                     in
-                                                    ( UI { ui | enclojureUi = updatedUi } ( env, thunk )
+                                                    ( ShowingUI { uiState | enclojureUi = updatedUi } ( env, thunk )
                                                     , model.console
                                                     )
 
@@ -674,7 +1011,7 @@ update msg appModel =
                 )
 
 
-inspectEnv : Env -> String
+inspectEnv : Env MyIO -> String
 inspectEnv { global, local } =
     let
         inspectDict dict =
@@ -695,7 +1032,7 @@ isRunning interpreter =
         Panic _ ->
             False
 
-        UI _ _ ->
+        ShowingUI _ _ ->
             True
 
         Done _ ->
@@ -809,7 +1146,7 @@ renderUI context uiModel =
 activeUi : Interpreter -> Maybe UiModel
 activeUi interpreter =
     case interpreter of
-        UI model _ ->
+        ShowingUI model _ ->
             Just model
 
         _ ->
@@ -833,7 +1170,7 @@ isDevModeOnlyEntry entry =
 viewConsole : Context -> Interpreter -> Console -> ConsoleOptions -> Element (Lantern.App.Message Message)
 viewConsole context interpreter console options =
     activeUi interpreter
-        |> Maybe.map (\ui -> UiTrace ui :: console)
+        |> Maybe.map (\uiState -> UiTrace uiState :: console)
         |> Maybe.withDefault console
         |> List.filter (\entry -> options.devMode || not (isDevModeOnlyEntry entry))
         |> List.take 20
@@ -904,10 +1241,10 @@ viewConsole context interpreter console options =
                         Failure ( e, _ ) ->
                             Element.text <| Runtime.inspectLocated (Located.map Throwable e)
 
-                        UiTrace ui ->
+                        UiTrace uiState ->
                             Element.column
                                 [ Element.width Element.fill ]
-                                [ renderUI context ui ]
+                                [ renderUI context uiState ]
                     )
             )
         |> Element.column

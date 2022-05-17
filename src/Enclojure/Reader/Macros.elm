@@ -12,12 +12,12 @@ type Expansion a
     | Returned a
 
 
-macroexpandAll : Located Value -> Result Exception (Located Value)
+macroexpandAll : Located (Value io) -> Result Exception (Located (Value io))
 macroexpandAll v =
     macroexpandAllInternal 0 v |> Result.map Tuple.second
 
 
-macroexpandAllInternal : Int -> Located Value -> Result Exception ( Int, Located Value )
+macroexpandAllInternal : Int -> Located (Value io) -> Result Exception ( Int, Located (Value io) )
 macroexpandAllInternal i v =
     case macroexpand i v of
         Ok result ->
@@ -62,7 +62,7 @@ macroexpandAllInternal i v =
             Err e
 
 
-macroexpand : Int -> Located Value -> Result Exception (Expansion ( Int, Located Value ))
+macroexpand : Int -> Located (Value io) -> Result Exception (Expansion ( Int, Located (Value io) ))
 macroexpand i (Located loc value) =
     case value of
         List l ->
@@ -126,7 +126,7 @@ macroexpand i (Located loc value) =
             Ok (Returned ( i, Located loc value ))
 
 
-expandDefn : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandDefn : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandDefn i (Located loc args) =
     case args of
         (Located _ (Symbol name)) :: fnBody ->
@@ -151,7 +151,7 @@ expandDefn i (Located loc args) =
             Err (Exception "Argument error: invalid arguments to defn" [])
 
 
-expandIfLet : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandIfLet : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandIfLet i (Located loc args) =
     case args of
         (Located _ (Vector bindings)) :: branches ->
@@ -175,7 +175,7 @@ expandIfLet i (Located loc args) =
             Err (Exception "Argument error: invalid arguments to if-let" [])
 
 
-expandWhenLet : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandWhenLet : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandWhenLet i (Located loc args) =
     case args of
         (Located _ (Vector bindings)) :: do ->
@@ -199,7 +199,7 @@ expandWhenLet i (Located loc args) =
             Err (Exception "Argument error: invalid arguments to when-let" [])
 
 
-expandAnd : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandAnd : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandAnd i (Located loc args) =
     case args of
         (Located _ form) :: rest ->
@@ -233,7 +233,7 @@ expandAnd i (Located loc args) =
             Ok ( i, Located loc (Bool True) )
 
 
-expandOr : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandOr : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandOr i (Located loc args) =
     case args of
         (Located _ form) :: rest ->
@@ -263,7 +263,7 @@ expandOr i (Located loc args) =
             Ok ( i, Located loc Nil )
 
 
-expandWhen : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandWhen : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandWhen i (Located loc args) =
     case args of
         cond :: rest ->
@@ -285,7 +285,7 @@ expandWhen i (Located loc args) =
             Err (Exception "Argument error: wrong number of arguments (0) passed to when" [])
 
 
-expandWhenNot : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandWhenNot : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandWhenNot i (Located loc args) =
     case args of
         cond :: rest ->
@@ -307,7 +307,7 @@ expandWhenNot i (Located loc args) =
             Err (Exception "Argument error: wrong number of arguments (0) passed to when-not" [])
 
 
-expandCond : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandCond : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandCond i (Located loc args) =
     case args of
         (Located letLoc (Keyword "let")) :: bindings :: rest ->
@@ -342,7 +342,7 @@ expandCond i (Located loc args) =
             Ok <| ( i, Located loc Nil )
 
 
-expandThreadFirst : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandThreadFirst : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandThreadFirst i (Located loc args) =
     case args of
         arg :: op :: rest ->
@@ -374,7 +374,7 @@ expandThreadFirst i (Located loc args) =
             Err (Exception "Argument error: wrong number of arguments (0) passed to ->" [])
 
 
-expandThreadLast : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandThreadLast : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandThreadLast i (Located loc args) =
     case args of
         arg :: op :: rest ->
@@ -402,7 +402,7 @@ expandThreadLast i (Located loc args) =
             Err (Exception "Argument error: wrong number of arguments (0) passed to ->>" [])
 
 
-expandThreadSomeFirst : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandThreadSomeFirst : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandThreadSomeFirst i (Located loc args) =
     case args of
         someArg :: op :: rest ->
@@ -444,7 +444,7 @@ expandThreadSomeFirst i (Located loc args) =
             Err (Exception "Argument error: wrong number of arguments (0) passed to some->" [])
 
 
-expandThreadSomeLast : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandThreadSomeLast : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandThreadSomeLast i (Located loc args) =
     case args of
         someArg :: op :: rest ->
@@ -482,7 +482,7 @@ expandThreadSomeLast i (Located loc args) =
             Err (Exception "Argument error: wrong number of arguments (0) passed to some->>" [])
 
 
-walk : a -> (a -> Located Value -> Result (Located Exception) ( a, Located Value )) -> Located Value -> Result (Located Exception) ( a, Located Value )
+walk : a -> (a -> Located (Value io) -> Result (Located Exception) ( a, Located (Value io) )) -> Located (Value io) -> Result (Located Exception) ( a, Located (Value io) )
 walk state f (Located loc val) =
     case val of
         List l ->
@@ -519,7 +519,7 @@ type alias Arguments =
     }
 
 
-expandLambda : Int -> Located (List (Located Value)) -> Result Exception ( Int, Located Value )
+expandLambda : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
 expandLambda i (Located loc body) =
     case body of
         [] ->
@@ -559,7 +559,7 @@ completeArguments startI arguments =
             ( startI, arguments )
 
 
-argsToValue : Located Arguments -> Value
+argsToValue : Located Arguments -> Value io
 argsToValue (Located loc arguments) =
     let
         positional =
@@ -574,7 +574,7 @@ argsToValue (Located loc arguments) =
     Vector (Array.fromList (positional ++ variadic))
 
 
-substituteLambdaArgsWalker : ( Int, Arguments ) -> Located Value -> Result (Located Exception) ( ( Int, Arguments ), Located Value )
+substituteLambdaArgsWalker : ( Int, Arguments ) -> Located (Value io) -> Result (Located Exception) ( ( Int, Arguments ), Located (Value io) )
 substituteLambdaArgsWalker ( i, args ) (Located loc expr) =
     case expr of
         Symbol "__lambda" ->
@@ -622,7 +622,7 @@ substituteLambdaArgsWalker ( i, args ) (Located loc expr) =
             Ok ( ( i, args ), Located loc expr )
 
 
-substituteLambdaArgs : Int -> List (Located Value) -> Result (Located Exception) ( ( Int, Arguments ), List (Located Value) )
+substituteLambdaArgs : Int -> List (Located (Value io)) -> Result (Located Exception) ( ( Int, Arguments ), List (Located (Value io)) )
 substituteLambdaArgs i exprs =
     let
         startState =

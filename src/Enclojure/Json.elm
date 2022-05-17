@@ -3,7 +3,6 @@ module Enclojure.Json exposing (decodeFromString, encodeToString)
 import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime as Runtime
 import Enclojure.Types exposing (Exception(..), Number(..), Value(..), ValueMap)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
@@ -11,7 +10,7 @@ import Json.Decode
 import Json.Encode
 
 
-decode : Json.Decode.Decoder Value
+decode : Json.Decode.Decoder (Value io)
 decode =
     Json.Decode.oneOf
         [ Json.Decode.string |> Json.Decode.map String
@@ -30,7 +29,7 @@ decode =
         ]
 
 
-decodeFromString : String -> Result Exception Value
+decodeFromString : String -> Result Exception (Value io)
 decodeFromString json =
     Json.Decode.decodeString decode json
         |> Result.mapError
@@ -40,7 +39,7 @@ decodeFromString json =
             )
 
 
-toDict : ValueMap -> Dict String Json.Encode.Value
+toDict : ValueMap io -> Dict String Json.Encode.Value
 toDict map =
     map
         |> ValueMap.toList
@@ -61,7 +60,7 @@ toDict map =
         |> Dict.fromList
 
 
-encode : Value -> Json.Encode.Value
+encode : Value io -> Json.Encode.Value
 encode val =
     case val of
         Number n ->
@@ -112,6 +111,6 @@ encode val =
             Json.Encode.null
 
 
-encodeToString : Value -> String
+encodeToString : Value io -> String
 encodeToString val =
     Json.Encode.encode 0 (encode val)

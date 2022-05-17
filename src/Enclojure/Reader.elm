@@ -19,7 +19,7 @@ located p =
         |= Parser.getPosition
 
 
-parse : String -> Result (List Parser.DeadEnd) (List (Located Value))
+parse : String -> Result (List Parser.DeadEnd) (List (Located (Value io)))
 parse code =
     Parser.run parser code
 
@@ -45,7 +45,7 @@ positiveNumber =
         }
 
 
-number : Parser Value
+number : Parser (Value io)
 number =
     Parser.oneOf
         [ Parser.succeed (Number << negateNumber)
@@ -102,7 +102,7 @@ symbolLike =
         }
 
 
-symbol : Parser Value
+symbol : Parser (Value io)
 symbol =
     Parser.succeed
         (\token ->
@@ -122,14 +122,14 @@ symbol =
         |= symbolLike
 
 
-keyword : Parser Value
+keyword : Parser (Value io)
 keyword =
     Parser.succeed Keyword
         |. Parser.symbol ":"
         |= symbolLike
 
 
-expressionsHelper : List (Located Value) -> Parser (Parser.Step (List (Located Value)) (List (Located Value)))
+expressionsHelper : List (Located (Value io)) -> Parser (Parser.Step (List (Located (Value io))) (List (Located (Value io))))
 expressionsHelper revExprs =
     Parser.oneOf
         [ Parser.succeed (\expr -> Parser.Loop (expr :: revExprs))
@@ -147,7 +147,7 @@ lineComment =
     Parser.lineComment ";"
 
 
-uncommentedExpression : Parser Value
+uncommentedExpression : Parser (Value io)
 uncommentedExpression =
     Parser.succeed identity
         |. Parser.spaces
@@ -165,12 +165,12 @@ uncommentedExpression =
         |. Parser.spaces
 
 
-wrapInQuote : Value -> Value
+wrapInQuote : Value io -> Value io
 wrapInQuote val =
     List [ Located.unknown (Symbol "quote"), Located.unknown val ]
 
 
-expression : Parser Value
+expression : Parser (Value io)
 expression =
     Parser.oneOf
         [ Parser.backtrackable <|
@@ -198,7 +198,7 @@ spaces =
         ]
 
 
-vector : Parser Value
+vector : Parser (Value io)
 vector =
     Parser.sequence
         { start = "["
@@ -211,7 +211,7 @@ vector =
         |> Parser.map (Array.fromList >> Vector)
 
 
-lambda : Parser Value
+lambda : Parser (Value io)
 lambda =
     Parser.sequence
         { start = "#("
@@ -225,7 +225,7 @@ lambda =
         |> Parser.map (\(Located loc v) -> List (Located loc (Symbol "__lambda") :: v))
 
 
-list : Parser Value
+list : Parser (Value io)
 list =
     Parser.sequence
         { start = "("
@@ -238,7 +238,7 @@ list =
         |> Parser.map List
 
 
-mapEntry : Parser ValueMapEntry
+mapEntry : Parser (ValueMapEntry io)
 mapEntry =
     Parser.succeed Tuple.pair
         |= expression
@@ -246,7 +246,7 @@ mapEntry =
         |= located expression
 
 
-valueMap : Parser Value
+valueMap : Parser (Value io)
 valueMap =
     Parser.sequence
         { start = "{"
@@ -259,7 +259,7 @@ valueMap =
         |> Parser.map (ValueMap.fromList >> Map)
 
 
-valueSet : Parser Value
+valueSet : Parser (Value io)
 valueSet =
     Parser.sequence
         { start = "#{"
@@ -272,12 +272,12 @@ valueSet =
         |> Parser.map (ValueSet.fromList >> Set)
 
 
-string : Parser Value
+string : Parser (Value io)
 string =
     DoubleQuotedString.string |> Parser.map String
 
 
-parser : Parser (List (Located Value))
+parser : Parser (List (Located (Value io)))
 parser =
     Parser.loop [] expressionsHelper
         |> Parser.andThen

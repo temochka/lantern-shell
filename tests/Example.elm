@@ -14,19 +14,19 @@ import Test exposing (..)
 
 
 type Expectation
-    = ExpectValue Value
+    = ExpectValue (Value ())
     | ExpectException String
     | ExpectExceptionWithTrace String (List String)
 
 
-eval : String -> Result Exception Value
+eval : String -> Result Exception (Value io)
 eval code =
     Enclojure.evalPure Enclojure.init code
         |> Result.mapError Located.getValue
         |> Result.map Tuple.first
 
 
-expectValue : Value -> String -> Test
+expectValue : Value io -> String -> Test
 expectValue value code =
     (\_ -> eval code |> Expect.equal (Ok value)) |> test code
 
