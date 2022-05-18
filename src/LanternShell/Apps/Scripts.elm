@@ -9,6 +9,7 @@ import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable)
 import Enclojure.Types exposing (Env, Exception(..), IO(..), Thunk(..), Value(..))
+import Enclojure.Value as Value
 import Enclojure.ValueMap
 import File.Download
 import Html.Events
@@ -188,7 +189,7 @@ type alias HttpRequest =
 decodeHttpRequest : Value MyIO -> Result Exception HttpRequest
 decodeHttpRequest value =
     value
-        |> Runtime.tryMap
+        |> Value.tryMap
         |> Result.fromMaybe (Exception "type error: request must be a map" [])
         |> Result.andThen
             (\requestMap ->
@@ -197,14 +198,14 @@ decodeHttpRequest value =
                         requestMap
                             |> Enclojure.ValueMap.get (Keyword "url")
                             |> Maybe.map Located.getValue
-                            |> Maybe.andThen Runtime.tryString
+                            |> Maybe.andThen Value.tryString
                             |> Result.fromMaybe (Exception "type error: :url must be a string" [])
 
                     headers =
                         requestMap
                             |> Enclojure.ValueMap.get (Keyword "headers")
                             |> Maybe.map Located.getValue
-                            |> Maybe.andThen (Runtime.tryDictOf Runtime.tryString Runtime.tryString)
+                            |> Maybe.andThen (Value.tryDictOf Value.tryString Value.tryString)
                             |> Maybe.map Dict.toList
                             |> Maybe.withDefault []
 
@@ -212,7 +213,7 @@ decodeHttpRequest value =
                         requestMap
                             |> Enclojure.ValueMap.get (Keyword "method")
                             |> Maybe.map Located.getValue
-                            |> Maybe.andThen Runtime.tryKeyword
+                            |> Maybe.andThen Value.tryKeyword
                             |> Result.fromMaybe (Exception "type error: method must be a keyword" [])
 
                     bodyResult =
@@ -338,14 +339,14 @@ ui =
                                             restArgs
                                                 |> List.head
                                                 |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryMap
+                                                |> Maybe.andThen Value.tryMap
                                                 |> Maybe.withDefault Enclojure.ValueMap.empty
 
                                         suggestions =
                                             options
                                                 |> Enclojure.ValueMap.get (Keyword "suggestions")
                                                 |> Maybe.map Located.getValue
-                                                |> Maybe.andThen (Runtime.trySequenceOf Runtime.tryString)
+                                                |> Maybe.andThen (Value.trySequenceOf Value.tryString)
                                                 |> Maybe.withDefault []
                                     in
                                     Ok (Input key (TextInput { suggestions = suggestions }))
@@ -368,7 +369,7 @@ ui =
                                         title =
                                             Enclojure.ValueMap.get (Keyword "title") options
                                                 |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.andThen Value.tryString
                                                 |> Maybe.withDefault key
                                     in
                                     Ok (Input key (Button { title = title }))
@@ -391,13 +392,13 @@ ui =
                                         contentType =
                                             Enclojure.ValueMap.get (Keyword "content-type") options
                                                 |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.andThen Value.tryString
                                                 |> Maybe.withDefault "text/plain"
 
                                         name =
                                             Enclojure.ValueMap.get (Keyword "name") options
                                                 |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryString
+                                                |> Maybe.andThen Value.tryString
                                                 |> Maybe.withDefault "download.txt"
                                     in
                                     Ok
@@ -442,7 +443,7 @@ ui =
                         |> Result.map (\cell -> SideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
 
                 _ ->
-                    Err (Exception ("type error: expected a map of defaults, got " ++ Runtime.inspect defaultsMap) [])
+                    Err (Exception ("type error: expected a map of defaults, got " ++ Value.inspect defaultsMap) [])
     in
     { emptyCallable
         | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
@@ -699,7 +700,7 @@ runWatchFn env watchFn stateMap =
             case interpreter of
                 Done ( val, _ ) ->
                     val
-                        |> Runtime.tryMap
+                        |> Value.tryMap
                         |> Result.fromMaybe (Located.unknown (Exception "type error: watch returned a non-map" []))
 
                 Panic ( err, _ ) ->
@@ -1089,7 +1090,7 @@ renderUI context uiModel =
             let
                 val =
                     Enclojure.ValueMap.get (Keyword key) state
-                        |> Maybe.map (Located.getValue >> Runtime.toString)
+                        |> Maybe.map (Located.getValue >> Value.toString)
                         |> Maybe.withDefault ""
             in
             case inputType of
@@ -1158,7 +1159,7 @@ renderUI context uiModel =
                                 let
                                     val =
                                         Enclojure.ValueMap.get (Keyword key) state
-                                            |> Maybe.map (Located.getValue >> Runtime.toString)
+                                            |> Maybe.map (Located.getValue >> Value.toString)
                                             |> Maybe.withDefault ""
                                 in
                                 Element.text val
@@ -1203,7 +1204,7 @@ viewConsole context interpreter console options =
                     valueRow val =
                         Element.paragraph
                             [ Element.width Element.fill ]
-                            [ Element.text (Runtime.inspect val)
+                            [ Element.text (Value.inspect val)
                             , LanternUi.Input.button context.theme
                                 []
                                 { onPress = Just (Lantern.App.Message <| InspectValue val)
@@ -1262,7 +1263,7 @@ viewConsole context interpreter console options =
                                 ]
 
                         Failure ( e, _ ) ->
-                            Element.text <| Runtime.inspectLocated (Located.map Throwable e)
+                            Element.text <| Value.inspectLocated (Located.map Throwable e)
 
                         UiTrace uiState ->
                             Element.column

@@ -1,10 +1,9 @@
 module Enclojure.Lib exposing (init, prelude)
 
 import Array
-import Dict
 import Enclojure.Json
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, toFunction)
+import Enclojure.Runtime as Runtime exposing (emptyCallable, toFunction)
 import Enclojure.Types
     exposing
         ( Arity(..)
@@ -17,6 +16,7 @@ import Enclojure.Types
         , Thunk(..)
         , Value(..)
         )
+import Enclojure.Value as Value exposing (inspect)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
@@ -114,7 +114,7 @@ jsonDecode : Callable io
 jsonDecode =
     let
         arity1 v =
-            Runtime.tryString v
+            Value.tryString v
                 |> Result.fromMaybe (Exception "type error: json/decode expects a string" [])
                 |> Result.andThen Enclojure.Json.decodeFromString
                 |> Result.map Const
@@ -521,7 +521,7 @@ str =
     let
         arity0 { rest } =
             rest
-                |> List.map Runtime.toString
+                |> List.map Value.toString
                 |> String.join ""
                 |> String
                 |> Ok
@@ -536,7 +536,7 @@ prStr =
     let
         arity0 { rest } =
             rest
-                |> List.map Runtime.inspect
+                |> List.map Value.inspect
                 |> String.join ""
                 |> String
                 |> Ok
@@ -610,7 +610,7 @@ fixedCall mArity =
             )
         |> Maybe.withDefault
             (\_ env k ->
-                ( Err ( Runtime.exception env "Interpreter error: undefined internal call arity", env )
+                ( Err ( Value.exception env "Interpreter error: undefined internal call arity", env )
                 , Just (Thunk k)
                 )
             )
@@ -753,7 +753,7 @@ first =
     let
         arity1 collVal =
             collVal
-                |> Runtime.toSeq
+                |> Value.toSeq
                 |> Result.map (List.map Located.getValue)
                 |> Result.map
                     (\s ->
@@ -775,7 +775,7 @@ second =
     let
         arity1 collVal =
             collVal
-                |> Runtime.toSeq
+                |> Value.toSeq
                 |> Result.map (List.map Located.getValue)
                 |> Result.map
                     (\s ->
@@ -886,7 +886,7 @@ rest_ =
 
                         _ ->
                             Located.unknown
-                                ( Err ( Runtime.exception env2 "Interpreter error: seq returned a non-list", env2 )
+                                ( Err ( Value.exception env2 "Interpreter error: seq returned a non-list", env2 )
                                 , Just (Thunk k)
                                 )
                 )
@@ -954,7 +954,7 @@ apply =
                         |> List.drop (numArgs - 1)
                         |> List.head
                         |> Result.fromMaybe (Exception "Interpreter error: arity2 function doesn't have a 2nd argument" [])
-                        |> Result.andThen Runtime.toSeq
+                        |> Result.andThen Value.toSeq
             in
             case listArgsResult of
                 Ok listArgs ->

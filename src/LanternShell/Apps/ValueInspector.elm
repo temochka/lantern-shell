@@ -5,10 +5,9 @@ import Element exposing (Element)
 import Element.Background
 import Element.Input
 import Enclojure.Located as Located
-import Enclojure.Runtime
 import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
-import Enclojure.ValueSet as ValueSet
 import Html.Events
 import Json.Decode
 import Lantern.App
@@ -118,7 +117,7 @@ renderValue theme path value =
 
             _ ->
                 Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <|
-                    Element.text (Enclojure.Runtime.inspect value)
+                    Element.text (Value.inspect value)
         )
 
 
@@ -129,7 +128,7 @@ view ctx model =
             model.hoveredPath
                 |> Maybe.map Just
                 |> Maybe.withDefault model.selectedPath
-                |> Maybe.map (\v -> Enclojure.Runtime.inspect (Vector (Array.map Located.unknown v)))
+                |> Maybe.map (\v -> Value.inspect (Vector (Array.map Located.unknown v)))
                 |> Maybe.withDefault " "
     in
     LanternUi.columnLayout

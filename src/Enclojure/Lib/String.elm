@@ -1,8 +1,9 @@
 module Enclojure.Lib.String exposing (init)
 
 import Enclojure.Located as Located
-import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, toFunction)
+import Enclojure.Runtime as Runtime exposing (emptyCallable, toFunction)
 import Enclojure.Types as Types exposing (Arity(..), Exception(..), IO(..), Value(..))
+import Enclojure.Value as Value exposing (inspect)
 
 
 init : Types.Env io -> Types.Env io
@@ -39,7 +40,7 @@ length : Types.Callable io
 length =
     let
         arity1 val =
-            Runtime.tryString val
+            Value.tryString val
                 |> Maybe.map (String.length >> Types.Int >> Types.Number >> Ok)
                 |> Maybe.withDefault (Err (Exception ("type error: expected string, got " ++ inspect val) []))
     in
@@ -53,14 +54,14 @@ join =
     let
         arity1 val =
             val
-                |> Runtime.trySequenceOf (Runtime.toString >> Just)
+                |> Value.trySequenceOf (Value.toString >> Just)
                 |> Maybe.map (String.join "" >> Types.String >> Ok)
                 |> Maybe.withDefault (Err (Exception ("type error: expected a sequence, got " ++ inspect val) []))
 
         arity2 ( sepVal, collVal ) =
             Maybe.map2 (\sep coll -> String.join sep coll |> Types.String |> Ok)
-                (Runtime.tryString sepVal)
-                (Runtime.trySequenceOf (Runtime.toString >> Just) collVal)
+                (Value.tryString sepVal)
+                (Value.trySequenceOf (Value.toString >> Just) collVal)
                 |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings" []))
     in
     { emptyCallable
