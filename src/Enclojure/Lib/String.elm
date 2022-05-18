@@ -1,7 +1,7 @@
 module Enclojure.Lib.String exposing (init)
 
 import Enclojure.Located as Located
-import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, pure)
+import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, toFunction)
 import Enclojure.Types as Types exposing (Arity(..), Exception(..), IO(..), Value(..))
 
 
@@ -31,7 +31,7 @@ splitLines =
                     Err (Exception ("type error: expected string, got " ++ inspect val) [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
     }
 
 
@@ -44,7 +44,7 @@ length =
                 |> Maybe.withDefault (Err (Exception ("type error: expected string, got " ++ inspect val) []))
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
     }
 
 
@@ -64,6 +64,6 @@ join =
                 |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings" []))
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
-        , arity2 = Just <| Fixed <| pure (arity2 >> Result.map Const)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
+        , arity2 = Just <| Fixed <| toFunction (arity2 >> Result.map Const)
     }

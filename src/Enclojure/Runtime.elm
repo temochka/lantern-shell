@@ -347,8 +347,8 @@ toString value =
             print value
 
 
-pure : (a -> Result Exception (IO io)) -> (a -> Env io -> Continuation io -> Step io)
-pure fn =
+toFunction : (a -> Result Exception (IO io)) -> (a -> Env io -> Continuation io -> Step io)
+toFunction fn =
     \v env k ->
         ( fn v
             |> Result.map (\io -> ( io, env ))
@@ -384,8 +384,8 @@ getFn key =
                 |> Maybe.withDefault default
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
-        , arity2 = Just <| Fixed <| pure (arity2 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
+        , arity2 = Just <| Fixed <| toFunction (arity2 >> Const >> Ok)
     }
 
 
@@ -400,7 +400,7 @@ setLookupFn set =
                 Nil
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -411,7 +411,7 @@ mapLookupFn map =
             ValueMap.get val map |> Maybe.map Located.getValue |> Maybe.withDefault Nil
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
     }
 
 

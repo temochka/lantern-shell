@@ -4,7 +4,7 @@ import Array
 import Dict
 import Enclojure.Json
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, pure)
+import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, toFunction)
 import Enclojure.Types exposing (..)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
@@ -95,7 +95,7 @@ jsonEncode =
             Enclojure.Json.encodeToString v |> String
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -109,7 +109,7 @@ jsonDecode =
                 |> Result.map Const
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure arity1
+        | arity1 = Just <| Fixed <| toFunction arity1
     }
 
 
@@ -120,7 +120,7 @@ not_ =
             Ok (Const (Bool (not (Runtime.isTruthy val))))
     in
     { emptyCallable
-        | arity1 = Just (Fixed (pure arity1))
+        | arity1 = Just (Fixed (toFunction arity1))
     }
 
 
@@ -130,7 +130,7 @@ list =
         arity0 { rest } =
             Ok (Const (List (List.map Located.unknown rest)))
     in
-    { emptyCallable | arity0 = Just (Variadic (pure arity0)) }
+    { emptyCallable | arity0 = Just (Variadic (toFunction arity0)) }
 
 
 toNumbers : List (Value io) -> Result Exception (List Number)
@@ -163,14 +163,14 @@ varargOp { arity0, arity1, arity2 } =
                 (toNumbers rest)
     in
     { emptyCallable
-        | arity0 = arity0 |> Maybe.map (Number >> Const >> Ok >> always >> pure >> Fixed)
+        | arity0 = arity0 |> Maybe.map (Number >> Const >> Ok >> always >> toFunction >> Fixed)
         , arity1 =
             arity1
                 |> Maybe.map
                     (\fn ->
-                        Fixed <| pure <| (toNumber >> Result.map (fn >> Number >> Const))
+                        Fixed <| toFunction <| (toNumber >> Result.map (fn >> Number >> Const))
                     )
-        , arity2 = (wrappedArity2 >> Result.map Const) |> pure |> Variadic |> Just
+        , arity2 = (wrappedArity2 >> Result.map Const) |> toFunction |> Variadic |> Just
     }
 
 
@@ -307,7 +307,7 @@ rem =
                 (toNumber valB)
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| pure <| (arity2 >> Result.map (Number >> Const))
+        | arity2 = Just <| Fixed <| toFunction <| (arity2 >> Result.map (Number >> Const))
     }
 
 
@@ -390,8 +390,8 @@ compOp { intOp, floatOp, stringOp } =
                             )
     in
     { emptyCallable
-        | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (pure (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
+        , arity2 = Just (Variadic (toFunction (arity2 >> Result.map Const)))
     }
 
 
@@ -472,8 +472,8 @@ isEqual =
                         Ok (Bool False)
     in
     { emptyCallable
-        | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (pure (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
+        , arity2 = Just (Variadic (toFunction (arity2 >> Result.map Const)))
     }
 
 
@@ -500,8 +500,8 @@ isNotEqual =
                         Ok (Bool False)
     in
     { emptyCallable
-        | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (pure (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
+        , arity2 = Just (Variadic (toFunction (arity2 >> Result.map Const)))
     }
 
 
@@ -516,7 +516,7 @@ str =
                 |> Ok
     in
     { emptyCallable
-        | arity0 = Just (Variadic (pure (arity0 >> Result.map Const)))
+        | arity0 = Just (Variadic (toFunction (arity0 >> Result.map Const)))
     }
 
 
@@ -531,7 +531,7 @@ prStr =
                 |> Ok
     in
     { emptyCallable
-        | arity0 = Just (Variadic (pure (arity0 >> Result.map Const)))
+        | arity0 = Just (Variadic (toFunction (arity0 >> Result.map Const)))
     }
 
 
@@ -581,7 +581,7 @@ seq =
                     Err (Exception (inspect coll ++ " is not sequable") [])
     in
     { emptyCallable
-        | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
+        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
     }
 
 
@@ -698,7 +698,7 @@ conj =
                     Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
-        | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const)
+        | arity2 = Just <| Variadic <| toFunction (arity2 >> Result.map Const)
     }
 
 
@@ -731,7 +731,7 @@ contains =
                     Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| pure (arity2 >> Result.map Const)
+        | arity2 = Just <| Fixed <| toFunction (arity2 >> Result.map Const)
     }
 
 
@@ -753,7 +753,7 @@ first =
                     )
     in
     { emptyCallable
-        | arity1 = Just (Fixed <| pure (arity1 >> Result.map Const))
+        | arity1 = Just (Fixed <| toFunction (arity1 >> Result.map Const))
     }
 
 
@@ -775,7 +775,7 @@ second =
                     )
     in
     { emptyCallable
-        | arity1 = Just (Fixed <| pure (arity1 >> Result.map Const))
+        | arity1 = Just (Fixed <| toFunction (arity1 >> Result.map Const))
     }
 
 
@@ -797,7 +797,7 @@ peek =
                     Err <| Exception ("Cannot use " ++ inspect val ++ " as a queue") []
     in
     { emptyCallable
-        | arity1 = Just (Fixed (pure (arity1 >> Result.map Const)))
+        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
     }
 
 
@@ -813,7 +813,7 @@ isNumber =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -829,7 +829,7 @@ isInteger =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -845,7 +845,7 @@ isFloat =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -893,7 +893,7 @@ throw =
                     Err (Exception (inspect v ++ " is not throwable") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure arity1
+        | arity1 = Just <| Fixed <| toFunction arity1
     }
 
 
@@ -909,7 +909,7 @@ newException =
                     Err (Exception "exception message must be a string" [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
     }
 
 
@@ -998,8 +998,8 @@ get =
                 |> Maybe.withDefault default
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| pure (arity2 >> Const >> Ok)
-        , arity3 = Just <| Fixed <| pure (arity3 >> Const >> Ok)
+        | arity2 = Just <| Fixed <| toFunction (arity2 >> Const >> Ok)
+        , arity3 = Just <| Fixed <| toFunction (arity3 >> Const >> Ok)
     }
 
 
@@ -1079,7 +1079,7 @@ assoc =
                 _ ->
                     Err (Exception (inspect val ++ " is not associable") [])
     in
-    { emptyCallable | arity3 = Just <| Variadic <| pure (arity3 >> Result.map Const) }
+    { emptyCallable | arity3 = Just <| Variadic <| toFunction (arity3 >> Result.map Const) }
 
 
 dissoc : Callable io
@@ -1106,7 +1106,7 @@ dissoc =
                 _ ->
                     Err (Exception (inspect val ++ " is not dissociable") [])
     in
-    { emptyCallable | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const) }
+    { emptyCallable | arity2 = Just <| Variadic <| toFunction (arity2 >> Result.map Const) }
 
 
 key_ : Callable io
@@ -1121,7 +1121,7 @@ key_ =
                     Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure arity1
+        | arity1 = Just <| Fixed <| toFunction arity1
     }
 
 
@@ -1137,7 +1137,7 @@ val_ =
                     Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| pure arity1
+        | arity1 = Just <| Fixed <| toFunction arity1
     }
 
 
