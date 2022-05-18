@@ -1,4 +1,4 @@
-module LanternShell.Apps.Scripts exposing (..)
+module LanternShell.Apps.Scripts exposing (Message(..), Model, MyIO, Script, lanternApp, scriptsQuery)
 
 import Array
 import Dict exposing (Dict)
@@ -58,7 +58,7 @@ type Cell
 type ConsoleEntry
     = ConsoleString String
     | UiTrace UiModel
-    | Savepoint_ ( ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) )
+    | Savepoint_ ( Located ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) )
     | Success (Value MyIO)
     | Failure ( Located Exception, Env MyIO )
 
@@ -119,10 +119,10 @@ traceUi model console =
     UiTrace model :: console
 
 
-recordSavepoint : ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) ) -> Console -> Console
-recordSavepoint ( ret, thunk ) console =
+recordSavepoint : Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) ) -> Console -> Console
+recordSavepoint (Located loc ( ret, thunk )) console =
     ret
-        |> Result.map (\val -> Savepoint_ ( val, thunk ) :: console)
+        |> Result.map (\val -> Savepoint_ ( Located loc val, thunk ) :: console)
         |> Result.withDefault console
 
 
@@ -162,7 +162,7 @@ sleep =
                     Err (Exception "type error: sleep expects one integer argument" [])
     in
     { emptyCallable
-        | arity1 = Just (Enclojure.Types.Fixed (Runtime.pure arity1))
+        | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
     }
 
 
@@ -173,7 +173,7 @@ savepoint =
             Ok (SideEffect (Savepoint val))
     in
     { emptyCallable
-        | arity1 = Just (Enclojure.Types.Fixed (Runtime.pure arity1))
+        | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
     }
 
 
@@ -254,7 +254,12 @@ http =
             case decodeHttpRequest request of
                 Ok req ->
                     ( Ok ( SideEffect (Http req), env )
-                    , Just (Thunk (\v rEnv -> ( Ok ( Located.map Const v, rEnv ), Just (Thunk k) )))
+                    , Just
+                        (Thunk
+                            (\v rEnv ->
+                                Located.sameAs v ( Ok ( Const <| Located.getValue v, rEnv ), Just (Thunk k) )
+                            )
+                        )
                     )
 
                 Err exception ->
@@ -437,9 +442,9 @@ ui =
                     Err (Exception ("type error: expected a map of defaults, got " ++ Runtime.inspect defaultsMap) [])
     in
     { emptyCallable
-        | arity1 = Just (Enclojure.Types.Fixed (Runtime.pure arity1))
-        , arity2 = Just (Enclojure.Types.Fixed (Runtime.pure arity2))
-        , arity3 = Just (Enclojure.Types.Fixed (Runtime.pure arity3))
+        | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
+        , arity2 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity2))
+        , arity3 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity3))
     }
 
 
@@ -456,8 +461,8 @@ type Message
     | Stop
     | UpdateInputRequest InputKey InputCell String
     | UpdateScripts (Result Lantern.Error (List Script))
-    | HandleIO ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) )
-    | Rewind ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) )
+    | HandleIO (Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) ))
+    | Rewind (Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) ))
     | InspectValue (Value MyIO)
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
@@ -533,19 +538,22 @@ responseToValue response =
             ]
 
 
-trampoline : ( Result ( Located Exception, Env MyIO ) ( Located (IO MyIO), Env MyIO ), Maybe (Thunk MyIO) ) -> Int -> ( Interpreter, Cmd (Lantern.App.Message Message) )
-trampoline ( result, thunk ) maxdepth =
+trampoline :
+    Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) )
+    -> Int
+    -> ( Interpreter, Cmd (Lantern.App.Message Message) )
+trampoline (Located loc ( result, thunk )) maxdepth =
     case result of
         Ok ( io, env ) ->
             if maxdepth <= 0 then
                 ( Panic ( Located.unknown (Exception "Stack level too deep" []), env ), Cmd.none )
 
             else
-                case Located.getValue io of
+                case io of
                     Const v ->
                         case thunk of
                             Just (Thunk continuation) ->
-                                trampoline (continuation (Located.sameAs io v) env) (maxdepth - 1)
+                                trampoline (continuation (Located loc v) env) (maxdepth - 1)
 
                             Nothing ->
                                 ( Done ( v, env ), Cmd.none )
@@ -561,7 +569,7 @@ trampoline ( result, thunk ) maxdepth =
                                     , body = request.body
                                     , expect =
                                         \response ->
-                                            HandleIO ( Ok ( Located.sameAs io (Const (responseToValue response)), env ), thunk )
+                                            HandleIO (Located loc ( Ok ( Const (responseToValue response), env ), thunk ))
                                     }
                                     |> Lantern.App.call
                                 )
@@ -572,10 +580,11 @@ trampoline ( result, thunk ) maxdepth =
                                     |> Task.attempt
                                         (\r ->
                                             ( r
-                                                |> Result.mapError (\e -> ( Located.sameAs io e, env ))
-                                                |> Result.map (\v -> ( Located.sameAs io (Const v), env ))
+                                                |> Result.mapError (\e -> ( e, env ))
+                                                |> Result.map (\v -> ( Const v, env ))
                                             , thunk
                                             )
+                                                |> Located loc
                                                 |> HandleIO
                                                 |> Lantern.App.Message
                                         )
@@ -588,11 +597,11 @@ trampoline ( result, thunk ) maxdepth =
 
                             Savepoint v ->
                                 ( Running
-                                , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.sameAs io (Const v), env ), thunk )))
+                                , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO (Located loc ( Ok ( Const v, env ), thunk ))))
                                 )
 
         Err e ->
-            ( Panic e, Cmd.none )
+            ( Panic (e |> Tuple.mapFirst (Located loc)), Cmd.none )
 
 
 updateBrowser :
@@ -892,7 +901,7 @@ update msg appModel =
                                     ( { model | interpreter = Running, console = console }
                                     , Task.perform
                                         identity
-                                        (Task.succeed (Lantern.App.Message <| HandleIO ( Ok ( Located.unknown (Const (List [ exitCode, state ])), env ), thunk )))
+                                        (Task.succeed (Lantern.App.Message <| HandleIO (Located.unknown ( Ok ( Const (List [ exitCode, state ]), env ), thunk ))))
                                     )
 
                                 _ ->
@@ -1223,7 +1232,7 @@ viewConsole context interpreter console options =
                         ConsoleString s ->
                             Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
 
-                        Savepoint_ ( ( Located loc io, env ), thunk ) ->
+                        Savepoint_ ( Located loc ( io, env ), thunk ) ->
                             let
                                 newEnv =
                                     case interpreter of
@@ -1239,7 +1248,7 @@ viewConsole context interpreter console options =
                                 rewindButton =
                                     LanternUi.Input.button context.theme
                                         []
-                                        { onPress = Just (Lantern.App.Message <| Rewind ( Ok ( Located loc io, newEnv ), thunk ))
+                                        { onPress = Just (Lantern.App.Message <| Rewind (Located loc ( Ok ( io, newEnv ), thunk )))
                                         , label = Element.text "Rewind"
                                         }
                             in

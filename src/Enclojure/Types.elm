@@ -10,16 +10,16 @@ type Exception
     = Exception String (List StackFrame)
 
 
+type alias Step io =
+    ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) )
+
+
 type alias Continuation io =
-    Located (Value io) -> Env io -> ( Result ( Located Exception, Env io ) ( Located (IO io), Env io ), Maybe (Thunk io) )
+    Located (Value io) -> Env io -> Located (Step io)
 
 
 type Thunk io
     = Thunk (Continuation io)
-
-
-type alias Step io =
-    ( Result ( Located Exception, Env io ) ( Located (IO io), Env io ), Maybe (Thunk io) )
 
 
 type Arity io a

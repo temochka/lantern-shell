@@ -1,12 +1,16 @@
-module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, map, member, remove, toList)
+module Enclojure.ValueSet exposing (ValueSet, empty, fromList, insert, isEmpty, map, member, remove, toList)
 
-import Enclojure.Types exposing (IO, Number(..), Value(..), ValueSet(..))
+import Enclojure.Types exposing (IO, Number(..), Value(..))
 import Set
+
+
+type alias ValueSet io =
+    Enclojure.Types.ValueSet io
 
 
 empty : ValueSet io
 empty =
-    ValueSet
+    Enclojure.Types.ValueSet
         { ints = Set.empty
         , floats = Set.empty
         , strings = Set.empty
@@ -26,7 +30,7 @@ empty =
 
 
 isEmpty : ValueSet io -> Bool
-isEmpty (ValueSet m) =
+isEmpty (Enclojure.Types.ValueSet m) =
     Set.isEmpty m.ints
         && Set.isEmpty m.floats
         && Set.isEmpty m.strings
@@ -46,8 +50,8 @@ isEmpty (ValueSet m) =
 
 
 insert : Value io -> ValueSet io -> ValueSet io
-insert v (ValueSet set) =
-    ValueSet <|
+insert v (Enclojure.Types.ValueSet set) =
+    Enclojure.Types.ValueSet <|
         case v of
             Number (Int int) ->
                 { set | ints = Set.insert int set.ints }
@@ -107,8 +111,8 @@ insert v (ValueSet set) =
 
 
 remove : Value io -> ValueSet io -> ValueSet io
-remove v (ValueSet set) =
-    ValueSet <|
+remove v (Enclojure.Types.ValueSet set) =
+    Enclojure.Types.ValueSet <|
         case v of
             Number (Int int) ->
                 { set | ints = Set.remove int set.ints }
@@ -202,7 +206,7 @@ fromList entries =
 
 
 toList : ValueSet io -> List (Value io)
-toList (ValueSet set) =
+toList (Enclojure.Types.ValueSet set) =
     let
         ints =
             Set.toList set.ints |> List.map (Int >> Number)
@@ -260,7 +264,7 @@ map f set =
 
 
 member : Value io -> ValueSet io -> Bool
-member v (ValueSet set) =
+member v (Enclojure.Types.ValueSet set) =
     case v of
         Number (Int int) ->
             Set.member int set.ints

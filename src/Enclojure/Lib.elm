@@ -5,7 +5,18 @@ import Dict
 import Enclojure.Json
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, toFunction)
-import Enclojure.Types exposing (..)
+import Enclojure.Types
+    exposing
+        ( Arity(..)
+        , Callable
+        , Continuation
+        , Env
+        , Exception(..)
+        , IO(..)
+        , Number(..)
+        , Thunk(..)
+        , Value(..)
+        )
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
@@ -616,20 +627,22 @@ cons =
                 (\(Located collLoc collSeq) env2 ->
                     case collSeq of
                         List l ->
-                            ( Ok ( Located collLoc (Const (List (Located.unknown x :: l))), env2 ), Just (Thunk k) )
+                            Located collLoc ( Ok ( Const (List (Located.unknown x :: l)), env2 ), Just (Thunk k) )
 
                         Nil ->
-                            ( Ok ( Located.unknown (Const (List [ Located.unknown x ])), env2 )
-                            , Just (Thunk k)
-                            )
+                            Located.unknown
+                                ( Ok ( Const (List [ Located.unknown x ]), env2 )
+                                , Just (Thunk k)
+                                )
 
                         _ ->
-                            ( Err
-                                ( Located.unknown (Exception "Interpreter error: seq returned a non-list" [])
-                                , env2
+                            Located.unknown
+                                ( Err
+                                    ( Exception "Interpreter error: seq returned a non-list" []
+                                    , env2
+                                    )
+                                , Just (Thunk k)
                                 )
-                            , Just (Thunk k)
-                            )
                 )
     in
     { emptyCallable
@@ -860,20 +873,22 @@ rest_ =
                 (\(Located collLoc collSeq) env2 ->
                     case collSeq of
                         List (_ :: rst) ->
-                            ( Ok ( Located collLoc (Const (List rst)), env2 ), Just (Thunk k) )
+                            Located collLoc ( Ok ( Const (List rst), env2 ), Just (Thunk k) )
 
                         List _ ->
-                            ( Ok ( Located collLoc (Const Nil), env2 ), Just (Thunk k) )
+                            Located collLoc ( Ok ( Const Nil, env2 ), Just (Thunk k) )
 
                         Nil ->
-                            ( Ok ( Located.unknown (Const (List [])), env2 )
-                            , Just (Thunk k)
-                            )
+                            Located.unknown
+                                ( Ok ( Const (List []), env2 )
+                                , Just (Thunk k)
+                                )
 
                         _ ->
-                            ( Err ( Located.unknown (Runtime.exception env2 "Interpreter error: seq returned a non-list"), env2 )
-                            , Just (Thunk k)
-                            )
+                            Located.unknown
+                                ( Err ( Runtime.exception env2 "Interpreter error: seq returned a non-list", env2 )
+                                , Just (Thunk k)
+                                )
                 )
     in
     { emptyCallable
@@ -917,11 +932,6 @@ newException =
 -- ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 
 
-toRuntimeStep : Step io -> Runtime.Step io
-toRuntimeStep ( r, k ) =
-    ( r |> Result.mapError (Tuple.mapFirst Located.getValue) |> Result.map (Tuple.mapFirst Located.getValue), k )
-
-
 apply : Callable io
 apply =
     let
@@ -953,7 +963,7 @@ apply =
                         (Located.unknown (List (List.map Located.unknown posArgs ++ listArgs)))
                         env
                         k
-                        |> toRuntimeStep
+                        |> Located.getValue
 
                 Err e ->
                     ( Err ( e, env ), Just (Thunk k) )

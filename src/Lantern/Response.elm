@@ -1,4 +1,4 @@
-module Lantern.Response exposing (..)
+module Lantern.Response exposing (Response(..))
 
 import Json.Decode
 import Lantern.Http as Http

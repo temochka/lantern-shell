@@ -3,8 +3,8 @@ module Enclojure.Json exposing (decodeFromString, encodeToString)
 import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..), ValueMap)
-import Enclojure.ValueMap as ValueMap
+import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import Json.Decode
 import Json.Encode

@@ -1,4 +1,4 @@
-module Lantern.Request exposing (..)
+module Lantern.Request exposing (Id, Request(..))
 
 import Lantern.Http as Http
 import Lantern.Query as Query

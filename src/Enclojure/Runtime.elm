@@ -1,4 +1,28 @@
-module Enclojure.Runtime exposing (..)
+module Enclojure.Runtime exposing
+    ( apply
+    , emptyCallable
+    , emptyEnv
+    , exception
+    , fetchEnv
+    , inspect
+    , inspectLocated
+    , isTruthy
+    , prettyTrace
+    , setCurrentStackFrameLocation
+    , setGlobalEnv
+    , setLocalEnv
+    , toFunction
+    , toMap
+    , toSeq
+    , toString
+    , toThunk
+    , tryDictOf
+    , tryKeyword
+    , tryMap
+    , trySequenceOf
+    , tryString
+    , trySymbol
+    )
 
 import Array
 import Dict
@@ -13,15 +37,12 @@ import Enclojure.Types as Types
         , Exception(..)
         , IO(..)
         , Number(..)
+        , Step
         , Thunk(..)
         , Value(..)
         )
-import Enclojure.ValueMap as ValueMap
-import Enclojure.ValueSet as ValueSet
-
-
-type alias Step io =
-    ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) )
+import Enclojure.ValueMap as ValueMap exposing (ValueMap)
+import Enclojure.ValueSet as ValueSet exposing (ValueSet)
 
 
 emptyEnv : Env io
@@ -186,15 +207,10 @@ toThunk callable { k } =
             case arg of
                 List args ->
                     dispatch callable (List.map Located.getValue args) env k
-                        |> Tuple.mapFirst
-                            (\r ->
-                                r
-                                    |> Result.map (Tuple.mapFirst (Located pos))
-                                    |> Result.mapError (Tuple.mapFirst (Located pos))
-                            )
+                        |> Located pos
 
                 _ ->
-                    ( Err ( Located pos (exception env "Foo"), env ), Nothing )
+                    Located pos ( Err ( exception env "Foo", env ), Nothing )
         )
 
 
@@ -239,7 +255,7 @@ toSeq val =
             Err <| Exception (inspect val ++ " is not a sequence") []
 
 
-toMap : Value io -> Maybe (Types.ValueMap io)
+toMap : Value io -> Maybe (ValueMap io)
 toMap val =
     case val of
         Nil ->
@@ -389,7 +405,7 @@ getFn key =
     }
 
 
-setLookupFn : Types.ValueSet io -> Callable io
+setLookupFn : ValueSet io -> Callable io
 setLookupFn set =
     let
         arity1 val =
@@ -404,7 +420,7 @@ setLookupFn set =
     }
 
 
-mapLookupFn : Types.ValueMap io -> Callable io
+mapLookupFn : ValueMap io -> Callable io
 mapLookupFn map =
     let
         arity1 val =
@@ -415,7 +431,7 @@ mapLookupFn map =
     }
 
 
-apply : Located (Value io) -> Located (Value io) -> Env io -> Continuation io -> Types.Step io
+apply : Located (Value io) -> Located (Value io) -> Env io -> Continuation io -> Located (Step io)
 apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
     let
         currentStack =
@@ -439,7 +455,8 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Located.map Const arg, env ), Just (callable { self = fnExpr, k = k }) )
+            ( Ok ( Const <| Located.getValue arg, env ), Just (callable { self = fnExpr, k = k }) )
+                |> Located.sameAs arg
 
         Keyword key ->
             let
@@ -452,7 +469,8 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Located.map Const arg, env ), Just (toThunk (getFn key) { self = fnExpr, k = k }) )
+            ( Ok ( Const <| Located.getValue arg, env ), Just (toThunk (getFn key) { self = fnExpr, k = k }) )
+                |> Located.sameAs arg
 
         Map map ->
             let
@@ -465,7 +483,8 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Located.map Const arg, env ), Just (toThunk (mapLookupFn map) { self = fnExpr, k = k }) )
+            ( Ok ( Const <| Located.getValue arg, env ), Just (toThunk (mapLookupFn map) { self = fnExpr, k = k }) )
+                |> Located.sameAs arg
 
         Set set ->
             let
@@ -478,12 +497,14 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Located.map Const arg, env ), Just (toThunk (setLookupFn set) { self = fnExpr, k = k }) )
+            ( Ok ( Const <| Located.getValue arg, env ), Just (toThunk (setLookupFn set) { self = fnExpr, k = k }) )
+                |> Located.sameAs arg
 
         _ ->
-            ( Err ( Located fnLoc (exception inputEnv (inspectLocated fn ++ " is not a valid callable.")), inputEnv )
+            ( Err ( exception inputEnv (inspectLocated fn ++ " is not a valid callable."), inputEnv )
             , Just (Thunk k)
             )
+                |> Located fnLoc
 
 
 tryString : Value io -> Maybe String
@@ -516,7 +537,7 @@ trySymbol value =
             Nothing
 
 
-tryMap : Value io -> Maybe (Types.ValueMap io)
+tryMap : Value io -> Maybe (ValueMap io)
 tryMap value =
     case value of
         Map s ->

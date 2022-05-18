@@ -5,11 +5,11 @@ import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Lib.String as LibString
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Reader as Parser
+import Enclojure.Reader as Reader
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Arity(..), Continuation, Env, Exception(..), IO(..), Number(..), Step, Thunk(..), Value(..))
+import Enclojure.Types exposing (Continuation, Env, Exception(..), IO(..), Number(..), Step, Thunk(..), Value(..))
 import Enclojure.ValueMap as ValueMap
-import Enclojure.ValueSet as ValueSet
+import Enclojure.ValueSet as ValueSet exposing (ValueSet)
 import Parser
 
 
@@ -31,7 +31,7 @@ closureHack3 a b c f =
     f a b c
 
 
-evalExpression : Located (Value io) -> Env io -> Continuation io -> Step io
+evalExpression : Located (Value io) -> Env io -> Continuation io -> Located (Step io)
 evalExpression mutableExpr mutableEnv mutableK =
     closureHack3
         mutableExpr
@@ -55,37 +55,37 @@ evalExpression mutableExpr mutableEnv mutableK =
                 Symbol s ->
                     case resolveSymbol env s of
                         Ok v ->
-                            ( Ok ( Located loc (Const v), env ), Just (Thunk k) )
+                            Located loc ( Ok ( Const v, env ), Just (Thunk k) )
 
                         Err e ->
-                            ( Err ( Located loc e, env ), Just (Thunk k) )
+                            Located loc ( Err ( e, env ), Just (Thunk k) )
 
                 String s ->
-                    ( Ok ( Located loc (Const (String s)), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const (String s), env ), Just (Thunk k) )
 
                 Keyword s ->
-                    ( Ok ( Located loc (Const (Keyword s)), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const (Keyword s), env ), Just (Thunk k) )
 
                 Number (Float _) ->
-                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 Number (Int _) ->
-                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 MapEntry _ ->
-                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 Nil ->
-                    ( Ok ( Located loc (Const Nil), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const Nil, env ), Just (Thunk k) )
 
                 Bool _ ->
-                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 Ref _ _ ->
-                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 Fn _ _ ->
-                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 List l ->
                     case l of
@@ -114,88 +114,93 @@ evalExpression mutableExpr mutableEnv mutableK =
 
                         -- empty list ()
                         [] ->
-                            ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                            Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 Throwable _ ->
-                    ( Ok ( Located loc (Const expr), env ), Just (Thunk k) )
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
         )
 
 
-evalVector : Located (Array (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalVector : Located (Array (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalVector (Located loc vecV) env k =
-    ( Ok ( Located loc (Const (Vector Array.empty)), env )
-    , vecV
-        |> Array.foldr
-            (\e a ->
-                \(Located _ v) envNow ->
-                    case v of
-                        Vector array ->
-                            evalExpression e
-                                envNow
-                                (\ret retEnv ->
-                                    ( Ok ( Located loc (Const (Vector (Array.push ret array))), retEnv )
+    Located loc
+        ( Ok ( Const (Vector Array.empty), env )
+        , vecV
+            |> Array.foldr
+                (\e a ->
+                    \(Located _ v) envNow ->
+                        case v of
+                            Vector array ->
+                                evalExpression e
+                                    envNow
+                                    (\ret retEnv ->
+                                        Located loc
+                                            ( Ok ( Const (Vector (Array.push ret array)), retEnv )
+                                            , Just (Thunk a)
+                                            )
+                                    )
+
+                            _ ->
+                                Located loc
+                                    ( Err ( Runtime.exception envNow "Interpreter error: vector evaluation yielded a non-vector", envNow )
                                     , Just (Thunk a)
                                     )
-                                )
-
-                        _ ->
-                            ( Err ( Located loc (Runtime.exception envNow "Interpreter error: vector evaluation yielded a non-vector"), envNow )
-                            , Just (Thunk a)
-                            )
-            )
-            k
-        |> Thunk
-        |> Just
-    )
+                )
+                k
+            |> Thunk
+            |> Just
+        )
 
 
-evalMap : Located (Enclojure.Types.ValueMap io) -> Env io -> Continuation io -> Step io
+evalMap : Located (Enclojure.Types.ValueMap io) -> Env io -> Continuation io -> Located (Step io)
 evalMap (Located mapLoc map) env k =
-    ( Ok ( Located mapLoc (Const (Map ValueMap.empty)), env )
-    , map
-        |> ValueMap.toList
-        |> List.map (Located mapLoc)
-        |> List.foldl
-            (\e a ->
-                \(Located loc v) renv ->
-                    case v of
-                        Map m ->
-                            evalMapEntry e
-                                renv
-                                (\(Located mapEntryLoc mapEntryV) mapEntryEnv ->
-                                    case mapEntryV of
-                                        MapEntry ( key, value ) ->
-                                            ( Ok
-                                                ( Located mapEntryLoc (Const (Map (ValueMap.insert key value m)))
-                                                , mapEntryEnv
-                                                )
-                                            , Just (Thunk a)
-                                            )
+    Located mapLoc
+        ( Ok ( Const (Map ValueMap.empty), env )
+        , map
+            |> ValueMap.toList
+            |> List.map (Located mapLoc)
+            |> List.foldl
+                (\e a ->
+                    \(Located loc v) renv ->
+                        case v of
+                            Map m ->
+                                evalMapEntry e
+                                    renv
+                                    (\(Located mapEntryLoc mapEntryV) mapEntryEnv ->
+                                        case mapEntryV of
+                                            MapEntry ( key, value ) ->
+                                                Located mapEntryLoc
+                                                    ( Ok
+                                                        ( Const (Map (ValueMap.insert key value m))
+                                                        , mapEntryEnv
+                                                        )
+                                                    , Just (Thunk a)
+                                                    )
 
-                                        _ ->
-                                            ( Runtime.exception mapEntryEnv "Interpreter error: Map entry evaluation yielded a non-map entry"
-                                                |> Located loc
-                                                |> (\ex -> ( ex, mapEntryEnv ))
-                                                |> Err
-                                            , Just (Thunk a)
-                                            )
-                                )
+                                            _ ->
+                                                Located loc
+                                                    ( Runtime.exception mapEntryEnv "Interpreter error: Map entry evaluation yielded a non-map entry"
+                                                        |> (\ex -> ( ex, mapEntryEnv ))
+                                                        |> Err
+                                                    , Just (Thunk a)
+                                                    )
+                                    )
 
-                        _ ->
-                            ( Runtime.exception renv "Interpreter error: Map evaluation yielded a non-map"
-                                |> Located loc
-                                |> (\ex -> ( ex, renv ))
-                                |> Err
-                            , Just (Thunk a)
-                            )
-            )
-            k
-        |> Thunk
-        |> Just
-    )
+                            _ ->
+                                Located loc
+                                    ( Runtime.exception renv "Interpreter error: Map evaluation yielded a non-map"
+                                        |> (\ex -> ( ex, renv ))
+                                        |> Err
+                                    , Just (Thunk a)
+                                    )
+                )
+                k
+            |> Thunk
+            |> Just
+        )
 
 
-evalMapEntry : Located (Enclojure.Types.ValueMapEntry io) -> Env io -> Continuation io -> Step io
+evalMapEntry : Located (Enclojure.Types.ValueMapEntry io) -> Env io -> Continuation io -> Located (Step io)
 evalMapEntry (Located loc ( key, value )) env k =
     evalExpression (Located.unknown key)
         env
@@ -203,47 +208,50 @@ evalMapEntry (Located loc ( key, value )) env k =
             evalExpression value
                 keyEnv
                 (\valRet valEnv ->
-                    ( Ok ( Located loc (Const (MapEntry ( Located.getValue keyRet, valRet ))), valEnv )
-                    , Just (Thunk k)
-                    )
+                    Located loc
+                        ( Ok ( Const (MapEntry ( Located.getValue keyRet, valRet )), valEnv )
+                        , Just (Thunk k)
+                        )
                 )
         )
 
 
-evalSet : Located (Enclojure.Types.ValueSet io) -> Env io -> Continuation io -> Step io
+evalSet : Located (ValueSet io) -> Env io -> Continuation io -> Located (Step io)
 evalSet (Located setLoc set) env k =
-    ( Ok ( Located setLoc (Const (Set ValueSet.empty)), env )
-    , set
-        |> ValueSet.toList
-        |> List.map (Located setLoc)
-        |> List.foldl
-            (\e a ->
-                \(Located loc v) renv ->
-                    case v of
-                        Set s ->
-                            evalExpression e
-                                renv
-                                (\(Located setEntryLoc setEntry) setEntryEnv ->
-                                    ( Ok
-                                        ( Located setEntryLoc (Const (Set (ValueSet.insert setEntry s)))
-                                        , setEntryEnv
-                                        )
+    Located setLoc
+        ( Ok ( Const (Set ValueSet.empty), env )
+        , set
+            |> ValueSet.toList
+            |> List.map (Located setLoc)
+            |> List.foldl
+                (\e a ->
+                    \(Located loc v) renv ->
+                        case v of
+                            Set s ->
+                                evalExpression e
+                                    renv
+                                    (\(Located setEntryLoc setEntry) setEntryEnv ->
+                                        Located setEntryLoc
+                                            ( Ok
+                                                ( Const (Set (ValueSet.insert setEntry s))
+                                                , setEntryEnv
+                                                )
+                                            , Just (Thunk a)
+                                            )
+                                    )
+
+                            _ ->
+                                Located loc
+                                    ( Runtime.exception renv "Interpreter error: Set evaluation yielded a non-set"
+                                        |> (\ex -> ( ex, renv ))
+                                        |> Err
                                     , Just (Thunk a)
                                     )
-                                )
-
-                        _ ->
-                            ( Runtime.exception renv "Interpreter error: Set evaluation yielded a non-set"
-                                |> Located loc
-                                |> (\ex -> ( ex, renv ))
-                                |> Err
-                            , Just (Thunk a)
-                            )
-            )
-            k
-        |> Thunk
-        |> Just
-    )
+                )
+                k
+            |> Thunk
+            |> Just
+        )
 
 
 destructure : Located (Value io) -> Located (Value io) -> Result (Located Exception) (List ( String, Value io ))
@@ -479,7 +487,7 @@ exctractFnName exprs =
             ( Nothing, exprs )
 
 
-evalFn : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalFn : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalFn (Located loc exprs) fnEnv k =
     let
         ( name, arity ) =
@@ -487,96 +495,96 @@ evalFn (Located loc exprs) fnEnv k =
     in
     case arity of
         (Located _ (Vector argBindings)) :: body ->
-            ( Ok
-                ( Fn name
-                    (\fn ->
+            Located loc
+                ( Ok
+                    ( Fn name
+                        (\fn ->
+                            (\args callsiteEnv ->
+                                let
+                                    callEnvResult =
+                                        { callsiteEnv | local = fnEnv.local }
+                                            |> (name
+                                                    |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self)
+                                                    |> Maybe.withDefault identity
+                                               )
+                                            |> Runtime.setLocalEnv "recur" fn.self
+                                            |> bindArgs args (Array.toList argBindings)
+                                in
+                                case callEnvResult of
+                                    Ok callEnv ->
+                                        evalExpression (wrapInDo (Located loc body))
+                                            callEnv
+                                            (scrubLocalEnv callsiteEnv fn.k)
+
+                                    Err e ->
+                                        Located.sameAs e ( Err ( Located.getValue e, fnEnv ), Just (Thunk fn.k) )
+                            )
+                                |> Thunk
+                        )
+                        |> Const
+                    , fnEnv
+                    )
+                , Just (Thunk k)
+                )
+
+        signatures ->
+            Located loc
+                ( ( (\fn ->
                         (\args callsiteEnv ->
                             let
-                                callEnvResult =
+                                callEnvBodyResult =
                                     { callsiteEnv | local = fnEnv.local }
                                         |> (name
                                                 |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self)
                                                 |> Maybe.withDefault identity
                                            )
                                         |> Runtime.setLocalEnv "recur" fn.self
-                                        |> bindArgs args (Array.toList argBindings)
+                                        |> (\env ->
+                                                mapBindingsToBodies signatures
+                                                    |> Result.andThen
+                                                        (listLocate
+                                                            (\( bindings, body ) ->
+                                                                bindArgs args bindings env
+                                                                    |> Result.toMaybe
+                                                                    |> Maybe.map (\e -> ( e, body ))
+                                                            )
+                                                            >> Result.fromMaybe
+                                                                (Located loc
+                                                                    (Exception
+                                                                        "Argument error: no matching arity"
+                                                                        []
+                                                                    )
+                                                                )
+                                                        )
+                                           )
                             in
-                            case callEnvResult of
-                                Ok callEnv ->
-                                    evalExpression (wrapInDo (Located loc body))
+                            case callEnvBodyResult of
+                                Ok ( callEnv, fnBody ) ->
+                                    evalExpression fnBody
                                         callEnv
                                         (scrubLocalEnv callsiteEnv fn.k)
 
                                 Err e ->
-                                    ( Err ( e, fnEnv ), Just (Thunk fn.k) )
+                                    Located.sameAs e ( Err ( Located.getValue e, callsiteEnv ), Just (Thunk fn.k) )
                         )
                             |> Thunk
                     )
-                    |> Const
-                    |> Located loc
-                , fnEnv
+                        |> Fn name
+                        |> Const
+                  , fnEnv
+                  )
+                    |> Ok
+                , Just (Thunk k)
                 )
-            , Just (Thunk k)
-            )
-
-        signatures ->
-            ( ( (\fn ->
-                    (\args callsiteEnv ->
-                        let
-                            callEnvBodyResult =
-                                { callsiteEnv | local = fnEnv.local }
-                                    |> (name
-                                            |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self)
-                                            |> Maybe.withDefault identity
-                                       )
-                                    |> Runtime.setLocalEnv "recur" fn.self
-                                    |> (\env ->
-                                            mapBindingsToBodies signatures
-                                                |> Result.andThen
-                                                    (listLocate
-                                                        (\( bindings, body ) ->
-                                                            bindArgs args bindings env
-                                                                |> Result.toMaybe
-                                                                |> Maybe.map (\e -> ( e, body ))
-                                                        )
-                                                        >> Result.fromMaybe
-                                                            (Located loc
-                                                                (Exception
-                                                                    "Argument error: no matching arity"
-                                                                    []
-                                                                )
-                                                            )
-                                                    )
-                                       )
-                        in
-                        case callEnvBodyResult of
-                            Ok ( callEnv, fnBody ) ->
-                                evalExpression fnBody
-                                    callEnv
-                                    (scrubLocalEnv callsiteEnv fn.k)
-
-                            Err e ->
-                                ( Err ( e, callsiteEnv ), Just (Thunk fn.k) )
-                    )
-                        |> Thunk
-                )
-                    |> Fn name
-                    |> Const
-                    |> Located loc
-              , fnEnv
-              )
-                |> Ok
-            , Just (Thunk k)
-            )
 
 
 scrubLocalEnv : Env io -> Continuation io -> Continuation io
 scrubLocalEnv priorEnv k =
     \v env ->
-        ( Ok ( Located.map Const v, { env | local = priorEnv.local } ), Just (Thunk k) )
+        Located.sameAs v ( Ok ( Const <| Located.getValue v, { env | local = priorEnv.local } ), Just (Thunk k) )
 
 
-evalLet : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalLet : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalLet (Located loc body) env k =
     let
         parseBindings bindings =
@@ -593,129 +601,139 @@ evalLet (Located loc body) env k =
     in
     case body of
         (Located bodyLoc (Vector bindings)) :: doBody ->
-            ( Ok ( Located loc (Const Nil), env )
-            , Just
-                (bindings
-                    |> Array.toList
-                    |> parseBindings
-                    |> Result.map
-                        (List.foldr
-                            (\( template, e ) a ->
-                                \_ eenv ->
-                                    evalExpression e
-                                        eenv
-                                        (\ret retEnv ->
-                                            ( destructure ret template
-                                                |> Result.mapError (\ex -> ( ex, retEnv ))
-                                                |> Result.andThen
-                                                    (\destructuredBindings ->
-                                                        Ok
-                                                            ( Located loc (Const Nil)
-                                                            , destructuredBindings
-                                                                |> List.foldl (\( name, v ) -> Runtime.setLocalEnv name v) retEnv
+            Located loc
+                ( Ok ( Const Nil, env )
+                , Just
+                    (bindings
+                        |> Array.toList
+                        |> parseBindings
+                        |> Result.map
+                            (List.foldr
+                                (\( template, e ) a ->
+                                    \_ eenv ->
+                                        evalExpression e
+                                            eenv
+                                            (\ret retEnv ->
+                                                Located loc
+                                                    ( destructure ret template
+                                                        |> Result.mapError (\ex -> ( Located.getValue ex, retEnv ))
+                                                        |> Result.andThen
+                                                            (\destructuredBindings ->
+                                                                Ok <|
+                                                                    ( Const Nil
+                                                                    , destructuredBindings
+                                                                        |> List.foldl (\( name, v ) -> Runtime.setLocalEnv name v) retEnv
+                                                                    )
                                                             )
+                                                    , Just (Thunk a)
                                                     )
-                                            , Just (Thunk a)
                                             )
-                                        )
+                                )
+                                (\_ renv ->
+                                    wrapInDo (Located bodyLoc doBody)
+                                        |> (\b -> evalExpression b renv (scrubLocalEnv env k))
+                                )
                             )
-                            (\_ renv ->
-                                wrapInDo (Located bodyLoc doBody)
-                                    |> (\b -> evalExpression b renv (scrubLocalEnv env k))
-                            )
-                        )
-                    |> Result.map Thunk
-                    |> (\r ->
-                            case r of
-                                Ok v ->
-                                    v
+                        |> Result.map Thunk
+                        |> (\r ->
+                                case r of
+                                    Ok v ->
+                                        v
 
-                                Err e ->
-                                    Thunk (\_ errEnv -> ( Err ( e, errEnv ), Just (Thunk (scrubLocalEnv env k)) ))
-                       )
+                                    Err e ->
+                                        Thunk
+                                            (\_ errEnv ->
+                                                Located.sameAs e
+                                                    ( Err ( Located.getValue e, errEnv )
+                                                    , Just (Thunk (scrubLocalEnv env k))
+                                                    )
+                                            )
+                           )
+                    )
                 )
-            )
 
         _ ->
-            ( Err ( Located loc (Runtime.exception env "Syntax error: let expects a vector of bindings"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "Syntax error: let expects a vector of bindings", env ), Just (Thunk k) )
 
 
-evalApply : Located (Value io) -> Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalApply : Located (Value io) -> Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalApply fnExpr (Located loc argExprs) env k =
     evalExpression fnExpr
         env
         (\fn fnEnv ->
-            ( Ok ( Located loc (Const (List [])), fnEnv )
-            , Just
-                (argExprs
-                    |> List.foldr
-                        (\e a ->
-                            \(Located _ args) argsEnv ->
-                                evalExpression e
-                                    argsEnv
-                                    (\arg argEnv ->
-                                        case args of
-                                            List ea ->
-                                                a (Located loc (List (ea ++ [ arg ]))) argEnv
+            Located loc
+                ( Ok ( Const (List []), fnEnv )
+                , Just
+                    (argExprs
+                        |> List.foldr
+                            (\e a ->
+                                \(Located _ args) argsEnv ->
+                                    evalExpression e
+                                        argsEnv
+                                        (\arg argEnv ->
+                                            case args of
+                                                List ea ->
+                                                    a (Located loc (List (ea ++ [ arg ]))) argEnv
 
-                                            _ ->
-                                                ( Runtime.exception argEnv "Impossible interpreter state: list evaluation yielded a non-list"
-                                                    |> Located loc
-                                                    |> (\ex -> ( ex, argEnv ))
-                                                    |> Err
-                                                , Just (Thunk a)
-                                                )
-                                    )
-                        )
-                        (\args argsEnv -> Runtime.apply fn args argsEnv k)
-                    |> Thunk
+                                                _ ->
+                                                    Located loc
+                                                        ( Runtime.exception argEnv "Impossible interpreter state: list evaluation yielded a non-list"
+                                                            |> (\ex -> ( ex, argEnv ))
+                                                            |> Err
+                                                        , Just (Thunk a)
+                                                        )
+                                        )
+                            )
+                            (\args argsEnv -> Runtime.apply fn args argsEnv k)
+                        |> Thunk
+                    )
                 )
-            )
         )
 
 
-evalQuote : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalQuote : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalQuote (Located loc exprs) env k =
     case exprs of
         [ arg ] ->
-            ( Ok ( Located.map Const arg, env )
-            , Just (Thunk k)
-            )
+            Located.sameAs arg
+                ( Ok ( Const <| Located.getValue arg, env )
+                , Just (Thunk k)
+                )
 
         _ ->
-            ( Err
-                ( Located loc
-                    (Runtime.exception env
+            Located loc
+                ( Err
+                    ( Runtime.exception env
                         ("Argument error: Wrong number of arguments ("
                             ++ String.fromInt (List.length exprs)
                             ++ ") passed to quote"
                         )
+                    , env
                     )
-                , env
+                , Just (Thunk k)
                 )
-            , Just (Thunk k)
-            )
 
 
-evalDo : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalDo : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalDo (Located loc exprs) env k =
-    ( Ok ( Located loc (Const Nil), env )
-    , Just
-        (Thunk
-            (exprs
-                |> List.foldr
-                    (\e a -> \_ eenv -> evalExpression e eenv a)
-                    (\r renv -> ( Ok ( Located.map Const r, renv ), Just (Thunk k) ))
+    Located loc
+        ( Ok ( Const Nil, env )
+        , Just
+            (Thunk
+                (exprs
+                    |> List.foldr
+                        (\e a -> \_ eenv -> evalExpression e eenv a)
+                        (\r renv -> Located.sameAs r ( Ok ( Const <| Located.getValue r, renv ), Just (Thunk k) ))
+                )
             )
         )
-    )
 
 
-evalIf : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalIf : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalIf (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ :: _ ->
-            ( Err ( Located loc (Runtime.exception env "an if with too many forms"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "an if with too many forms", env ), Just (Thunk k) )
 
         [ eIf, eThen, eElse ] ->
             evalExpression eIf
@@ -736,45 +754,46 @@ evalIf (Located loc args) env k =
                         evalExpression eThen ifEnv k
 
                     else
-                        ( Ok ( Located loc (Const Nil), ifEnv ), Just (Thunk k) )
+                        Located loc ( Ok ( Const Nil, ifEnv ), Just (Thunk k) )
                 )
 
         [ _ ] ->
-            ( Err ( Located loc (Runtime.exception env "an if without then"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "an if without then", env ), Just (Thunk k) )
 
         [] ->
-            ( Err ( Located loc (Runtime.exception env "an empty if"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "an empty if", env ), Just (Thunk k) )
 
 
-evalDef : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
+evalDef : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalDef (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ ->
-            ( Err ( Located loc (Runtime.exception env "too many arguments to def"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "too many arguments to def", env ), Just (Thunk k) )
 
         [ Located _ (Symbol name), e ] ->
             evalExpression e
                 env
                 (\eret eenv ->
-                    ( Ok
-                        ( Located loc (Const (Ref name eret))
-                        , Runtime.setGlobalEnv name (Located.getValue eret) eenv
+                    Located loc
+                        ( Ok
+                            ( Const (Ref name eret)
+                            , Runtime.setGlobalEnv name (Located.getValue eret) eenv
+                            )
+                        , Just (Thunk k)
                         )
-                    , Just (Thunk k)
-                    )
                 )
 
         [ _, _ ] ->
-            ( Err ( Located loc (Runtime.exception env "def accepts a symbol and an expression"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "def accepts a symbol and an expression", env ), Just (Thunk k) )
 
         [ Located _ (Symbol name) ] ->
-            ( Err ( Located loc (Runtime.exception env ("empty def " ++ name)), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env ("empty def " ++ name), env ), Just (Thunk k) )
 
         [ _ ] ->
-            ( Err ( Located loc (Runtime.exception env "def expects a symbol as its first argument"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "def expects a symbol as its first argument", env ), Just (Thunk k) )
 
         [] ->
-            ( Err ( Located loc (Runtime.exception env "no arguments to def"), env ), Just (Thunk k) )
+            Located loc ( Err ( Runtime.exception env "no arguments to def", env ), Just (Thunk k) )
 
 
 wrapInDo : Located (List (Located (Value io))) -> Located (Value io)
@@ -784,33 +803,33 @@ wrapInDo (Located loc vs) =
 
 prelude : Result (Located Exception) (List (Located (Value io)))
 prelude =
-    Parser.parse Lib.prelude
+    Reader.parse Lib.prelude
         |> Result.mapError (deadEndsToString >> Runtime.exception defaultEnv >> Located.unknown)
 
 
 terminate : Continuation io
 terminate (Located pos v) env =
-    ( Ok ( Located pos (Const v), env ), Nothing )
+    Located pos ( Ok ( Const v, env ), Nothing )
 
 
-trampolinePure : ( Result ( Located Exception, Env io ) ( Located (IO io), Env io ), Maybe (Thunk io) ) -> Result (Located Exception) ( Value io, Env io )
-trampolinePure ( result, thunk ) =
+trampolinePure : Located ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ) -> Result (Located Exception) ( Value io, Env io )
+trampolinePure (Located loc ( result, thunk )) =
     case result of
         Ok ( io, env ) ->
-            case Located.getValue io of
+            case io of
                 Const v ->
                     case thunk of
                         Just (Thunk continuation) ->
-                            trampolinePure (continuation (Located.sameAs io v) env)
+                            trampolinePure (continuation (Located loc v) env)
 
                         Nothing ->
                             Ok ( v, env )
 
-                _ ->
-                    Err (Located.sameAs io (Runtime.exception env "Interpreter error: An unexpected side effect during init"))
+                SideEffect _ ->
+                    Err (Located loc (Runtime.exception env "Interpreter error: An unexpected side effect during init"))
 
         Err ( e, _ ) ->
-            Err e
+            Err (Located loc e)
 
 
 defaultEnv : Env io
@@ -888,7 +907,7 @@ problemToString p =
 
 evalPure : Env io -> String -> Result (Located Exception) ( Value io, Env io )
 evalPure initEnv code =
-    Parser.parse code
+    Reader.parse code
         |> Result.mapError (deadEndsToString >> Runtime.exception initEnv)
         |> Result.andThen
             (\exprs ->
@@ -907,9 +926,9 @@ evalPure initEnv code =
         |> Result.andThen trampolinePure
 
 
-eval : Env io -> String -> Step io
+eval : Env io -> String -> Located (Step io)
 eval initEnv code =
-    Parser.parse code
+    Reader.parse code
         |> Result.mapError (deadEndsToString >> Runtime.exception initEnv >> Located.unknown)
         |> Result.map2
             (\a b -> a ++ b)
@@ -933,7 +952,5 @@ eval initEnv code =
                         v
 
                     Err e ->
-                        ( Err ( e, initEnv )
-                        , Nothing
-                        )
+                        Located.sameAs e ( Err ( Located.getValue e, initEnv ), Nothing )
            )

@@ -1,8 +1,16 @@
-module Enclojure.ValueMap exposing (empty, foldl, fromList, get, insert, isEmpty, map, member, remove, toList)
+module Enclojure.ValueMap exposing (ValueMap, ValueMapEntry, empty, foldl, fromList, get, insert, isEmpty, map, member, remove, toList)
 
 import Dict
 import Enclojure.Located exposing (Located(..))
-import Enclojure.Types exposing (..)
+import Enclojure.Types exposing (Number(..), Value(..))
+
+
+type alias ValueMap io =
+    Enclojure.Types.ValueMap io
+
+
+type alias ValueMapEntry io =
+    Enclojure.Types.ValueMapEntry io
 
 
 empty : ValueMap io
