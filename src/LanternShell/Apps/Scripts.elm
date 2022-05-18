@@ -519,7 +519,6 @@ type alias UiModel =
 
 type Interpreter
     = Stopped
-    | Blocked
     | ShowingUI UiModel ( Env MyIO, Maybe (Thunk MyIO) )
     | Running
     | Done ( Value MyIO, Env MyIO )
@@ -546,7 +545,7 @@ responseToValue response =
 
 
 trampoline :
-    Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) )
+    Located (Enclojure.Types.Step MyIO)
     -> Int
     -> ( Interpreter, Cmd (Lantern.App.Message Message) )
 trampoline (Located loc ( result, thunk )) maxdepth =
