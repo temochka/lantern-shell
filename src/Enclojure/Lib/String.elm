@@ -5,7 +5,7 @@ import Enclojure.Runtime as Runtime exposing (emptyCallable, inspect, pure)
 import Enclojure.Types as Types exposing (Arity(..), Exception(..), IO(..), Value(..))
 
 
-init : Types.Env -> Types.Env
+init : Types.Env io -> Types.Env io
 init env =
     env
         |> Runtime.setGlobalEnv "string/join"
@@ -16,7 +16,7 @@ init env =
             (Fn (Just "string/split-lines") (Runtime.toContinuation splitLines))
 
 
-splitLines : Types.Callable
+splitLines : Types.Callable io
 splitLines =
     let
         arity1 val =
@@ -35,7 +35,7 @@ splitLines =
     }
 
 
-length : Types.Callable
+length : Types.Callable io
 length =
     let
         arity1 val =
@@ -48,7 +48,7 @@ length =
     }
 
 
-join : Types.Callable
+join : Types.Callable io
 join =
     let
         arity1 val =

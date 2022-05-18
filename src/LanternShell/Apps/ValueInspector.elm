@@ -4,10 +4,11 @@ import Array exposing (Array)
 import Element exposing (Element)
 import Element.Background
 import Element.Input
-import Enclojure.Located
+import Enclojure.Located as Located
 import Enclojure.Runtime
-import Enclojure.Types exposing (Number(..), Value(..))
-import Enclojure.ValueMap
+import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.ValueMap as ValueMap
+import Enclojure.ValueSet as ValueSet
 import Html.Events
 import Json.Decode
 import Lantern.App
@@ -20,23 +21,23 @@ type alias Context =
     { theme : LanternUi.Theme.Theme }
 
 
-type alias Flags =
-    { value : Value }
+type alias Flags io =
+    { value : Value io }
 
 
-type alias Model =
-    { value : Value
-    , selectedPath : Maybe (Array Value)
-    , hoveredPath : Maybe (Array Value)
+type alias Model io =
+    { value : Value io
+    , selectedPath : Maybe (Array (Value io))
+    , hoveredPath : Maybe (Array (Value io))
     }
 
 
-type Message
-    = SelectPath (Array Value)
+type Message io
+    = SelectPath (Array (Value io))
     | Nop
 
 
-init : Maybe Flags -> ( Model, Cmd (Lantern.App.Message Message) )
+init : Maybe (Flags io) -> ( Model io, Cmd (Lantern.App.Message (Message io)) )
 init flags =
     ( { value = flags |> Maybe.map .value |> Maybe.withDefault Nil
       , selectedPath = Nothing
@@ -46,7 +47,7 @@ init flags =
     )
 
 
-update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
+update : Message io -> Model io -> ( Model io, Cmd (Lantern.App.Message (Message io)) )
 update msg model =
     case msg of
         Nop ->
@@ -66,7 +67,7 @@ indent =
     paddingLeft 20
 
 
-renderValue : LanternUi.Theme.Theme -> Array Value -> Value -> Element (Lantern.App.Message Message)
+renderValue : LanternUi.Theme.Theme -> Array (Value io) -> Value io -> Element (Lantern.App.Message (Message io))
 renderValue theme path value =
     Element.el
         [ Element.htmlAttribute <|
@@ -82,7 +83,7 @@ renderValue theme path value =
                     [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] (Element.text "[")
                     , v
                         |> Array.toList
-                        |> List.indexedMap (\i e -> renderValue theme (Array.push (Number (Int i)) path) (Enclojure.Located.getValue e))
+                        |> List.indexedMap (\i e -> renderValue theme (Array.push (Number (Int i)) path) (Located.getValue e))
                         |> Element.column [ indent ]
                     , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] (Element.text "]")
                     ]
@@ -92,7 +93,7 @@ renderValue theme path value =
                     []
                     [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "("
                     , v
-                        |> List.indexedMap (\i e -> renderValue theme (Array.push (Number (Int i)) path) (Enclojure.Located.getValue e))
+                        |> List.indexedMap (\i e -> renderValue theme (Array.push (Number (Int i)) path) (Located.getValue e))
                         |> Element.column [ indent ]
                     , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text ")"
                     ]
@@ -102,9 +103,9 @@ renderValue theme path value =
                     []
                     [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "{"
                     , m
-                        |> Enclojure.ValueMap.toList
+                        |> ValueMap.toList
                         |> List.map
-                            (\( k, Enclojure.Located.Located _ v ) ->
+                            (\( k, Located.Located _ v ) ->
                                 Element.row
                                     [ Element.width Element.fill, Element.alignTop, Element.spacing 10 ]
                                     [ Element.el [ Element.alignTop ] (renderValue theme (Array.push k path) k)
@@ -121,14 +122,14 @@ renderValue theme path value =
         )
 
 
-view : Context -> Model -> Element (Lantern.App.Message Message)
+view : Context -> Model io -> Element (Lantern.App.Message (Message io))
 view ctx model =
     let
         path =
             model.hoveredPath
                 |> Maybe.map Just
                 |> Maybe.withDefault model.selectedPath
-                |> Maybe.map (\v -> Enclojure.Runtime.inspect (Vector (Array.map Enclojure.Located.unknown v)))
+                |> Maybe.map (\v -> Enclojure.Runtime.inspect (Vector (Array.map Located.unknown v)))
                 |> Maybe.withDefault " "
     in
     LanternUi.columnLayout
@@ -148,7 +149,7 @@ view ctx model =
         ]
 
 
-lanternApp : Lantern.App.App Context Flags Model Message
+lanternApp : Lantern.App.App Context (Flags io) (Model io) (Message io)
 lanternApp =
     Lantern.App.app
         { name = "Value inspector"

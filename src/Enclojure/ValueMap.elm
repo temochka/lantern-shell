@@ -1,11 +1,11 @@
-module Enclojure.ValueMap exposing (empty, foldl, fromList, get, insert, isEmpty, member, remove, toList)
+module Enclojure.ValueMap exposing (empty, foldl, fromList, get, insert, isEmpty, map, member, remove, toList)
 
 import Dict
 import Enclojure.Located exposing (Located(..))
 import Enclojure.Types exposing (..)
 
 
-empty : ValueMap
+empty : ValueMap io
 empty =
     { ints = Dict.empty
     , floats = Dict.empty
@@ -25,7 +25,7 @@ empty =
     }
 
 
-isEmpty : ValueMap -> Bool
+isEmpty : ValueMap io -> Bool
 isEmpty m =
     Dict.isEmpty m.ints
         && Dict.isEmpty m.floats
@@ -45,31 +45,31 @@ isEmpty m =
         && Dict.isEmpty m.keywords
 
 
-insert : Value -> Located Value -> ValueMap -> ValueMap
-insert k v map =
+insert : Value io -> Located (Value io) -> ValueMap io -> ValueMap io
+insert k v m =
     case k of
         Number (Int int) ->
-            { map | ints = Dict.insert int v map.ints }
+            { m | ints = Dict.insert int v m.ints }
 
         Number (Float float) ->
-            { map | floats = Dict.insert float v map.floats }
+            { m | floats = Dict.insert float v m.floats }
 
         String string ->
-            { map | strings = Dict.insert string v map.strings }
+            { m | strings = Dict.insert string v m.strings }
 
         Ref _ _ ->
-            { map | refs = ( k, v ) :: map.refs }
+            { m | refs = ( k, v ) :: m.refs }
 
         List _ ->
-            { map | lists = ( k, v ) :: map.lists }
+            { m | lists = ( k, v ) :: m.lists }
 
         Nil ->
-            { map | nil = Just v }
+            { m | nil = Just v }
 
         Bool bool ->
             let
                 oldBools =
-                    map.bools
+                    m.bools
 
                 bools =
                     if bool then
@@ -78,66 +78,66 @@ insert k v map =
                     else
                         { oldBools | false = Just v }
             in
-            { map | bools = bools }
+            { m | bools = bools }
 
         Keyword keyword ->
-            { map | keywords = Dict.insert keyword v map.keywords }
+            { m | keywords = Dict.insert keyword v m.keywords }
 
         Symbol symbol ->
-            { map | symbols = Dict.insert symbol v map.symbols }
+            { m | symbols = Dict.insert symbol v m.symbols }
 
         Fn _ _ ->
-            { map | fns = ( k, v ) :: map.fns }
+            { m | fns = ( k, v ) :: m.fns }
 
         Map _ ->
-            { map | maps = ( k, v ) :: map.maps }
+            { m | maps = ( k, v ) :: m.maps }
 
         MapEntry _ ->
-            { map | mapEntries = ( k, v ) :: map.mapEntries }
+            { m | mapEntries = ( k, v ) :: m.mapEntries }
 
         Set _ ->
-            { map | sets = ( k, v ) :: map.sets }
+            { m | sets = ( k, v ) :: m.sets }
 
         Throwable _ ->
-            { map | throwables = ( k, v ) :: map.throwables }
+            { m | throwables = ( k, v ) :: m.throwables }
 
         Vector _ ->
-            { map | vectors = ( k, v ) :: map.vectors }
+            { m | vectors = ( k, v ) :: m.vectors }
 
 
-remove : Value -> ValueMap -> ValueMap
-remove k map =
+remove : Value io -> ValueMap io -> ValueMap io
+remove k m =
     case k of
         Number (Int int) ->
-            { map | ints = Dict.remove int map.ints }
+            { m | ints = Dict.remove int m.ints }
 
         Number (Float float) ->
-            { map | floats = Dict.remove float map.floats }
+            { m | floats = Dict.remove float m.floats }
 
         String string ->
-            { map | strings = Dict.remove string map.strings }
+            { m | strings = Dict.remove string m.strings }
 
         Ref _ _ ->
             let
                 newRefs =
-                    map.refs |> List.filter (Tuple.first >> (/=) k)
+                    m.refs |> List.filter (Tuple.first >> (/=) k)
             in
-            { map | refs = newRefs }
+            { m | refs = newRefs }
 
         List _ ->
             let
                 newLists =
-                    map.lists |> List.filter (Tuple.first >> (/=) k)
+                    m.lists |> List.filter (Tuple.first >> (/=) k)
             in
-            { map | lists = newLists }
+            { m | lists = newLists }
 
         Nil ->
-            { map | nil = Nothing }
+            { m | nil = Nothing }
 
         Bool bool ->
             let
                 oldBools =
-                    map.bools
+                    m.bools
 
                 bools =
                     if bool then
@@ -146,51 +146,51 @@ remove k map =
                     else
                         { oldBools | false = Nothing }
             in
-            { map | bools = bools }
+            { m | bools = bools }
 
         Keyword keyword ->
-            { map | keywords = Dict.remove keyword map.keywords }
+            { m | keywords = Dict.remove keyword m.keywords }
 
         Symbol symbol ->
-            { map | symbols = Dict.remove symbol map.symbols }
+            { m | symbols = Dict.remove symbol m.symbols }
 
         Fn _ _ ->
             let
                 newFns =
-                    map.fns |> List.filter (Tuple.first >> (/=) k)
+                    m.fns |> List.filter (Tuple.first >> (/=) k)
             in
-            { map | fns = newFns }
+            { m | fns = newFns }
 
         Map _ ->
             let
                 newMaps =
-                    map.maps |> List.filter (Tuple.first >> (/=) k)
+                    m.maps |> List.filter (Tuple.first >> (/=) k)
             in
-            { map | maps = newMaps }
+            { m | maps = newMaps }
 
         MapEntry _ ->
             let
                 newMapEntries =
-                    map.mapEntries |> List.filter (Tuple.first >> (/=) k)
+                    m.mapEntries |> List.filter (Tuple.first >> (/=) k)
             in
-            { map | mapEntries = newMapEntries }
+            { m | mapEntries = newMapEntries }
 
         Set _ ->
             let
                 newSets =
-                    map.sets |> List.filter (Tuple.first >> (/=) k)
+                    m.sets |> List.filter (Tuple.first >> (/=) k)
             in
-            { map | sets = newSets }
+            { m | sets = newSets }
 
         Throwable _ ->
-            map
+            m
 
         Vector _ ->
             let
                 newVectors =
-                    map.vectors |> List.filter (Tuple.first >> (/=) k)
+                    m.vectors |> List.filter (Tuple.first >> (/=) k)
             in
-            { map | vectors = newVectors }
+            { m | vectors = newVectors }
 
 
 linearFind : (a -> Bool) -> List a -> Maybe a
@@ -207,97 +207,97 @@ linearFind f l =
                 linearFind f rest
 
 
-get : Value -> ValueMap -> Maybe (Located Value)
-get k map =
+get : Value io -> ValueMap io -> Maybe (Located (Value io))
+get k m =
     case k of
         Number (Int int) ->
-            Dict.get int map.ints
+            Dict.get int m.ints
 
         Number (Float float) ->
-            Dict.get float map.floats
+            Dict.get float m.floats
 
         String string ->
-            Dict.get string map.strings
+            Dict.get string m.strings
 
         Ref _ _ ->
-            linearFind (Tuple.first >> (==) k) map.refs
+            linearFind (Tuple.first >> (==) k) m.refs
                 |> Maybe.map Tuple.second
 
         List _ ->
-            linearFind (Tuple.first >> (==) k) map.lists
+            linearFind (Tuple.first >> (==) k) m.lists
                 |> Maybe.map Tuple.second
 
         Nil ->
-            map.nil
+            m.nil
 
         Bool bool ->
             if bool then
-                map.bools.true
+                m.bools.true
 
             else
-                map.bools.false
+                m.bools.false
 
         Keyword keyword ->
-            Dict.get keyword map.keywords
+            Dict.get keyword m.keywords
 
         Symbol symbol ->
-            Dict.get symbol map.symbols
+            Dict.get symbol m.symbols
 
         Fn _ _ ->
-            linearFind (Tuple.first >> (==) k) map.fns
+            linearFind (Tuple.first >> (==) k) m.fns
                 |> Maybe.map Tuple.second
 
         Map _ ->
-            linearFind (Tuple.first >> (==) k) map.maps
+            linearFind (Tuple.first >> (==) k) m.maps
                 |> Maybe.map Tuple.second
 
         MapEntry _ ->
-            linearFind (Tuple.first >> (==) k) map.mapEntries
+            linearFind (Tuple.first >> (==) k) m.mapEntries
                 |> Maybe.map Tuple.second
 
         Set _ ->
-            linearFind (Tuple.first >> (==) k) map.sets
+            linearFind (Tuple.first >> (==) k) m.sets
                 |> Maybe.map Tuple.second
 
         Throwable _ ->
             Nothing
 
         Vector _ ->
-            linearFind (Tuple.first >> (==) k) map.vectors
+            linearFind (Tuple.first >> (==) k) m.vectors
                 |> Maybe.map Tuple.second
 
 
-member : Value -> ValueMap -> Bool
-member val map =
-    Nothing /= get val map
+member : Value io -> ValueMap io -> Bool
+member val m =
+    Nothing /= get val m
 
 
-toList : ValueMap -> List ( Value, Located Value )
-toList map =
+toList : ValueMap io -> List ( Value io, Located (Value io) )
+toList m =
     let
         ints =
-            Dict.toList map.ints |> List.map (Tuple.mapFirst (Int >> Number))
+            Dict.toList m.ints |> List.map (Tuple.mapFirst (Int >> Number))
 
         floats =
-            Dict.toList map.floats |> List.map (Tuple.mapFirst (Float >> Number))
+            Dict.toList m.floats |> List.map (Tuple.mapFirst (Float >> Number))
 
         strings =
-            Dict.toList map.strings |> List.map (Tuple.mapFirst String)
+            Dict.toList m.strings |> List.map (Tuple.mapFirst String)
 
         nils =
-            map.nil |> Maybe.map (Tuple.pair Nil >> List.singleton) |> Maybe.withDefault []
+            m.nil |> Maybe.map (Tuple.pair Nil >> List.singleton) |> Maybe.withDefault []
 
         trues =
-            map.bools.true |> Maybe.map (Tuple.pair (Bool True) >> List.singleton) |> Maybe.withDefault []
+            m.bools.true |> Maybe.map (Tuple.pair (Bool True) >> List.singleton) |> Maybe.withDefault []
 
         falses =
-            map.bools.false |> Maybe.map (Tuple.pair (Bool False) >> List.singleton) |> Maybe.withDefault []
+            m.bools.false |> Maybe.map (Tuple.pair (Bool False) >> List.singleton) |> Maybe.withDefault []
 
         keywords =
-            Dict.toList map.keywords |> List.map (Tuple.mapFirst Keyword)
+            Dict.toList m.keywords |> List.map (Tuple.mapFirst Keyword)
 
         symbols =
-            Dict.toList map.symbols |> List.map (Tuple.mapFirst Symbol)
+            Dict.toList m.symbols |> List.map (Tuple.mapFirst Symbol)
     in
     ints
         ++ floats
@@ -307,21 +307,26 @@ toList map =
         ++ falses
         ++ keywords
         ++ symbols
-        ++ map.refs
-        ++ map.fns
-        ++ map.maps
-        ++ map.mapEntries
-        ++ map.lists
-        ++ map.sets
-        ++ map.vectors
+        ++ m.refs
+        ++ m.fns
+        ++ m.maps
+        ++ m.mapEntries
+        ++ m.lists
+        ++ m.sets
+        ++ m.vectors
 
 
-foldl : (Value -> Located Value -> a -> a) -> a -> ValueMap -> a
-foldl fn init map =
-    List.foldl (\( k, v ) a -> fn k v a) init (toList map)
+foldl : (Value io -> Located (Value io) -> a -> a) -> a -> ValueMap io -> a
+foldl fn init m =
+    List.foldl (\( k, v ) a -> fn k v a) init (toList m)
 
 
-fromList : List ValueMapEntry -> ValueMap
+fromList : List (ValueMapEntry io) -> ValueMap io
 fromList entries =
     entries
         |> List.foldl (\( k, v ) a -> insert k v a) empty
+
+
+map : (ValueMapEntry io -> ValueMapEntry io) -> ValueMap io -> ValueMap io
+map f m =
+    m |> toList |> List.map f |> fromList

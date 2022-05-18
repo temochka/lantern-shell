@@ -10,21 +10,21 @@ type Exception
     = Exception String (List StackFrame)
 
 
-type alias Continuation =
-    Located Value -> Env -> ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
+type alias Continuation io =
+    Located (Value io) -> Env io -> ( Result ( Located Exception, Env io ) ( Located (IO io), Env io ), Maybe (Thunk io) )
 
 
-type Thunk
-    = Thunk Continuation
+type Thunk io
+    = Thunk (Continuation io)
 
 
-type alias Step =
-    ( Result ( Located Exception, Env ) ( Located IO, Env ), Maybe Thunk )
+type alias Step io =
+    ( Result ( Located Exception, Env io ) ( Located (IO io), Env io ), Maybe (Thunk io) )
 
 
-type Arity a
-    = Fixed (a -> Env -> Continuation -> ( Result ( Exception, Env ) ( IO, Env ), Maybe Thunk ))
-    | Variadic ({ args : a, rest : List Value } -> Env -> Continuation -> ( Result ( Exception, Env ) ( IO, Env ), Maybe Thunk ))
+type Arity io a
+    = Fixed (a -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ))
+    | Variadic ({ args : a, rest : List (Value io) } -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ))
 
 
 type TextFormat
@@ -50,78 +50,59 @@ type Cell
     | HStack (List Cell)
 
 
-type alias UI =
-    { state : ValueMap
-    , cell : Cell
-    , watchFn : Value
+type IO io
+    = Const (Value io)
+    | SideEffect io
+
+
+type alias Callable io =
+    { arity0 : Maybe (Arity io ())
+    , arity1 : Maybe (Arity io (Value io))
+    , arity2 : Maybe (Arity io ( Value io, Value io ))
+    , arity3 : Maybe (Arity io ( Value io, Value io, Value io ))
     }
 
 
-type alias HttpRequest =
-    { method : String
-    , headers : List ( String, String )
-    , url : String
-    , body : Maybe String
+type alias ValueMapEntry io =
+    ( Value io, Located (Value io) )
+
+
+type alias ValueMap io =
+    { ints : Dict Int (Located (Value io))
+    , floats : Dict Float (Located (Value io))
+    , strings : Dict String (Located (Value io))
+    , nil : Maybe (Located (Value io))
+    , bools : { true : Maybe (Located (Value io)), false : Maybe (Located (Value io)) }
+    , keywords : Dict String (Located (Value io))
+    , symbols : Dict String (Located (Value io))
+    , fns : List ( Value io, Located (Value io) )
+    , maps : List ( Value io, Located (Value io) )
+    , mapEntries : List ( Value io, Located (Value io) )
+    , lists : List ( Value io, Located (Value io) )
+    , refs : List ( Value io, Located (Value io) )
+    , sets : List ( Value io, Located (Value io) )
+    , throwables : List ( Value io, Located (Value io) )
+    , vectors : List ( Value io, Located (Value io) )
     }
 
 
-type IO
-    = Const Value
-    | Savepoint Value
-    | Http HttpRequest
-    | Sleep Float
-    | ReadField String
-    | ShowUI UI
-
-
-type alias Callable =
-    { arity0 : Maybe (Arity ())
-    , arity1 : Maybe (Arity Value)
-    , arity2 : Maybe (Arity ( Value, Value ))
-    , arity3 : Maybe (Arity ( Value, Value, Value ))
-    }
-
-
-type alias ValueMapEntry =
-    ( Value, Located Value )
-
-
-type alias ValueMap =
-    { ints : Dict Int (Located Value)
-    , floats : Dict Float (Located Value)
-    , strings : Dict String (Located Value)
-    , nil : Maybe (Located Value)
-    , bools : { true : Maybe (Located Value), false : Maybe (Located Value) }
-    , keywords : Dict String (Located Value)
-    , symbols : Dict String (Located Value)
-    , fns : List ( Value, Located Value )
-    , maps : List ( Value, Located Value )
-    , mapEntries : List ( Value, Located Value )
-    , lists : List ( Value, Located Value )
-    , refs : List ( Value, Located Value )
-    , sets : List ( Value, Located Value )
-    , throwables : List ( Value, Located Value )
-    , vectors : List ( Value, Located Value )
-    }
-
-
-type ValueSet
+type ValueSet io
     = ValueSet
         { ints : Set.Set Int
         , floats : Set.Set Float
         , strings : Set.Set String
-        , nil : Maybe Value
+        , nil : Maybe (Value io)
         , bools : { true : Bool, false : Bool }
         , keywords : Set.Set String
         , symbols : Set.Set String
-        , fns : List Value
-        , maps : List ValueMap
-        , mapEntries : List ValueMapEntry
-        , lists : List (List (Located Value))
-        , refs : List Value
-        , sets : List ValueSet
-        , throwables : List Value
-        , vectors : List (Array (Located Value))
+        , fns : List (Value io)
+        , maps : List (ValueMap io)
+        , mapEntries : List (ValueMapEntry io)
+        , lists : List (List (Located (Value io)))
+        , refs : List (Value io)
+        , sets : List (ValueSet io)
+        , throwables : List (Value io)
+        , vectors : List (Array (Located (Value io)))
         }
 
 
@@ -130,19 +111,19 @@ type Number
     | Int Int
 
 
-type Value
+type Value io
     = Number Number
     | String String
-    | Ref String (Located Value)
-    | Fn (Maybe String) ({ self : Value, k : Continuation } -> Thunk)
-    | List (List (Located Value))
-    | Vector (Array (Located Value))
+    | Ref String (Located (Value io))
+    | Fn (Maybe String) ({ self : Value io, k : Continuation io } -> Thunk io)
+    | List (List (Located (Value io)))
+    | Vector (Array (Located (Value io)))
     | Nil
     | Bool Basics.Bool
     | Keyword String
-    | Map ValueMap
-    | MapEntry ValueMapEntry
-    | Set ValueSet
+    | Map (ValueMap io)
+    | MapEntry (ValueMapEntry io)
+    | Set (ValueSet io)
     | Symbol String
     | Throwable Exception
 
@@ -153,8 +134,8 @@ type alias StackFrame =
     }
 
 
-type alias Env =
-    { global : Dict String Value
-    , local : Dict String Value
+type alias Env io =
+    { global : Dict String (Value io)
+    , local : Dict String (Value io)
     , stack : List StackFrame
     }

@@ -1,10 +1,10 @@
-module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, member, remove, toList)
+module Enclojure.ValueSet exposing (empty, fromList, insert, isEmpty, map, member, remove, toList)
 
-import Enclojure.Types exposing (Number(..), Value(..), ValueSet(..))
+import Enclojure.Types exposing (IO, Number(..), Value(..), ValueSet(..))
 import Set
 
 
-empty : ValueSet
+empty : ValueSet io
 empty =
     ValueSet
         { ints = Set.empty
@@ -25,7 +25,7 @@ empty =
         }
 
 
-isEmpty : ValueSet -> Bool
+isEmpty : ValueSet io -> Bool
 isEmpty (ValueSet m) =
     Set.isEmpty m.ints
         && Set.isEmpty m.floats
@@ -45,7 +45,7 @@ isEmpty (ValueSet m) =
         && Set.isEmpty m.keywords
 
 
-insert : Value -> ValueSet -> ValueSet
+insert : Value io -> ValueSet io -> ValueSet io
 insert v (ValueSet set) =
     ValueSet <|
         case v of
@@ -106,7 +106,7 @@ insert v (ValueSet set) =
                 { set | vectors = vector :: set.vectors }
 
 
-remove : Value -> ValueSet -> ValueSet
+remove : Value io -> ValueSet io -> ValueSet io
 remove v (ValueSet set) =
     ValueSet <|
         case v of
@@ -195,13 +195,13 @@ remove v (ValueSet set) =
                 { set | vectors = newVectors }
 
 
-fromList : List Value -> ValueSet
+fromList : List (Value io) -> ValueSet io
 fromList entries =
     entries
         |> List.foldl (\v a -> insert v a) empty
 
 
-toList : ValueSet -> List Value
+toList : ValueSet io -> List (Value io)
 toList (ValueSet set) =
     let
         ints =
@@ -254,7 +254,12 @@ toList (ValueSet set) =
         ++ List.map Vector set.vectors
 
 
-member : Value -> ValueSet -> Bool
+map : (Value io -> Value io) -> ValueSet io -> ValueSet io
+map f set =
+    set |> toList |> List.map f |> fromList
+
+
+member : Value io -> ValueSet io -> Bool
 member v (ValueSet set) =
     case v of
         Number (Int int) ->

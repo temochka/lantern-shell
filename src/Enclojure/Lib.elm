@@ -11,7 +11,7 @@ import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
 
 
-init : Env -> Env
+init : Env io -> Env io
 init env =
     env
         |> Runtime.setGlobalEnv "+"
@@ -56,8 +56,6 @@ init env =
             (Fn (Just "json/encode") (Runtime.toContinuation jsonEncode))
         |> Runtime.setGlobalEnv "json/decode"
             (Fn (Just "json/decode") (Runtime.toContinuation jsonDecode))
-        |> Runtime.setGlobalEnv "http/request"
-            (Fn (Just "http/request") (Runtime.toContinuation http))
         |> Runtime.setGlobalEnv "integer?"
             (Fn (Just "integer?") (Runtime.toContinuation isInteger))
         |> Runtime.setGlobalEnv "key"
@@ -74,8 +72,6 @@ init env =
             (Fn (Just "peek") (Runtime.toContinuation peek))
         |> Runtime.setGlobalEnv "pr-str"
             (Fn (Just "pr-str") (Runtime.toContinuation prStr))
-        |> Runtime.setGlobalEnv "read-field"
-            (Fn (Just "read-field") (Runtime.toContinuation readField))
         |> Runtime.setGlobalEnv "rem"
             (Fn (Just "rem") (Runtime.toContinuation rem))
         |> Runtime.setGlobalEnv "rest"
@@ -84,127 +80,15 @@ init env =
             (Fn (Just "second") (Runtime.toContinuation second))
         |> Runtime.setGlobalEnv "seq"
             (Fn (Just "seq") (Runtime.toContinuation seq))
-        |> Runtime.setGlobalEnv "sleep"
-            (Fn (Just "sleep") (Runtime.toContinuation sleep))
         |> Runtime.setGlobalEnv "str"
             (Fn (Just "str") (Runtime.toContinuation str))
         |> Runtime.setGlobalEnv "throw"
             (Fn (Just "throw") (Runtime.toContinuation throw))
-        |> Runtime.setGlobalEnv "ui"
-            (Fn (Just "ui") (Runtime.toContinuation ui))
         |> Runtime.setGlobalEnv "val"
             (Fn (Just "val") (Runtime.toContinuation val_))
-        |> Runtime.setGlobalEnv "<o>"
-            (Fn (Just "<o>") (Runtime.toContinuation savepoint))
 
 
-sleep : Callable
-sleep =
-    let
-        arity1 val =
-            case val of
-                Number (Int i) ->
-                    Ok (Sleep (toFloat i))
-
-                Number (Float i) ->
-                    Ok (Sleep i)
-
-                _ ->
-                    Err (Exception "type error: sleep expects one integer argument" [])
-    in
-    { emptyCallable
-        | arity1 = Just (Fixed (pure arity1))
-    }
-
-
-savepoint : Callable
-savepoint =
-    let
-        arity1 val =
-            Ok (Savepoint val)
-    in
-    { emptyCallable
-        | arity1 = Just (Fixed (pure arity1))
-    }
-
-
-decodeHttpRequest : Value -> Result Exception HttpRequest
-decodeHttpRequest value =
-    value
-        |> Runtime.tryMap
-        |> Result.fromMaybe (Exception "type error: request must be a map" [])
-        |> Result.andThen
-            (\requestMap ->
-                let
-                    urlResult =
-                        requestMap
-                            |> ValueMap.get (Keyword "url")
-                            |> Maybe.map Located.getValue
-                            |> Maybe.andThen Runtime.tryString
-                            |> Result.fromMaybe (Exception "type error: :url must be a string" [])
-
-                    headers =
-                        requestMap
-                            |> ValueMap.get (Keyword "headers")
-                            |> Maybe.map Located.getValue
-                            |> Maybe.andThen (Runtime.tryDictOf Runtime.tryString Runtime.tryString)
-                            |> Maybe.map Dict.toList
-                            |> Maybe.withDefault []
-
-                    methodResult =
-                        requestMap
-                            |> ValueMap.get (Keyword "method")
-                            |> Maybe.map Located.getValue
-                            |> Maybe.andThen Runtime.tryKeyword
-                            |> Result.fromMaybe (Exception "type error: method must be a keyword" [])
-
-                    bodyResult =
-                        requestMap
-                            |> ValueMap.get (Keyword "body")
-                            |> Maybe.map Located.getValue
-                            |> Maybe.withDefault Nil
-                            |> (\bodyValue ->
-                                    case bodyValue of
-                                        String s ->
-                                            Just (Just s)
-
-                                        Nil ->
-                                            Just Nothing
-
-                                        _ ->
-                                            Nothing
-                               )
-                            |> Result.fromMaybe (Exception "type error: body must be nil or string" [])
-                in
-                Result.map3
-                    (\url method body ->
-                        { method = String.toUpper method
-                        , headers = headers
-                        , url = url
-                        , body = body
-                        }
-                    )
-                    urlResult
-                    methodResult
-                    bodyResult
-            )
-
-
-http : Callable
-http =
-    let
-        arity1 request env k =
-            case decodeHttpRequest request of
-                Ok req ->
-                    ( Ok ( Http req, env ), Just (Thunk (\v rEnv -> ( Ok ( Located.map Const v, rEnv ), Just (Thunk k) ))) )
-
-                Err exception ->
-                    ( Err ( exception, env ), Just (Thunk k) )
-    in
-    { emptyCallable | arity1 = Just (Fixed arity1) }
-
-
-jsonEncode : Callable
+jsonEncode : Callable io
 jsonEncode =
     let
         arity1 v =
@@ -215,7 +99,7 @@ jsonEncode =
     }
 
 
-jsonDecode : Callable
+jsonDecode : Callable io
 jsonDecode =
     let
         arity1 v =
@@ -229,212 +113,7 @@ jsonDecode =
     }
 
 
-readField : Callable
-readField =
-    let
-        arity1 key env k =
-            case key of
-                String cellName ->
-                    ( Ok ( ReadField cellName, env )
-                    , Just
-                        (Thunk
-                            (\v rEnv ->
-                                ( Ok ( Located.map Const v, rEnv ), Just (Thunk k) )
-                            )
-                        )
-                    )
-
-                _ ->
-                    ( Err ( Exception "type error: read-field expects one string argument" [], env )
-                    , Just (Thunk k)
-                    )
-    in
-    { emptyCallable
-        | arity1 = Just (Fixed arity1)
-    }
-
-
-ui : Callable
-ui =
-    let
-        toTextPart (Located _ val) =
-            case val of
-                String s ->
-                    Ok (Plain s)
-
-                Vector v ->
-                    case Array.toList v of
-                        [ Located _ (Keyword "$"), Located _ (Keyword key) ] ->
-                            Ok (TextRef key)
-
-                        _ ->
-                            Err (Exception "type error: invalid text formatter" [])
-
-                _ ->
-                    Err (Exception "text parts must be plain strings" [])
-
-        toUi (Located _ val) =
-            case val of
-                Vector v ->
-                    case Array.toList v of
-                        (Located _ (Keyword "v-stack")) :: cells ->
-                            cells
-                                |> List.foldl
-                                    (\e acc ->
-                                        acc
-                                            |> Result.andThen
-                                                (\l ->
-                                                    toUi e
-                                                        |> Result.map
-                                                            (\retCell ->
-                                                                retCell :: l
-                                                            )
-                                                )
-                                    )
-                                    (Ok [])
-                                |> Result.map (List.reverse >> VStack)
-
-                        (Located _ (Keyword "h-stack")) :: cells ->
-                            cells
-                                |> List.foldl
-                                    (\e acc ->
-                                        acc
-                                            |> Result.andThen
-                                                (\l ->
-                                                    toUi e
-                                                        |> Result.map
-                                                            (\retCell ->
-                                                                retCell :: l
-                                                            )
-                                                )
-                                    )
-                                    (Ok [])
-                                |> Result.map (List.reverse >> HStack)
-
-                        (Located _ (Keyword "text")) :: parts ->
-                            parts
-                                |> List.foldr (\e a -> toTextPart e |> Result.map2 (flip (::)) a) (Ok [])
-                                |> Result.map Text
-
-                        (Located _ (Keyword "text-input")) :: args ->
-                            case args of
-                                (Located _ (Keyword key)) :: restArgs ->
-                                    let
-                                        options =
-                                            restArgs
-                                                |> List.head
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryMap
-                                                |> Maybe.withDefault ValueMap.empty
-
-                                        suggestions =
-                                            options
-                                                |> ValueMap.get (Keyword "suggestions")
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen (Runtime.trySequenceOf Runtime.tryString)
-                                                |> Maybe.withDefault []
-                                    in
-                                    Ok (Input key (TextInput { suggestions = suggestions }))
-
-                                _ ->
-                                    Err (Exception "type error: invalid arguments to text-input cell" [])
-
-                        (Located _ (Keyword "button")) :: args ->
-                            case args of
-                                (Located _ (Keyword key)) :: restArgs ->
-                                    let
-                                        options =
-                                            case restArgs of
-                                                (Located _ (Map m)) :: _ ->
-                                                    m
-
-                                                _ ->
-                                                    ValueMap.empty
-
-                                        title =
-                                            ValueMap.get (Keyword "title") options
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryString
-                                                |> Maybe.withDefault key
-                                    in
-                                    Ok (Input key (Button { title = title }))
-
-                                _ ->
-                                    Err (Exception "type error: invalid arguments to button cell" [])
-
-                        (Located _ (Keyword "download")) :: args ->
-                            case args of
-                                (Located _ (Keyword key)) :: (Located _ (String content)) :: restArgs ->
-                                    let
-                                        options =
-                                            case restArgs of
-                                                (Located _ (Map m)) :: _ ->
-                                                    m
-
-                                                _ ->
-                                                    ValueMap.empty
-
-                                        contentType =
-                                            ValueMap.get (Keyword "content-type") options
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryString
-                                                |> Maybe.withDefault "text/plain"
-
-                                        name =
-                                            ValueMap.get (Keyword "name") options
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Runtime.tryString
-                                                |> Maybe.withDefault "download.txt"
-                                    in
-                                    Ok
-                                        (Input key
-                                            (Download
-                                                { name = name
-                                                , content = content
-                                                , contentType = contentType
-                                                }
-                                            )
-                                        )
-
-                                _ ->
-                                    Err (Exception "type error: invalid arguments to download cell" [])
-
-                        (Located _ (Keyword cellType)) :: _ ->
-                            Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type") [])
-
-                        _ :: _ ->
-                            Err (Exception "type error: cell type must be a keyword" [])
-
-                        [] ->
-                            Err (Exception "type error: empty vector is not a valid cell" [])
-
-                _ ->
-                    Err (Exception "cell must be a vector" [])
-
-        arity1 val =
-            toUi (Located.unknown val)
-                |> Result.map (\cell -> ShowUI { cell = cell, watchFn = Nil, state = ValueMap.empty })
-
-        arity2 ( uiVal, defaultsMap ) =
-            arity3 ( uiVal, Nil, defaultsMap )
-
-        arity3 ( uiVal, watchFn, defaultsMap ) =
-            case defaultsMap of
-                Map m ->
-                    toUi (Located.unknown uiVal)
-                        |> Result.map (\cell -> ShowUI { cell = cell, watchFn = watchFn, state = m })
-
-                _ ->
-                    Err (Exception ("type error: expected a map of defaults, got " ++ inspect defaultsMap) [])
-    in
-    { emptyCallable
-        | arity1 = Just (Fixed (pure arity1))
-        , arity2 = Just (Fixed (pure arity2))
-        , arity3 = Just (Fixed (pure arity3))
-    }
-
-
-not_ : Callable
+not_ : Callable io
 not_ =
     let
         arity1 val =
@@ -445,7 +124,7 @@ not_ =
     }
 
 
-list : Callable
+list : Callable io
 list =
     let
         arity0 { rest } =
@@ -454,7 +133,7 @@ list =
     { emptyCallable | arity0 = Just (Variadic (pure arity0)) }
 
 
-toNumbers : List Value -> Result Exception (List Number)
+toNumbers : List (Value io) -> Result Exception (List Number)
 toNumbers =
     List.foldl
         (\e a -> a |> Result.andThen (\l -> toNumber e |> Result.map (\n -> n :: l)))
@@ -467,7 +146,7 @@ flip f =
     \a b -> f b a
 
 
-varargOp : { arity0 : Maybe Number, arity1 : Maybe (Number -> Number), arity2 : Number -> Number -> Number } -> Callable
+varargOp : { arity0 : Maybe Number, arity1 : Maybe (Number -> Number), arity2 : Number -> Number -> Number } -> Callable io
 varargOp { arity0, arity1, arity2 } =
     let
         wrappedArity2 { args, rest } =
@@ -495,7 +174,7 @@ varargOp { arity0, arity1, arity2 } =
     }
 
 
-plus : Callable
+plus : Callable io
 plus =
     varargOp
         { arity0 = Just (Int 0)
@@ -532,7 +211,7 @@ negateNumber numX =
             Float (negate x)
 
 
-minus : Callable
+minus : Callable io
 minus =
     varargOp
         { arity0 = Nothing
@@ -554,7 +233,7 @@ minus =
         }
 
 
-mul : Callable
+mul : Callable io
 mul =
     varargOp
         { arity0 = Just (Int 1)
@@ -576,7 +255,7 @@ mul =
         }
 
 
-div : Callable
+div : Callable io
 div =
     let
         op numA numB =
@@ -605,7 +284,7 @@ remainderByFloat by x =
     x - (toFloat (floor (x / by)) * by)
 
 
-rem : Callable
+rem : Callable io
 rem =
     let
         op numA numB =
@@ -632,7 +311,7 @@ rem =
     }
 
 
-toNumber : Value -> Result Exception Number
+toNumber : Value io -> Result Exception Number
 toNumber val =
     case val of
         Number n ->
@@ -642,22 +321,22 @@ toNumber val =
             Err <| Exception (inspect val ++ " is not a number") []
 
 
-isLessThan : Callable
+isLessThan : Callable io
 isLessThan =
     compOp { intOp = (<), floatOp = (<), stringOp = (<) }
 
 
-isLessThanOrEqual : Callable
+isLessThanOrEqual : Callable io
 isLessThanOrEqual =
     compOp { intOp = (<=), floatOp = (<=), stringOp = (<=) }
 
 
-isGreaterThan : Callable
+isGreaterThan : Callable io
 isGreaterThan =
     compOp { intOp = (>), floatOp = (>), stringOp = (>) }
 
 
-isGreaterThanOrEqual : Callable
+isGreaterThanOrEqual : Callable io
 isGreaterThanOrEqual =
     compOp { intOp = (>=), floatOp = (>=), stringOp = (>=) }
 
@@ -667,7 +346,7 @@ compOp :
     , floatOp : Float -> Float -> Bool
     , stringOp : String -> String -> Bool
     }
-    -> Callable
+    -> Callable io
 compOp { intOp, floatOp, stringOp } =
     let
         arity1 _ =
@@ -716,7 +395,7 @@ compOp { intOp, floatOp, stringOp } =
     }
 
 
-areEqualValues : Value -> Value -> Bool
+areEqualValues : Value io -> Value io -> Bool
 areEqualValues a b =
     let
         compareLists listA listB =
@@ -770,7 +449,7 @@ areEqualValues a b =
                 False
 
 
-isEqual : Callable
+isEqual : Callable io
 isEqual =
     let
         arity1 _ =
@@ -798,7 +477,7 @@ isEqual =
     }
 
 
-isNotEqual : Callable
+isNotEqual : Callable io
 isNotEqual =
     let
         arity1 _ =
@@ -826,7 +505,7 @@ isNotEqual =
     }
 
 
-str : Callable
+str : Callable io
 str =
     let
         arity0 { rest } =
@@ -841,7 +520,7 @@ str =
     }
 
 
-prStr : Callable
+prStr : Callable io
 prStr =
     let
         arity0 { rest } =
@@ -856,7 +535,7 @@ prStr =
     }
 
 
-seq : Callable
+seq : Callable io
 seq =
     let
         arity1 coll =
@@ -906,7 +585,7 @@ seq =
     }
 
 
-fixedCall : Maybe (Arity a) -> a -> Env -> Continuation -> ( Result ( Exception, Env ) ( IO, Env ), Maybe Thunk )
+fixedCall : Maybe (Arity io a) -> a -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) )
 fixedCall mArity =
     mArity
         |> Maybe.andThen
@@ -926,7 +605,7 @@ fixedCall mArity =
             )
 
 
-cons : Callable
+cons : Callable io
 cons =
     let
         arity2 ( x, coll ) env1 k =
@@ -958,7 +637,7 @@ cons =
     }
 
 
-conj : Callable
+conj : Callable io
 conj =
     let
         arity2 signature =
@@ -1023,7 +702,7 @@ conj =
     }
 
 
-contains : Callable
+contains : Callable io
 contains =
     let
         arity2 ( coll, x ) =
@@ -1056,7 +735,7 @@ contains =
     }
 
 
-first : Callable
+first : Callable io
 first =
     let
         arity1 collVal =
@@ -1078,7 +757,7 @@ first =
     }
 
 
-second : Callable
+second : Callable io
 second =
     let
         arity1 collVal =
@@ -1100,7 +779,7 @@ second =
     }
 
 
-peek : Callable
+peek : Callable io
 peek =
     let
         arity1 val =
@@ -1122,7 +801,7 @@ peek =
     }
 
 
-isNumber : Callable
+isNumber : Callable io
 isNumber =
     let
         arity1 v =
@@ -1138,7 +817,7 @@ isNumber =
     }
 
 
-isInteger : Callable
+isInteger : Callable io
 isInteger =
     let
         arity1 v =
@@ -1154,7 +833,7 @@ isInteger =
     }
 
 
-isFloat : Callable
+isFloat : Callable io
 isFloat =
     let
         arity1 v =
@@ -1170,7 +849,7 @@ isFloat =
     }
 
 
-rest_ : Callable
+rest_ : Callable io
 rest_ =
     let
         arity1 coll env1 k =
@@ -1202,7 +881,7 @@ rest_ =
     }
 
 
-throw : Callable
+throw : Callable io
 throw =
     let
         arity1 v =
@@ -1218,7 +897,7 @@ throw =
     }
 
 
-newException : Callable
+newException : Callable io
 newException =
     let
         arity1 v =
@@ -1238,12 +917,12 @@ newException =
 -- ( Result (Located Exception) ( Located IO, Env ), Maybe Thunk )
 
 
-toRuntimeStep : Step -> Runtime.Step
+toRuntimeStep : Step io -> Runtime.Step io
 toRuntimeStep ( r, k ) =
     ( r |> Result.mapError (Tuple.mapFirst Located.getValue) |> Result.map (Tuple.mapFirst Located.getValue), k )
 
 
-apply : Callable
+apply : Callable io
 apply =
     let
         arity2 signature env k =
@@ -1284,7 +963,7 @@ apply =
     }
 
 
-get : Callable
+get : Callable io
 get =
     let
         arity2 ( mapVal, key ) =
@@ -1337,7 +1016,7 @@ listToPairs l =
             Nothing
 
 
-assoc : Callable
+assoc : Callable io
 assoc =
     let
         arity3 signature =
@@ -1403,7 +1082,7 @@ assoc =
     { emptyCallable | arity3 = Just <| Variadic <| pure (arity3 >> Result.map Const) }
 
 
-dissoc : Callable
+dissoc : Callable io
 dissoc =
     let
         arity2 signature =
@@ -1430,7 +1109,7 @@ dissoc =
     { emptyCallable | arity2 = Just <| Variadic <| pure (arity2 >> Result.map Const) }
 
 
-key_ : Callable
+key_ : Callable io
 key_ =
     let
         arity1 v =
@@ -1446,7 +1125,7 @@ key_ =
     }
 
 
-val_ : Callable
+val_ : Callable io
 val_ =
     let
         arity1 v =
