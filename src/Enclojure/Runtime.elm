@@ -179,8 +179,8 @@ dispatch callable args env k =
                     )
 
 
-toContinuation : Callable io -> { self : Value io, k : Continuation io } -> Thunk io
-toContinuation callable { k } =
+toThunk : Callable io -> { self : Value io, k : Continuation io } -> Thunk io
+toThunk callable { k } =
     Thunk
         (\(Located pos arg) env ->
             case arg of
@@ -452,7 +452,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Located.map Const arg, env ), Just (toContinuation (getFn key) { self = fnExpr, k = k }) )
+            ( Ok ( Located.map Const arg, env ), Just (toThunk (getFn key) { self = fnExpr, k = k }) )
 
         Map map ->
             let
@@ -465,7 +465,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Located.map Const arg, env ), Just (toContinuation (mapLookupFn map) { self = fnExpr, k = k }) )
+            ( Ok ( Located.map Const arg, env ), Just (toThunk (mapLookupFn map) { self = fnExpr, k = k }) )
 
         Set set ->
             let
@@ -478,7 +478,7 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                                 :: currentStack
                     }
             in
-            ( Ok ( Located.map Const arg, env ), Just (toContinuation (setLookupFn set) { self = fnExpr, k = k }) )
+            ( Ok ( Located.map Const arg, env ), Just (toThunk (setLookupFn set) { self = fnExpr, k = k }) )
 
         _ ->
             ( Err ( Located fnLoc (exception inputEnv (inspectLocated fn ++ " is not a valid callable.")), inputEnv )

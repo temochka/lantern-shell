@@ -27,29 +27,6 @@ type Arity io a
     | Variadic ({ args : a, rest : List (Value io) } -> Env io -> Continuation io -> ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ))
 
 
-type TextFormat
-    = Plain String
-    | TextRef InputKey
-
-
-type InputCell
-    = TextInput { suggestions : List String }
-    | MaskedTextInput
-    | Button { title : String }
-    | Download { name : String, contentType : String, content : String }
-
-
-type alias InputKey =
-    String
-
-
-type Cell
-    = Input InputKey InputCell
-    | Text (List TextFormat)
-    | VStack (List Cell)
-    | HStack (List Cell)
-
-
 type IO io
     = Const (Value io)
     | SideEffect io

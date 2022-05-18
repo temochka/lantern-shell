@@ -15,77 +15,77 @@ init : Env io -> Env io
 init env =
     env
         |> Runtime.setGlobalEnv "+"
-            (Fn (Just "+") (Runtime.toContinuation plus))
+            (Fn (Just "+") (Runtime.toThunk plus))
         |> Runtime.setGlobalEnv "-"
-            (Fn (Just "-") (Runtime.toContinuation minus))
+            (Fn (Just "-") (Runtime.toThunk minus))
         |> Runtime.setGlobalEnv "/"
-            (Fn (Just "/") (Runtime.toContinuation div))
+            (Fn (Just "/") (Runtime.toThunk div))
         |> Runtime.setGlobalEnv "*"
-            (Fn (Just "*") (Runtime.toContinuation mul))
+            (Fn (Just "*") (Runtime.toThunk mul))
         |> Runtime.setGlobalEnv "="
-            (Fn (Just "=") (Runtime.toContinuation isEqual))
+            (Fn (Just "=") (Runtime.toThunk isEqual))
         |> Runtime.setGlobalEnv "not="
-            (Fn (Just "not=") (Runtime.toContinuation isNotEqual))
+            (Fn (Just "not=") (Runtime.toThunk isNotEqual))
         |> Runtime.setGlobalEnv ">"
-            (Fn (Just ">") (Runtime.toContinuation isGreaterThan))
+            (Fn (Just ">") (Runtime.toThunk isGreaterThan))
         |> Runtime.setGlobalEnv ">="
-            (Fn (Just ">=") (Runtime.toContinuation isGreaterThanOrEqual))
+            (Fn (Just ">=") (Runtime.toThunk isGreaterThanOrEqual))
         |> Runtime.setGlobalEnv "<"
-            (Fn (Just "<") (Runtime.toContinuation isLessThan))
+            (Fn (Just "<") (Runtime.toThunk isLessThan))
         |> Runtime.setGlobalEnv "<="
-            (Fn (Just "<=") (Runtime.toContinuation isLessThanOrEqual))
+            (Fn (Just "<=") (Runtime.toThunk isLessThanOrEqual))
         |> Runtime.setGlobalEnv "apply"
-            (Fn (Just "apply") (Runtime.toContinuation apply))
+            (Fn (Just "apply") (Runtime.toThunk apply))
         |> Runtime.setGlobalEnv "assoc"
-            (Fn (Just "assoc") (Runtime.toContinuation assoc))
+            (Fn (Just "assoc") (Runtime.toThunk assoc))
         |> Runtime.setGlobalEnv "conj"
-            (Fn (Just "conj") (Runtime.toContinuation conj))
+            (Fn (Just "conj") (Runtime.toThunk conj))
         |> Runtime.setGlobalEnv "cons"
-            (Fn (Just "cons") (Runtime.toContinuation cons))
+            (Fn (Just "cons") (Runtime.toThunk cons))
         |> Runtime.setGlobalEnv "contains?"
-            (Fn (Just "contains?") (Runtime.toContinuation contains))
+            (Fn (Just "contains?") (Runtime.toThunk contains))
         |> Runtime.setGlobalEnv "dissoc"
-            (Fn (Just "dissoc") (Runtime.toContinuation dissoc))
+            (Fn (Just "dissoc") (Runtime.toThunk dissoc))
         |> Runtime.setGlobalEnv "first"
-            (Fn (Just "first") (Runtime.toContinuation first))
+            (Fn (Just "first") (Runtime.toThunk first))
         |> Runtime.setGlobalEnv "float?"
-            (Fn (Just "float?") (Runtime.toContinuation isFloat))
+            (Fn (Just "float?") (Runtime.toThunk isFloat))
         |> Runtime.setGlobalEnv "get"
-            (Fn (Just "get") (Runtime.toContinuation get))
+            (Fn (Just "get") (Runtime.toThunk get))
         |> Runtime.setGlobalEnv "json/encode"
-            (Fn (Just "json/encode") (Runtime.toContinuation jsonEncode))
+            (Fn (Just "json/encode") (Runtime.toThunk jsonEncode))
         |> Runtime.setGlobalEnv "json/decode"
-            (Fn (Just "json/decode") (Runtime.toContinuation jsonDecode))
+            (Fn (Just "json/decode") (Runtime.toThunk jsonDecode))
         |> Runtime.setGlobalEnv "integer?"
-            (Fn (Just "integer?") (Runtime.toContinuation isInteger))
+            (Fn (Just "integer?") (Runtime.toThunk isInteger))
         |> Runtime.setGlobalEnv "key"
-            (Fn (Just "key") (Runtime.toContinuation key_))
+            (Fn (Just "key") (Runtime.toThunk key_))
         |> Runtime.setGlobalEnv "list"
-            (Fn (Just "list") (Runtime.toContinuation list))
+            (Fn (Just "list") (Runtime.toThunk list))
         |> Runtime.setGlobalEnv "Exception."
-            (Fn (Just "Exception.") (Runtime.toContinuation newException))
+            (Fn (Just "Exception.") (Runtime.toThunk newException))
         |> Runtime.setGlobalEnv "not"
-            (Fn (Just "not") (Runtime.toContinuation not_))
+            (Fn (Just "not") (Runtime.toThunk not_))
         |> Runtime.setGlobalEnv "number?"
-            (Fn (Just "number?") (Runtime.toContinuation isNumber))
+            (Fn (Just "number?") (Runtime.toThunk isNumber))
         |> Runtime.setGlobalEnv "peek"
-            (Fn (Just "peek") (Runtime.toContinuation peek))
+            (Fn (Just "peek") (Runtime.toThunk peek))
         |> Runtime.setGlobalEnv "pr-str"
-            (Fn (Just "pr-str") (Runtime.toContinuation prStr))
+            (Fn (Just "pr-str") (Runtime.toThunk prStr))
         |> Runtime.setGlobalEnv "rem"
-            (Fn (Just "rem") (Runtime.toContinuation rem))
+            (Fn (Just "rem") (Runtime.toThunk rem))
         |> Runtime.setGlobalEnv "rest"
-            (Fn (Just "rest") (Runtime.toContinuation rest_))
+            (Fn (Just "rest") (Runtime.toThunk rest_))
         |> Runtime.setGlobalEnv "second"
-            (Fn (Just "second") (Runtime.toContinuation second))
+            (Fn (Just "second") (Runtime.toThunk second))
         |> Runtime.setGlobalEnv "seq"
-            (Fn (Just "seq") (Runtime.toContinuation seq))
+            (Fn (Just "seq") (Runtime.toThunk seq))
         |> Runtime.setGlobalEnv "str"
-            (Fn (Just "str") (Runtime.toContinuation str))
+            (Fn (Just "str") (Runtime.toThunk str))
         |> Runtime.setGlobalEnv "throw"
-            (Fn (Just "throw") (Runtime.toContinuation throw))
+            (Fn (Just "throw") (Runtime.toThunk throw))
         |> Runtime.setGlobalEnv "val"
-            (Fn (Just "val") (Runtime.toContinuation val_))
+            (Fn (Just "val") (Runtime.toThunk val_))
 
 
 jsonEncode : Callable io

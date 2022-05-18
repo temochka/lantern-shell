@@ -9,11 +9,11 @@ init : Types.Env io -> Types.Env io
 init env =
     env
         |> Runtime.setGlobalEnv "string/join"
-            (Fn (Just "string/join") (Runtime.toContinuation join))
+            (Fn (Just "string/join") (Runtime.toThunk join))
         |> Runtime.setGlobalEnv "string/length"
-            (Fn (Just "string/length") (Runtime.toContinuation length))
+            (Fn (Just "string/length") (Runtime.toThunk length))
         |> Runtime.setGlobalEnv "string/split-lines"
-            (Fn (Just "string/split-lines") (Runtime.toContinuation splitLines))
+            (Fn (Just "string/split-lines") (Runtime.toThunk splitLines))
 
 
 splitLines : Types.Callable io

@@ -8,7 +8,7 @@ import Element.Input
 import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable)
-import Enclojure.Types exposing (Cell(..), Env, Exception(..), IO(..), InputCell(..), InputKey, TextFormat(..), Thunk(..), Value(..))
+import Enclojure.Types exposing (Env, Exception(..), IO(..), Thunk(..), Value(..))
 import Enclojure.ValueMap
 import File.Download
 import Html.Events
@@ -30,6 +30,29 @@ import Task
 
 type alias Context =
     { theme : LanternUi.Theme.Theme }
+
+
+type TextFormat
+    = Plain String
+    | TextRef InputKey
+
+
+type InputCell
+    = TextInput { suggestions : List String }
+    | MaskedTextInput
+    | Button { title : String }
+    | Download { name : String, contentType : String, content : String }
+
+
+type alias InputKey =
+    String
+
+
+type Cell
+    = Input InputKey InputCell
+    | Text (List TextFormat)
+    | VStack (List Cell)
+    | HStack (List Cell)
 
 
 type ConsoleEntry
@@ -664,13 +687,13 @@ defaultEnv : Env MyIO
 defaultEnv =
     Enclojure.defaultEnv
         |> Runtime.setGlobalEnv "http/request"
-            (Fn (Just "http/request") (Runtime.toContinuation http))
+            (Fn (Just "http/request") (Runtime.toThunk http))
         |> Runtime.setGlobalEnv "sleep"
-            (Fn (Just "sleep") (Runtime.toContinuation sleep))
+            (Fn (Just "sleep") (Runtime.toThunk sleep))
         |> Runtime.setGlobalEnv "ui"
-            (Fn (Just "ui") (Runtime.toContinuation ui))
+            (Fn (Just "ui") (Runtime.toThunk ui))
         |> Runtime.setGlobalEnv "<o>"
-            (Fn (Just "<o>") (Runtime.toContinuation savepoint))
+            (Fn (Just "<o>") (Runtime.toThunk savepoint))
 
 
 runScript : EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) )
