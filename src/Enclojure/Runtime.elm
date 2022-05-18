@@ -618,7 +618,7 @@ setCurrentStackFrameLocation location env =
 
 
 prettyTrace : Exception -> List String
-prettyTrace (Exception msg trace) =
+prettyTrace (Exception _ trace) =
     trace
         |> List.map
             (\frame ->

@@ -119,7 +119,7 @@ traceUi model console =
     UiTrace model :: console
 
 
-recordSavepoint : Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) ) -> Console -> Console
+recordSavepoint : Located (Enclojure.Types.Step MyIO) -> Console -> Console
 recordSavepoint (Located loc ( ret, thunk )) console =
     ret
         |> Result.map (\val -> Savepoint_ ( Located loc val, thunk ) :: console)
@@ -427,7 +427,10 @@ ui =
 
         arity1 val =
             toUi (Located.unknown val)
-                |> Result.map (\cell -> SideEffect <| ShowUI { cell = cell, watchFn = Nil, state = Enclojure.ValueMap.empty })
+                |> Result.map
+                    (\cell ->
+                        SideEffect <| ShowUI { cell = cell, watchFn = Nil, state = Enclojure.ValueMap.empty }
+                    )
 
         arity2 ( uiVal, defaultsMap ) =
             arity3 ( uiVal, Nil, defaultsMap )
@@ -461,8 +464,8 @@ type Message
     | Stop
     | UpdateInputRequest InputKey InputCell String
     | UpdateScripts (Result Lantern.Error (List Script))
-    | HandleIO (Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) ))
-    | Rewind (Located ( Result ( Exception, Env MyIO ) ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) ))
+    | HandleIO (Located (Enclojure.Types.Step MyIO))
+    | Rewind (Located (Enclojure.Types.Step MyIO))
     | InspectValue (Value MyIO)
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
@@ -530,7 +533,11 @@ responseToValue response =
             [ ( Keyword "status", Located.unknown <| Number (Enclojure.Types.Int response.status) )
             , ( Keyword "headers"
               , Located.unknown <|
-                    Map (response.headers |> List.map (\( k, v ) -> ( String k, Located.unknown (String v) )) |> Enclojure.ValueMap.fromList)
+                    Map
+                        (response.headers
+                            |> List.map (\( k, v ) -> ( String k, Located.unknown (String v) ))
+                            |> Enclojure.ValueMap.fromList
+                        )
               )
             , ( Keyword "body"
               , response.body |> Maybe.map String |> Maybe.withDefault Nil |> Located.unknown
@@ -569,7 +576,9 @@ trampoline (Located loc ( result, thunk )) maxdepth =
                                     , body = request.body
                                     , expect =
                                         \response ->
-                                            HandleIO (Located loc ( Ok ( Const (responseToValue response), env ), thunk ))
+                                            ( Ok ( Const (responseToValue response), env ), thunk )
+                                                |> Located loc
+                                                |> HandleIO
                                     }
                                     |> Lantern.App.call
                                 )
@@ -597,7 +606,12 @@ trampoline (Located loc ( result, thunk )) maxdepth =
 
                             Savepoint v ->
                                 ( Running
-                                , Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO (Located loc ( Ok ( Const v, env ), thunk ))))
+                                , ( Ok ( Const v, env ), thunk )
+                                    |> Located loc
+                                    |> HandleIO
+                                    |> Lantern.App.Message
+                                    |> Task.succeed
+                                    |> Task.perform identity
                                 )
 
         Err e ->
@@ -662,7 +676,11 @@ updateRunner model updateFn =
             ( model, Cmd.none )
 
 
-runWatchFn : Env MyIO -> Value MyIO -> Enclojure.Types.ValueMap MyIO -> Result (Located Exception) (Enclojure.Types.ValueMap MyIO)
+runWatchFn :
+    Env MyIO
+    -> Value MyIO
+    -> Enclojure.Types.ValueMap MyIO
+    -> Result (Located Exception) (Enclojure.Types.ValueMap MyIO)
 runWatchFn env watchFn stateMap =
     case watchFn of
         Nil ->
@@ -899,15 +917,20 @@ update msg appModel =
                                                 |> printResult model.interpreter
                                     in
                                     ( { model | interpreter = Running, console = console }
-                                    , Task.perform
-                                        identity
-                                        (Task.succeed (Lantern.App.Message <| HandleIO (Located.unknown ( Ok ( Const (List [ exitCode, state ]), env ), thunk ))))
+                                    , ( Ok ( Const (List [ exitCode, state ]), env ), thunk )
+                                        |> Located.unknown
+                                        |> HandleIO
+                                        |> Lantern.App.Message
+                                        |> Task.succeed
+                                        |> Task.perform identity
                                     )
 
                                 _ ->
                                     let
                                         updatedState =
-                                            Enclojure.ValueMap.insert (Keyword name) (Located.unknown (String v)) uiState.enclojureUi.state
+                                            Enclojure.ValueMap.insert (Keyword name)
+                                                (Located.unknown (String v))
+                                                uiState.enclojureUi.state
                                                 |> runWatchFn env uiState.enclojureUi.watchFn
 
                                         ( interpreter, console ) =
@@ -1041,37 +1064,6 @@ update msg appModel =
                     , Cmd.none
                     )
                 )
-
-
-inspectEnv : Env MyIO -> String
-inspectEnv { global, local } =
-    let
-        inspectDict dict =
-            "{" ++ Dict.foldl (\k v s -> s ++ "\"" ++ k ++ "\" " ++ Runtime.inspect v ++ " ") "" dict ++ "}"
-    in
-    "{\"local\" " ++ inspectDict local ++ " \"global\" " ++ inspectDict global ++ "}"
-
-
-isRunning : Interpreter -> Bool
-isRunning interpreter =
-    case interpreter of
-        Running ->
-            True
-
-        Blocked ->
-            True
-
-        Panic _ ->
-            False
-
-        ShowingUI _ _ ->
-            True
-
-        Done _ ->
-            False
-
-        Stopped ->
-            False
 
 
 renderUI : Context -> UiModel -> Element (Lantern.App.Message Message)
@@ -1297,17 +1289,25 @@ viewEditor context model =
                     "Restart"
 
         runButton =
-            LanternUi.Input.button context.theme [] { label = Element.text runButtonTitle, onPress = Just <| Lantern.App.Message Run }
+            LanternUi.Input.button context.theme
+                []
+                { label = Element.text runButtonTitle, onPress = Just <| Lantern.App.Message Run }
 
         evalButton =
-            LanternUi.Input.button context.theme [] { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.script.code) }
+            LanternUi.Input.button context.theme
+                []
+                { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.script.code) }
 
         saveButton =
             if model.script.id == Nothing then
-                LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message CreateScript }
+                LanternUi.Input.button context.theme
+                    []
+                    { label = Element.text "Save", onPress = Just <| Lantern.App.Message CreateScript }
 
             else
-                LanternUi.Input.button context.theme [] { label = Element.text "Save", onPress = Just <| Lantern.App.Message SaveScript }
+                LanternUi.Input.button context.theme
+                    []
+                    { label = Element.text "Save", onPress = Just <| Lantern.App.Message SaveScript }
 
         toolbar =
             Element.row
@@ -1346,7 +1346,9 @@ viewEditor context model =
             Element.column [ Element.width Element.fill, Element.spacing 20 ]
                 [ LanternUi.Input.code context.theme
                     [ Element.width Element.fill
-                    , Element.htmlAttribute (Html.Events.preventDefaultOn "keydown" (Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent))
+                    , Json.Decode.map handleKeyPress Keyboard.Event.decodeKeyboardEvent
+                        |> Html.Events.preventDefaultOn "keydown"
+                        |> Element.htmlAttribute
                     ]
                     { onChange = UpdateRepl >> Lantern.App.Message
                     , value = model.repl
@@ -1371,7 +1373,10 @@ viewBrowser context model =
         newScriptButton =
             Element.el
                 [ Element.width Element.fill ]
-                (LanternUi.Input.button context.theme [] { label = Element.text "New script", onPress = Just <| Lantern.App.Message NewScript })
+                (LanternUi.Input.button context.theme
+                    []
+                    { label = Element.text "New script", onPress = Just <| Lantern.App.Message NewScript }
+                )
 
         search =
             LanternUi.Input.text
@@ -1392,7 +1397,11 @@ viewBrowser context model =
 
         filteredScripts =
             model.scripts
-                |> List.filter (\s -> String.isEmpty model.query || String.contains (String.toLower model.query) (String.toLower s.name))
+                |> List.filter
+                    (\s ->
+                        String.isEmpty model.query
+                            || String.contains (String.toLower model.query) (String.toLower s.name)
+                    )
 
         scriptsList =
             filteredScripts
@@ -1402,7 +1411,8 @@ viewBrowser context model =
                             [ Element.width Element.fill
                             , Element.spacing 20
                             ]
-                            [ Element.Input.button [ Element.mouseOver [ Element.Background.color context.theme.bgHighlight ] ]
+                            [ Element.Input.button
+                                [ Element.mouseOver [ Element.Background.color context.theme.bgHighlight ] ]
                                 { onPress = Just (Lantern.App.Message <| EditScript script)
                                 , label = Element.text (scriptName script)
                                 }
@@ -1461,7 +1471,8 @@ scriptDecoder =
 
 scriptsQuery : (Result Lantern.Error (List Script) -> msg) -> LiveQuery msg
 scriptsQuery =
-    Lantern.LiveQuery.prepare ( Lantern.Query.Query "SELECT id, input, name, code FROM scripts ORDER BY name" Dict.empty, scriptDecoder )
+    Lantern.LiveQuery.prepare
+        ( Lantern.Query.Query "SELECT id, input, name, code FROM scripts ORDER BY name" Dict.empty, scriptDecoder )
 
 
 liveQueries : Model -> List (LiveQuery Message)
