@@ -4,11 +4,11 @@ import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
 import Element.Input
-import Enclojure
+import Enclojure exposing (Exception)
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable)
-import Enclojure.Types exposing (Env, Exception(..), IO(..), Step, Thunk(..))
+import Enclojure.Types exposing (Env, IO(..), Step, Thunk(..))
 import Enclojure.Value as Value exposing (Value)
 import Enclojure.ValueMap
 import File.Download
@@ -148,7 +148,7 @@ sleep =
                 |> Value.tryInt
                 |> Maybe.map toFloat
                 |> orElse (\_ -> Value.tryFloat val)
-                |> Result.fromMaybe (Exception "type error: sleep expects one numeric argument" [])
+                |> Result.fromMaybe (Value.exception "type error: sleep expects one numeric argument")
                 |> Result.andThen
                     (Process.sleep
                         >> Task.map (\_ -> Value.nil)
@@ -185,7 +185,7 @@ decodeHttpRequest : Value MyIO -> Result Exception HttpRequest
 decodeHttpRequest value =
     value
         |> Value.tryMap
-        |> Result.fromMaybe (Exception "type error: request must be a map" [])
+        |> Result.fromMaybe (Value.exception "type error: request must be a map")
         |> Result.andThen
             (\requestMap ->
                 let
@@ -194,7 +194,7 @@ decodeHttpRequest value =
                             |> Enclojure.ValueMap.get (Value.keyword "url")
                             |> Maybe.map Located.getValue
                             |> Maybe.andThen Value.tryString
-                            |> Result.fromMaybe (Exception "type error: :url must be a string" [])
+                            |> Result.fromMaybe (Value.exception "type error: :url must be a string")
 
                     headers =
                         requestMap
@@ -209,7 +209,7 @@ decodeHttpRequest value =
                             |> Enclojure.ValueMap.get (Value.keyword "method")
                             |> Maybe.map Located.getValue
                             |> Maybe.andThen Value.tryKeyword
-                            |> Result.fromMaybe (Exception "type error: method must be a keyword" [])
+                            |> Result.fromMaybe (Value.exception "type error: method must be a keyword")
 
                     bodyResult =
                         requestMap
@@ -223,7 +223,7 @@ decodeHttpRequest value =
                                             , Value.tryNil >> Maybe.map (always Nothing)
                                             ]
                                )
-                            |> Result.fromMaybe (Exception "type error: body must be nil or string" [])
+                            |> Result.fromMaybe (Value.exception "type error: body must be nil or string")
                 in
                 Result.map3
                     (\url method body ->
@@ -277,23 +277,21 @@ toTextPart val =
                     )
             ]
         |> Result.fromMaybe
-            (Exception "text parts must be plain strings or variable vectors (e.g., [:$ :var])"
-                []
-            )
+            (Value.exception "text parts must be plain strings or variable vectors (e.g., [:$ :var])")
 
 
 toUi : Value ui -> Result Exception Cell
 toUi val =
     val
         |> Value.tryVectorOf Just
-        |> Result.fromMaybe (Exception "cell must be a vector" [])
+        |> Result.fromMaybe (Value.exception "cell must be a vector")
         |> Result.andThen
             (\cell ->
                 if List.length cell > 0 then
                     Ok cell
 
                 else
-                    Err (Exception "empty vector is not a valid cell" [])
+                    Err (Value.exception "empty vector is not a valid cell")
             )
         |> Result.andThen
             (\v ->
@@ -304,7 +302,7 @@ toUi val =
                 v
                     |> List.head
                     |> Maybe.andThen Value.tryKeyword
-                    |> Result.fromMaybe (Exception "type error: cell type must be a keyword" [])
+                    |> Result.fromMaybe (Value.exception "type error: cell type must be a keyword")
                     |> Result.andThen
                         (\cellType ->
                             case cellType of
@@ -351,7 +349,7 @@ toUi val =
                                     args
                                         |> List.head
                                         |> Maybe.andThen Value.tryKeyword
-                                        |> Result.fromMaybe (Exception "missing required key argument to :text-input" [])
+                                        |> Result.fromMaybe (Value.exception "missing required key argument to :text-input")
                                         |> Result.andThen
                                             (\key ->
                                                 let
@@ -376,7 +374,7 @@ toUi val =
                                     args
                                         |> List.head
                                         |> Maybe.andThen Value.tryKeyword
-                                        |> Result.fromMaybe (Exception "missing required key argument to :button" [])
+                                        |> Result.fromMaybe (Value.exception "missing required key argument to :button")
                                         |> Result.andThen
                                             (\key ->
                                                 let
@@ -431,10 +429,10 @@ toUi val =
                                             )
                                             Value.tryKeyword
                                             Value.tryString
-                                        |> Result.fromMaybe (Exception "type error: invalid arguments to download cell" [])
+                                        |> Result.fromMaybe (Value.exception "type error: invalid arguments to download cell")
 
                                 _ ->
-                                    Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type") [])
+                                    Err (Value.exception ("type error: " ++ cellType ++ " is not a supported cell type"))
                         )
             )
 
@@ -455,7 +453,7 @@ ui =
         arity3 ( uiVal, watchFn, defaultsMap ) =
             defaultsMap
                 |> Value.tryMap
-                |> Result.fromMaybe (Exception ("type error: expected a map of defaults, got " ++ Value.inspect defaultsMap) [])
+                |> Result.fromMaybe (Value.exception ("type error: expected a map of defaults, got " ++ Value.inspect defaultsMap))
                 |> Result.andThen
                     (\m ->
                         toUi uiVal
@@ -570,7 +568,7 @@ trampoline (Located loc ( result, thunk )) maxdepth =
     case result of
         Ok ( io, env ) ->
             if maxdepth <= 0 then
-                ( Panic ( Located.unknown (Exception "Stack level too deep" []), env ), Cmd.none )
+                ( Panic ( Located.unknown (Value.exception "Stack level too deep"), env ), Cmd.none )
 
             else
                 case io of
@@ -718,13 +716,13 @@ runWatchFn env watchFn stateMap =
                 Done ( val, _ ) ->
                     val
                         |> Value.tryMap
-                        |> Result.fromMaybe (Located.unknown (Exception "type error: watch returned a non-map" []))
+                        |> Result.fromMaybe (Located.unknown (Value.exception "type error: watch returned a non-map"))
 
                 Panic ( err, _ ) ->
                     Err err
 
                 _ ->
-                    Err (Located.unknown (Exception "runtime error: watch fn tried to run a side effect" []))
+                    Err (Located.unknown (Value.exception "runtime error: watch fn tried to run a side effect"))
 
 
 defaultEnv : Env MyIO
@@ -882,7 +880,7 @@ update msg appModel =
             updateEditor appModel
                 (\model ->
                     ( { model
-                        | interpreter = Panic ( Located.unknown (Exception "Terminated" []), Runtime.emptyEnv )
+                        | interpreter = Panic ( Located.unknown (Value.exception "Terminated"), Runtime.emptyEnv )
                       }
                     , Cmd.none
                     )

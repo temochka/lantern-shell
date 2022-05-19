@@ -249,9 +249,9 @@ tryPatternOf2 combine matchA matchB values =
             Nothing
 
 
-exception : Env io -> String -> Exception
-exception env message =
-    Exception message env.stack
+exception : String -> Exception
+exception message =
+    Exception message []
 
 
 inspectLocated : Located (Value io) -> String

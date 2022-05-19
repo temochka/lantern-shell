@@ -610,7 +610,10 @@ fixedCall mArity =
             )
         |> Maybe.withDefault
             (\_ env k ->
-                ( Err ( Value.exception env "Interpreter error: undefined internal call arity", env )
+                ( Err
+                    ( Value.exception "Interpreter error: undefined internal call arity" |> Runtime.throw env
+                    , env
+                    )
                 , Just (Thunk k)
                 )
             )
@@ -886,7 +889,11 @@ rest_ =
 
                         _ ->
                             Located.unknown
-                                ( Err ( Value.exception env2 "Interpreter error: seq returned a non-list", env2 )
+                                ( Err
+                                    ( Value.exception "Interpreter error: seq returned a non-list"
+                                        |> Runtime.throw env2
+                                    , env2
+                                    )
                                 , Just (Thunk k)
                                 )
                 )

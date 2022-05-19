@@ -8,6 +8,7 @@ module Enclojure.Runtime exposing
     , setCurrentStackFrameLocation
     , setGlobalEnv
     , setLocalEnv
+    , throw
     , toFunction
     , toThunk
     )
@@ -93,7 +94,7 @@ dispatch callable args env k =
                             Variadic fn ->
                                 fn { args = (), rest = [] } env k
                     )
-                |> Maybe.withDefault ( Err ( Value.exception env "Invalid arity 0", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( Value.exception "Invalid arity 0" |> throw env, env ), Just (Thunk k) )
 
         [ a0 ] ->
             extractVariadic callable.arity0
@@ -111,7 +112,7 @@ dispatch callable args env k =
                                             fn { args = a0, rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err ( Value.exception env "Invalid arity 1", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( Value.exception "Invalid arity 1" |> throw env, env ), Just (Thunk k) )
 
         [ a0, a1 ] ->
             extractVariadic callable.arity0
@@ -134,7 +135,7 @@ dispatch callable args env k =
                                             fn { args = ( a0, a1 ), rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err ( Value.exception env "Invalid arity 2", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( Value.exception "Invalid arity 2" |> throw env, env ), Just (Thunk k) )
 
         [ a0, a1, a2 ] ->
             extractVariadic callable.arity0
@@ -162,7 +163,7 @@ dispatch callable args env k =
                                             fn { args = ( a0, a1, a2 ), rest = [] } env k
                                 )
                     )
-                |> Maybe.withDefault ( Err ( Value.exception env "Invalid arity 3", env ), Just (Thunk k) )
+                |> Maybe.withDefault ( Err ( Value.exception "Invalid arity 3" |> throw env, env ), Just (Thunk k) )
 
         a0 :: a1 :: a2 :: rest ->
             extractVariadic callable.arity0
@@ -183,7 +184,10 @@ dispatch callable args env k =
                             |> Maybe.map (\fn -> fn { args = ( a0, a1, a2 ), rest = rest } env k)
                     )
                 |> Maybe.withDefault
-                    ( Err ( Value.exception env ("Invalid arity " ++ String.fromInt (List.length args)), env )
+                    ( Err
+                        ( Value.exception ("Invalid arity " ++ String.fromInt (List.length args)) |> throw env
+                        , env
+                        )
                     , Nothing
                     )
 
@@ -198,7 +202,7 @@ toThunk callable { k } =
                         |> Located pos
 
                 _ ->
-                    Located pos ( Err ( Value.exception env "Foo", env ), Nothing )
+                    Located pos ( Err ( Value.exception "Foo" |> throw env, env ), Nothing )
         )
 
 
@@ -353,7 +357,10 @@ apply ((Located fnLoc fnExpr) as fn) arg inputEnv inputK =
                 |> Located.sameAs arg
 
         _ ->
-            ( Err ( Value.exception inputEnv (Value.inspectLocated fn ++ " is not a valid callable."), inputEnv )
+            ( Err
+                ( Value.exception (Value.inspectLocated fn ++ " is not a valid callable.") |> throw inputEnv
+                , inputEnv
+                )
             , Just (Thunk k)
             )
                 |> Located fnLoc
@@ -390,3 +397,8 @@ prettyTrace (Exception _ trace) =
                                 ":" ++ (Tuple.first start |> String.fromInt)
                        )
             )
+
+
+throw : Env io -> Exception -> Exception
+throw env (Exception msg _) =
+    Exception msg env.stack

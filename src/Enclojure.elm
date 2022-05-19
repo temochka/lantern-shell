@@ -1,4 +1,4 @@
-module Enclojure exposing (defaultEnv, eval, evalPure, init, terminate)
+module Enclojure exposing (Exception, defaultEnv, eval, evalPure, init, terminate)
 
 import Array exposing (Array)
 import Enclojure.Extra.Maybe exposing (orElse)
@@ -14,11 +14,15 @@ import Enclojure.ValueSet as ValueSet exposing (ValueSet)
 import Parser
 
 
+type alias Exception =
+    Enclojure.Types.Exception
+
+
 resolveSymbol : Env io -> String -> Result Exception (Value io)
 resolveSymbol env symbol =
     Runtime.fetchEnv symbol env.local
         |> orElse (\_ -> Runtime.fetchEnv symbol env.global)
-        |> Result.fromMaybe (Value.exception env ("Unknown symbol " ++ symbol))
+        |> Result.fromMaybe (Value.exception ("Unknown symbol " ++ symbol) |> Runtime.throw env)
 
 
 {-| Introduce a redundant closure to prevent closure shadowing via tail-call optimization
@@ -143,7 +147,11 @@ evalVector (Located loc vecV) env k =
 
                             _ ->
                                 Located loc
-                                    ( Err ( Value.exception envNow "Interpreter error: vector evaluation yielded a non-vector", envNow )
+                                    ( Err
+                                        ( Value.exception "Interpreter error: vector evaluation yielded a non-vector"
+                                            |> Runtime.throw envNow
+                                        , envNow
+                                        )
                                     , Just (Thunk a)
                                     )
                 )
@@ -180,7 +188,8 @@ evalMap (Located mapLoc map) env k =
 
                                             _ ->
                                                 Located loc
-                                                    ( Value.exception mapEntryEnv "Interpreter error: Map entry evaluation yielded a non-map entry"
+                                                    ( Value.exception "Interpreter error: Map entry evaluation yielded a non-map entry"
+                                                        |> Runtime.throw mapEntryEnv
                                                         |> (\ex -> ( ex, mapEntryEnv ))
                                                         |> Err
                                                     , Just (Thunk a)
@@ -189,7 +198,8 @@ evalMap (Located mapLoc map) env k =
 
                             _ ->
                                 Located loc
-                                    ( Value.exception renv "Interpreter error: Map evaluation yielded a non-map"
+                                    ( Value.exception "Interpreter error: Map evaluation yielded a non-map"
+                                        |> Runtime.throw renv
                                         |> (\ex -> ( ex, renv ))
                                         |> Err
                                     , Just (Thunk a)
@@ -243,7 +253,8 @@ evalSet (Located setLoc set) env k =
 
                             _ ->
                                 Located loc
-                                    ( Value.exception renv "Interpreter error: Set evaluation yielded a non-set"
+                                    ( Value.exception "Interpreter error: Set evaluation yielded a non-set"
+                                        |> Runtime.throw renv
                                         |> (\ex -> ( ex, renv ))
                                         |> Err
                                     , Just (Thunk a)
@@ -598,7 +609,8 @@ evalLet (Located loc body) env k =
                     Ok []
 
                 _ ->
-                    Value.exception env "Syntax error: let received an uneven number of binding pairs"
+                    Value.exception "Syntax error: let received an uneven number of binding pairs"
+                        |> Runtime.throw env
                         |> Located loc
                         |> Err
     in
@@ -657,7 +669,10 @@ evalLet (Located loc body) env k =
 
         _ ->
             Located loc
-                ( Err ( Value.exception env "Syntax error: let expects a vector of bindings", env )
+                ( Err
+                    ( Value.exception "Syntax error: let expects a vector of bindings" |> Runtime.throw env
+                    , env
+                    )
                 , Just (Thunk k)
                 )
 
@@ -683,7 +698,8 @@ evalApply fnExpr (Located loc argExprs) env k =
 
                                                 _ ->
                                                     Located loc
-                                                        ( Value.exception argEnv "Impossible interpreter state: list evaluation yielded a non-list"
+                                                        ( Value.exception "Impossible interpreter state: list evaluation yielded a non-list"
+                                                            |> Runtime.throw argEnv
                                                             |> (\ex -> ( ex, argEnv ))
                                                             |> Err
                                                         , Just (Thunk a)
@@ -709,11 +725,12 @@ evalQuote (Located loc exprs) env k =
         _ ->
             Located loc
                 ( Err
-                    ( Value.exception env
+                    ( Value.exception
                         ("Argument error: Wrong number of arguments ("
                             ++ String.fromInt (List.length exprs)
                             ++ ") passed to quote"
                         )
+                        |> Runtime.throw env
                     , env
                     )
                 , Just (Thunk k)
@@ -739,7 +756,7 @@ evalIf : Located (List (Located (Value io))) -> Env io -> Continuation io -> Loc
 evalIf (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ :: _ ->
-            Located loc ( Err ( Value.exception env "an if with too many forms", env ), Just (Thunk k) )
+            Located loc ( Err ( Value.exception "an if with too many forms" |> Runtime.throw env, env ), Just (Thunk k) )
 
         [ eIf, eThen, eElse ] ->
             evalExpression eIf
@@ -764,17 +781,20 @@ evalIf (Located loc args) env k =
                 )
 
         [ _ ] ->
-            Located loc ( Err ( Value.exception env "an if without then", env ), Just (Thunk k) )
+            Located loc ( Err ( Value.exception "an if without then" |> Runtime.throw env, env ), Just (Thunk k) )
 
         [] ->
-            Located loc ( Err ( Value.exception env "an empty if", env ), Just (Thunk k) )
+            Located loc ( Err ( Value.exception "an empty if" |> Runtime.throw env, env ), Just (Thunk k) )
 
 
 evalDef : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
 evalDef (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ ->
-            Located loc ( Err ( Value.exception env "too many arguments to def", env ), Just (Thunk k) )
+            Located loc
+                ( Err ( Value.exception "too many arguments to def" |> Runtime.throw env, env )
+                , Just (Thunk k)
+                )
 
         [ Located _ (Symbol name), e ] ->
             evalExpression e
@@ -790,19 +810,25 @@ evalDef (Located loc args) env k =
                 )
 
         [ _, _ ] ->
-            Located loc ( Err ( Value.exception env "def accepts a symbol and an expression", env ), Just (Thunk k) )
+            Located loc
+                ( Err
+                    ( Value.exception "def accepts a symbol and an expression" |> Runtime.throw env
+                    , env
+                    )
+                , Just (Thunk k)
+                )
 
         [ Located _ (Symbol name) ] ->
-            Located loc ( Err ( Value.exception env ("empty def " ++ name), env ), Just (Thunk k) )
+            Located loc ( Err ( Value.exception ("empty def " ++ name) |> Runtime.throw env, env ), Just (Thunk k) )
 
         [ _ ] ->
             Located loc
-                ( Err ( Value.exception env "def expects a symbol as its first argument", env )
+                ( Err ( Value.exception "def expects a symbol as its first argument" |> Runtime.throw env, env )
                 , Just (Thunk k)
                 )
 
         [] ->
-            Located loc ( Err ( Value.exception env "no arguments to def", env ), Just (Thunk k) )
+            Located loc ( Err ( Value.exception "no arguments to def" |> Runtime.throw env, env ), Just (Thunk k) )
 
 
 wrapInDo : Located (List (Located (Value io))) -> Located (Value io)
@@ -813,7 +839,7 @@ wrapInDo (Located loc vs) =
 prelude : Result (Located Exception) (List (Located (Value io)))
 prelude =
     Reader.parse Lib.prelude
-        |> Result.mapError (deadEndsToString >> Value.exception defaultEnv >> Located.unknown)
+        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw defaultEnv >> Located.unknown)
 
 
 terminate : Continuation io
@@ -835,7 +861,12 @@ trampolinePure (Located loc ( result, thunk )) =
                             Ok ( v, env )
 
                 SideEffect _ ->
-                    Err (Located loc (Value.exception env "Interpreter error: An unexpected side effect during init"))
+                    Err
+                        (Located loc
+                            (Value.exception "Interpreter error: An unexpected side effect during init"
+                                |> Runtime.throw env
+                            )
+                        )
 
         Err ( e, _ ) ->
             Err (Located loc e)
@@ -917,13 +948,13 @@ problemToString p =
 evalPure : Env io -> String -> Result (Located Exception) ( Value io, Env io )
 evalPure initEnv code =
     Reader.parse code
-        |> Result.mapError (deadEndsToString >> Value.exception initEnv)
+        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw initEnv)
         |> Result.andThen
             (\exprs ->
                 exprs
                     |> List.head
                     |> Maybe.map ((\lv -> Located.sameAs lv exprs) >> wrapInDo)
-                    |> Result.fromMaybe (Value.exception initEnv "Empty program")
+                    |> Result.fromMaybe (Value.exception "Empty program" |> Runtime.throw initEnv)
             )
         |> Result.map
             (\program ->
@@ -938,7 +969,7 @@ evalPure initEnv code =
 eval : Env io -> String -> Located (Step io)
 eval initEnv code =
     Reader.parse code
-        |> Result.mapError (deadEndsToString >> Value.exception initEnv >> Located.unknown)
+        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw initEnv >> Located.unknown)
         |> Result.map2
             (\a b -> a ++ b)
             prelude
