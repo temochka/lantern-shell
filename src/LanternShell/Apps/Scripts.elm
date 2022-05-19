@@ -1,15 +1,15 @@
 module LanternShell.Apps.Scripts exposing (Message(..), Model, MyIO, Script, lanternApp, scriptsQuery)
 
-import Array
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
 import Element.Input
 import Enclojure
+import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable)
-import Enclojure.Types exposing (Env, Exception(..), IO(..), Thunk(..), Value(..))
-import Enclojure.Value as Value
+import Enclojure.Types exposing (Env, Exception(..), IO(..), Step, Thunk(..))
+import Enclojure.Value as Value exposing (Value)
 import Enclojure.ValueMap
 import File.Download
 import Html.Events
@@ -120,7 +120,7 @@ traceUi model console =
     UiTrace model :: console
 
 
-recordSavepoint : Located (Enclojure.Types.Step MyIO) -> Console -> Console
+recordSavepoint : Located (Step MyIO) -> Console -> Console
 recordSavepoint (Located loc ( ret, thunk )) console =
     ret
         |> Result.map (\val -> Savepoint_ ( Located loc val, thunk ) :: console)
@@ -144,23 +144,18 @@ sleep : Enclojure.Types.Callable MyIO
 sleep =
     let
         arity1 val =
-            case val of
-                Number (Enclojure.Types.Int i) ->
-                    Process.sleep (toFloat i)
-                        |> Task.map (\_ -> Nil)
-                        |> IOTask
-                        |> SideEffect
-                        |> Ok
-
-                Number (Enclojure.Types.Float i) ->
-                    Process.sleep i
-                        |> Task.map (\_ -> Nil)
-                        |> IOTask
-                        |> SideEffect
-                        |> Ok
-
-                _ ->
-                    Err (Exception "type error: sleep expects one integer argument" [])
+            val
+                |> Value.tryInt
+                |> Maybe.map toFloat
+                |> orElse (\_ -> Value.tryFloat val)
+                |> Result.fromMaybe (Exception "type error: sleep expects one numeric argument" [])
+                |> Result.andThen
+                    (Process.sleep
+                        >> Task.map (\_ -> Value.nil)
+                        >> IOTask
+                        >> SideEffect
+                        >> Ok
+                    )
     in
     { emptyCallable
         | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
@@ -196,14 +191,14 @@ decodeHttpRequest value =
                 let
                     urlResult =
                         requestMap
-                            |> Enclojure.ValueMap.get (Keyword "url")
+                            |> Enclojure.ValueMap.get (Value.keyword "url")
                             |> Maybe.map Located.getValue
                             |> Maybe.andThen Value.tryString
                             |> Result.fromMaybe (Exception "type error: :url must be a string" [])
 
                     headers =
                         requestMap
-                            |> Enclojure.ValueMap.get (Keyword "headers")
+                            |> Enclojure.ValueMap.get (Value.keyword "headers")
                             |> Maybe.map Located.getValue
                             |> Maybe.andThen (Value.tryDictOf Value.tryString Value.tryString)
                             |> Maybe.map Dict.toList
@@ -211,26 +206,22 @@ decodeHttpRequest value =
 
                     methodResult =
                         requestMap
-                            |> Enclojure.ValueMap.get (Keyword "method")
+                            |> Enclojure.ValueMap.get (Value.keyword "method")
                             |> Maybe.map Located.getValue
                             |> Maybe.andThen Value.tryKeyword
                             |> Result.fromMaybe (Exception "type error: method must be a keyword" [])
 
                     bodyResult =
                         requestMap
-                            |> Enclojure.ValueMap.get (Keyword "body")
+                            |> Enclojure.ValueMap.get (Value.keyword "body")
                             |> Maybe.map Located.getValue
-                            |> Maybe.withDefault Nil
+                            |> Maybe.withDefault Value.nil
                             |> (\bodyValue ->
-                                    case bodyValue of
-                                        String s ->
-                                            Just (Just s)
-
-                                        Nil ->
-                                            Just Nothing
-
-                                        _ ->
-                                            Nothing
+                                    bodyValue
+                                        |> Value.tryOneOf
+                                            [ Value.tryString >> Maybe.map Just
+                                            , Value.tryNil >> Maybe.map (always Nothing)
+                                            ]
                                )
                             |> Result.fromMaybe (Exception "type error: body must be nil or string" [])
                 in
@@ -269,181 +260,207 @@ http =
     { emptyCallable | arity1 = Just (Enclojure.Types.Fixed arity1) }
 
 
+toTextPart : Value ui -> Result Exception TextFormat
+toTextPart val =
+    val
+        |> Value.tryOneOf
+            [ Value.tryString >> Maybe.map Plain
+            , Value.tryVectorOf Value.tryKeyword
+                >> Maybe.andThen
+                    (\kws ->
+                        case kws of
+                            [ "$", key ] ->
+                                Just (TextRef key)
+
+                            _ ->
+                                Nothing
+                    )
+            ]
+        |> Result.fromMaybe
+            (Exception "text parts must be plain strings or variable vectors (e.g., [:$ :var])"
+                []
+            )
+
+
+toUi : Value ui -> Result Exception Cell
+toUi val =
+    val
+        |> Value.tryVectorOf Just
+        |> Result.fromMaybe (Exception "cell must be a vector" [])
+        |> Result.andThen
+            (\cell ->
+                if List.length cell > 0 then
+                    Ok cell
+
+                else
+                    Err (Exception "empty vector is not a valid cell" [])
+            )
+        |> Result.andThen
+            (\v ->
+                let
+                    args =
+                        List.drop 1 v
+                in
+                v
+                    |> List.head
+                    |> Maybe.andThen Value.tryKeyword
+                    |> Result.fromMaybe (Exception "type error: cell type must be a keyword" [])
+                    |> Result.andThen
+                        (\cellType ->
+                            case cellType of
+                                "v-stack" ->
+                                    args
+                                        |> List.foldl
+                                            (\e acc ->
+                                                acc
+                                                    |> Result.andThen
+                                                        (\l ->
+                                                            toUi e
+                                                                |> Result.map
+                                                                    (\retCell ->
+                                                                        retCell :: l
+                                                                    )
+                                                        )
+                                            )
+                                            (Ok [])
+                                        |> Result.map (List.reverse >> VStack)
+
+                                "h-stack" ->
+                                    args
+                                        |> List.foldl
+                                            (\e acc ->
+                                                acc
+                                                    |> Result.andThen
+                                                        (\l ->
+                                                            toUi e
+                                                                |> Result.map
+                                                                    (\retCell ->
+                                                                        retCell :: l
+                                                                    )
+                                                        )
+                                            )
+                                            (Ok [])
+                                        |> Result.map (List.reverse >> HStack)
+
+                                "text" ->
+                                    args
+                                        |> List.foldr (\e a -> toTextPart e |> Result.map2 (\x y -> y :: x) a) (Ok [])
+                                        |> Result.map Text
+
+                                "text-input" ->
+                                    args
+                                        |> List.head
+                                        |> Maybe.andThen Value.tryKeyword
+                                        |> Result.fromMaybe (Exception "missing required key argument to :text-input" [])
+                                        |> Result.andThen
+                                            (\key ->
+                                                let
+                                                    options =
+                                                        args
+                                                            |> List.drop 1
+                                                            |> List.head
+                                                            |> Maybe.andThen Value.tryMap
+                                                            |> Maybe.withDefault Enclojure.ValueMap.empty
+
+                                                    suggestions =
+                                                        options
+                                                            |> Enclojure.ValueMap.get (Value.keyword "suggestions")
+                                                            |> Maybe.map Located.getValue
+                                                            |> Maybe.andThen (Value.trySequenceOf Value.tryString)
+                                                            |> Maybe.withDefault []
+                                                in
+                                                Ok (Input key (TextInput { suggestions = suggestions }))
+                                            )
+
+                                "button" ->
+                                    args
+                                        |> List.head
+                                        |> Maybe.andThen Value.tryKeyword
+                                        |> Result.fromMaybe (Exception "missing required key argument to :button" [])
+                                        |> Result.andThen
+                                            (\key ->
+                                                let
+                                                    options =
+                                                        args
+                                                            |> List.drop 1
+                                                            |> List.head
+                                                            |> Maybe.andThen Value.tryMap
+                                                            |> Maybe.withDefault Enclojure.ValueMap.empty
+
+                                                    title =
+                                                        Enclojure.ValueMap.get (Value.keyword "title") options
+                                                            |> Maybe.map Located.getValue
+                                                            |> Maybe.andThen Value.tryString
+                                                            |> Maybe.withDefault key
+                                                in
+                                                Ok (Input key (Button { title = title }))
+                                            )
+
+                                "download" ->
+                                    args
+                                        |> Value.tryPatternOf2
+                                            (\key content restArgs ->
+                                                let
+                                                    options =
+                                                        restArgs
+                                                            |> List.head
+                                                            |> Maybe.andThen Value.tryMap
+                                                            |> Maybe.withDefault Enclojure.ValueMap.empty
+
+                                                    contentType =
+                                                        Enclojure.ValueMap.get (Value.keyword "content-type") options
+                                                            |> Maybe.map Located.getValue
+                                                            |> Maybe.andThen Value.tryString
+                                                            |> Maybe.withDefault "text/plain"
+
+                                                    name =
+                                                        Enclojure.ValueMap.get (Value.keyword "name") options
+                                                            |> Maybe.map Located.getValue
+                                                            |> Maybe.andThen Value.tryString
+                                                            |> Maybe.withDefault "download.txt"
+                                                in
+                                                Just
+                                                    (Input key
+                                                        (Download
+                                                            { name = name
+                                                            , content = content
+                                                            , contentType = contentType
+                                                            }
+                                                        )
+                                                    )
+                                            )
+                                            Value.tryKeyword
+                                            Value.tryString
+                                        |> Result.fromMaybe (Exception "type error: invalid arguments to download cell" [])
+
+                                _ ->
+                                    Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type") [])
+                        )
+            )
+
+
 ui : Enclojure.Types.Callable MyIO
 ui =
     let
-        toTextPart (Located _ val) =
-            case val of
-                String s ->
-                    Ok (Plain s)
-
-                Vector v ->
-                    case Array.toList v of
-                        [ Located _ (Keyword "$"), Located _ (Keyword key) ] ->
-                            Ok (TextRef key)
-
-                        _ ->
-                            Err (Exception "type error: invalid text formatter" [])
-
-                _ ->
-                    Err (Exception "text parts must be plain strings" [])
-
-        toUi (Located _ val) =
-            case val of
-                Vector v ->
-                    case Array.toList v of
-                        (Located _ (Keyword "v-stack")) :: cells ->
-                            cells
-                                |> List.foldl
-                                    (\e acc ->
-                                        acc
-                                            |> Result.andThen
-                                                (\l ->
-                                                    toUi e
-                                                        |> Result.map
-                                                            (\retCell ->
-                                                                retCell :: l
-                                                            )
-                                                )
-                                    )
-                                    (Ok [])
-                                |> Result.map (List.reverse >> VStack)
-
-                        (Located _ (Keyword "h-stack")) :: cells ->
-                            cells
-                                |> List.foldl
-                                    (\e acc ->
-                                        acc
-                                            |> Result.andThen
-                                                (\l ->
-                                                    toUi e
-                                                        |> Result.map
-                                                            (\retCell ->
-                                                                retCell :: l
-                                                            )
-                                                )
-                                    )
-                                    (Ok [])
-                                |> Result.map (List.reverse >> HStack)
-
-                        (Located _ (Keyword "text")) :: parts ->
-                            parts
-                                |> List.foldr (\e a -> toTextPart e |> Result.map2 (\x y -> y :: x) a) (Ok [])
-                                |> Result.map Text
-
-                        (Located _ (Keyword "text-input")) :: args ->
-                            case args of
-                                (Located _ (Keyword key)) :: restArgs ->
-                                    let
-                                        options =
-                                            restArgs
-                                                |> List.head
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Value.tryMap
-                                                |> Maybe.withDefault Enclojure.ValueMap.empty
-
-                                        suggestions =
-                                            options
-                                                |> Enclojure.ValueMap.get (Keyword "suggestions")
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen (Value.trySequenceOf Value.tryString)
-                                                |> Maybe.withDefault []
-                                    in
-                                    Ok (Input key (TextInput { suggestions = suggestions }))
-
-                                _ ->
-                                    Err (Exception "type error: invalid arguments to text-input cell" [])
-
-                        (Located _ (Keyword "button")) :: args ->
-                            case args of
-                                (Located _ (Keyword key)) :: restArgs ->
-                                    let
-                                        options =
-                                            case restArgs of
-                                                (Located _ (Map m)) :: _ ->
-                                                    m
-
-                                                _ ->
-                                                    Enclojure.ValueMap.empty
-
-                                        title =
-                                            Enclojure.ValueMap.get (Keyword "title") options
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Value.tryString
-                                                |> Maybe.withDefault key
-                                    in
-                                    Ok (Input key (Button { title = title }))
-
-                                _ ->
-                                    Err (Exception "type error: invalid arguments to button cell" [])
-
-                        (Located _ (Keyword "download")) :: args ->
-                            case args of
-                                (Located _ (Keyword key)) :: (Located _ (String content)) :: restArgs ->
-                                    let
-                                        options =
-                                            case restArgs of
-                                                (Located _ (Map m)) :: _ ->
-                                                    m
-
-                                                _ ->
-                                                    Enclojure.ValueMap.empty
-
-                                        contentType =
-                                            Enclojure.ValueMap.get (Keyword "content-type") options
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Value.tryString
-                                                |> Maybe.withDefault "text/plain"
-
-                                        name =
-                                            Enclojure.ValueMap.get (Keyword "name") options
-                                                |> Maybe.map Located.getValue
-                                                |> Maybe.andThen Value.tryString
-                                                |> Maybe.withDefault "download.txt"
-                                    in
-                                    Ok
-                                        (Input key
-                                            (Download
-                                                { name = name
-                                                , content = content
-                                                , contentType = contentType
-                                                }
-                                            )
-                                        )
-
-                                _ ->
-                                    Err (Exception "type error: invalid arguments to download cell" [])
-
-                        (Located _ (Keyword cellType)) :: _ ->
-                            Err (Exception ("type error: " ++ cellType ++ " is not a supported cell type") [])
-
-                        _ :: _ ->
-                            Err (Exception "type error: cell type must be a keyword" [])
-
-                        [] ->
-                            Err (Exception "type error: empty vector is not a valid cell" [])
-
-                _ ->
-                    Err (Exception "cell must be a vector" [])
-
         arity1 val =
-            toUi (Located.unknown val)
+            toUi val
                 |> Result.map
                     (\cell ->
-                        SideEffect <| ShowUI { cell = cell, watchFn = Nil, state = Enclojure.ValueMap.empty }
+                        SideEffect <| ShowUI { cell = cell, watchFn = Value.nil, state = Enclojure.ValueMap.empty }
                     )
 
         arity2 ( uiVal, defaultsMap ) =
-            arity3 ( uiVal, Nil, defaultsMap )
+            arity3 ( uiVal, Value.nil, defaultsMap )
 
         arity3 ( uiVal, watchFn, defaultsMap ) =
-            case defaultsMap of
-                Map m ->
-                    toUi (Located.unknown uiVal)
-                        |> Result.map (\cell -> SideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
-
-                _ ->
-                    Err (Exception ("type error: expected a map of defaults, got " ++ Value.inspect defaultsMap) [])
+            defaultsMap
+                |> Value.tryMap
+                |> Result.fromMaybe (Exception ("type error: expected a map of defaults, got " ++ Value.inspect defaultsMap) [])
+                |> Result.andThen
+                    (\m ->
+                        toUi uiVal
+                            |> Result.map (\cell -> SideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
+                    )
     in
     { emptyCallable
         | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
@@ -465,8 +482,8 @@ type Message
     | Stop
     | UpdateInputRequest InputKey InputCell String
     | UpdateScripts (Result Lantern.Error (List Script))
-    | HandleIO (Located (Enclojure.Types.Step MyIO))
-    | Rewind (Located (Enclojure.Types.Step MyIO))
+    | HandleIO (Located (Step MyIO))
+    | Rewind (Located (Step MyIO))
     | InspectValue (Value MyIO)
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
@@ -528,25 +545,25 @@ type Interpreter
 
 responseToValue : Lantern.Http.Response -> Value MyIO
 responseToValue response =
-    Map <|
+    Value.map <|
         Enclojure.ValueMap.fromList
-            [ ( Keyword "status", Located.unknown <| Number (Enclojure.Types.Int response.status) )
-            , ( Keyword "headers"
+            [ ( Value.keyword "status", Located.unknown <| Value.int response.status )
+            , ( Value.keyword "headers"
               , Located.unknown <|
-                    Map
+                    Value.map
                         (response.headers
-                            |> List.map (\( k, v ) -> ( String k, Located.unknown (String v) ))
+                            |> List.map (\( k, v ) -> ( Value.string k, Located.unknown (Value.string v) ))
                             |> Enclojure.ValueMap.fromList
                         )
               )
-            , ( Keyword "body"
-              , response.body |> Maybe.map String |> Maybe.withDefault Nil |> Located.unknown
+            , ( Value.keyword "body"
+              , response.body |> Maybe.map Value.string |> Maybe.withDefault Value.nil |> Located.unknown
               )
             ]
 
 
 trampoline :
-    Located (Enclojure.Types.Step MyIO)
+    Located (Step MyIO)
     -> Int
     -> ( Interpreter, Cmd (Lantern.App.Message Message) )
 trampoline (Located loc ( result, thunk )) maxdepth =
@@ -682,8 +699,8 @@ runWatchFn :
     -> Enclojure.Types.ValueMap MyIO
     -> Result (Located Exception) (Enclojure.Types.ValueMap MyIO)
 runWatchFn env watchFn stateMap =
-    case watchFn of
-        Nil ->
+    case Value.tryNil watchFn of
+        Just _ ->
             Ok stateMap
 
         _ ->
@@ -691,7 +708,7 @@ runWatchFn env watchFn stateMap =
                 ( interpreter, _ ) =
                     trampoline
                         (Runtime.apply (Located.unknown watchFn)
-                            (Located.unknown (List [ Located.unknown (Map stateMap) ]))
+                            (Located.unknown (Value.list [ Value.map stateMap ]))
                             env
                             Enclojure.terminate
                         )
@@ -714,13 +731,13 @@ defaultEnv : Env MyIO
 defaultEnv =
     Enclojure.defaultEnv
         |> Runtime.setGlobalEnv "http/request"
-            (Fn (Just "http/request") (Runtime.toThunk http))
+            (Value.fn (Just "http/request") (Runtime.toThunk http))
         |> Runtime.setGlobalEnv "sleep"
-            (Fn (Just "sleep") (Runtime.toThunk sleep))
+            (Value.fn (Just "sleep") (Runtime.toThunk sleep))
         |> Runtime.setGlobalEnv "ui"
-            (Fn (Just "ui") (Runtime.toThunk ui))
+            (Value.fn (Just "ui") (Runtime.toThunk ui))
         |> Runtime.setGlobalEnv "<o>"
-            (Fn (Just "<o>") (Runtime.toThunk savepoint))
+            (Value.fn (Just "<o>") (Runtime.toThunk savepoint))
 
 
 runScript : EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) )
@@ -906,10 +923,10 @@ update msg appModel =
                                 Button _ ->
                                     let
                                         exitCode =
-                                            Located.unknown <| Keyword name
+                                            Value.keyword name
 
                                         state =
-                                            Located.unknown <| Map enclojureUi.state
+                                            Value.map enclojureUi.state
 
                                         console =
                                             model.console
@@ -917,7 +934,7 @@ update msg appModel =
                                                 |> printResult model.interpreter
                                     in
                                     ( { model | interpreter = Running, console = console }
-                                    , ( Ok ( Const (List [ exitCode, state ]), env ), thunk )
+                                    , ( Ok ( Const (Value.list [ exitCode, state ]), env ), thunk )
                                         |> Located.unknown
                                         |> HandleIO
                                         |> Lantern.App.Message
@@ -928,8 +945,8 @@ update msg appModel =
                                 _ ->
                                     let
                                         updatedState =
-                                            Enclojure.ValueMap.insert (Keyword name)
-                                                (Located.unknown (String v))
+                                            Enclojure.ValueMap.insert (Value.keyword name)
+                                                (Located.unknown (Value.string v))
                                                 uiState.enclojureUi.state
                                                 |> runWatchFn env uiState.enclojureUi.watchFn
 
@@ -1089,7 +1106,7 @@ renderUI context uiModel =
         Input key inputType ->
             let
                 val =
-                    Enclojure.ValueMap.get (Keyword key) state
+                    Enclojure.ValueMap.get (Value.keyword key) state
                         |> Maybe.map (Located.getValue >> Value.toString)
                         |> Maybe.withDefault ""
             in
@@ -1158,7 +1175,7 @@ renderUI context uiModel =
                             TextRef key ->
                                 let
                                     val =
-                                        Enclojure.ValueMap.get (Keyword key) state
+                                        Enclojure.ValueMap.get (Value.keyword key) state
                                             |> Maybe.map (Located.getValue >> Value.toString)
                                             |> Maybe.withDefault ""
                                 in
@@ -1263,7 +1280,7 @@ viewConsole context interpreter console options =
                                 ]
 
                         Failure ( e, _ ) ->
-                            Element.text <| Value.inspectLocated (Located.map Throwable e)
+                            Element.text <| Value.inspectLocated (Located.map Value.throwable e)
 
                         UiTrace uiState ->
                             Element.column

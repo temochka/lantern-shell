@@ -1,16 +1,33 @@
 module Enclojure.Value exposing
-    ( exception
+    ( Value
+    , exception
+    , float
+    , fn
     , inspect
     , inspectLocated
+    , int
+    , keyword
+    , list
+    , map
+    , nil
+    , string
+    , symbol
+    , throwable
     , toMap
     , toSeq
     , toString
     , tryDictOf
+    , tryFloat
+    , tryInt
     , tryKeyword
     , tryMap
+    , tryNil
+    , tryOneOf
+    , tryPatternOf2
     , trySequenceOf
     , tryString
     , trySymbol
+    , tryVectorOf
     )
 
 import Array
@@ -19,6 +36,11 @@ import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Types exposing (Env, Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
+import File exposing (decoder)
+
+
+type alias Value io =
+    Enclojure.Types.Value io
 
 
 toSeq : Value io -> Result Exception (List (Located (Value io)))
@@ -105,10 +127,40 @@ tryMap value =
             Nothing
 
 
+tryFloat : Value io -> Maybe Float
+tryFloat value =
+    case value of
+        Number (Float n) ->
+            Just n
+
+        _ ->
+            Nothing
+
+
+tryInt : Value io -> Maybe Int
+tryInt value =
+    case value of
+        Number (Int n) ->
+            Just n
+
+        _ ->
+            Nothing
+
+
+tryNil : Value io -> Maybe ()
+tryNil value =
+    case value of
+        Nil ->
+            Just ()
+
+        _ ->
+            Nothing
+
+
 tryDictOf : (Value io -> Maybe comparable) -> (Value io -> Maybe b) -> Value io -> Maybe (Dict.Dict comparable b)
 tryDictOf extractKey extractValue value =
     let
-        extractAll kvSequence =
+        extractAllKv kvSequence =
             kvSequence
                 |> List.foldr
                     (\( key, val ) a ->
@@ -125,7 +177,34 @@ tryDictOf extractKey extractValue value =
     in
     case value of
         Map m ->
-            m |> ValueMap.toList |> extractAll |> Maybe.map Dict.fromList
+            m |> ValueMap.toList |> extractAllKv |> Maybe.map Dict.fromList
+
+        _ ->
+            Nothing
+
+
+extractAll : (Value io -> Maybe a) -> List (Value io) -> Maybe (List a)
+extractAll extract sequence =
+    sequence
+        |> List.foldr
+            (\e a ->
+                a
+                    |> Maybe.andThen
+                        (\acc ->
+                            extract e
+                                |> Maybe.map (\extracted -> extracted :: acc)
+                        )
+            )
+            (Just [])
+
+
+tryVectorOf : (Value io -> Maybe a) -> Value io -> Maybe (List a)
+tryVectorOf extract value =
+    case value of
+        Vector v ->
+            Array.toList v
+                |> List.map Located.getValue
+                |> extractAll extract
 
         _ ->
             Nothing
@@ -133,24 +212,41 @@ tryDictOf extractKey extractValue value =
 
 trySequenceOf : (Value io -> Maybe a) -> Value io -> Maybe (List a)
 trySequenceOf extract value =
-    let
-        extractAll sequence =
-            sequence
-                |> List.foldr
-                    (\e a ->
-                        a
-                            |> Maybe.andThen
-                                (\acc ->
-                                    extract e
-                                        |> Maybe.map (\extracted -> extracted :: acc)
-                                )
-                    )
-                    (Just [])
-    in
     toSeq value
         |> Result.map (List.map Located.getValue)
         |> Result.toMaybe
-        |> Maybe.andThen extractAll
+        |> Maybe.andThen (extractAll extract)
+
+
+tryOneOf : List (Value io -> Maybe a) -> Value io -> Maybe a
+tryOneOf decoders value =
+    case decoders of
+        [] ->
+            Nothing
+
+        decoder :: rest ->
+            case decoder value of
+                Just v ->
+                    Just v
+
+                Nothing ->
+                    tryOneOf rest value
+
+
+tryPatternOf2 : (a -> b -> List (Value io) -> Maybe c) -> (Value io -> Maybe a) -> (Value io -> Maybe b) -> List (Value io) -> Maybe c
+tryPatternOf2 combine matchA matchB values =
+    case values of
+        a :: b :: rest ->
+            Maybe.map2
+                (\matchedA matchedB ->
+                    combine matchedA matchedB rest
+                )
+                (matchA a)
+                (matchB b)
+                |> Maybe.andThen identity
+
+        _ ->
+            Nothing
 
 
 exception : Env io -> String -> Exception
@@ -176,8 +272,8 @@ inspect value =
         Ref name _ ->
             "#'" ++ name
 
-        String string ->
-            "\"" ++ string ++ "\""
+        String s ->
+            "\"" ++ s ++ "\""
 
         Number (Int x) ->
             String.fromInt x
@@ -230,8 +326,8 @@ inspect value =
 print : Value io -> String
 print value =
     case value of
-        String string ->
-            string
+        String s ->
+            s
 
         Nil ->
             ""
@@ -248,3 +344,53 @@ toString value =
 
         _ ->
             print value
+
+
+float : Float -> Value io
+float n =
+    Number <| Float n
+
+
+int : Int -> Value io
+int n =
+    Number <| Int n
+
+
+string : String -> Value io
+string =
+    String
+
+
+keyword : String -> Value io
+keyword =
+    Keyword
+
+
+symbol : String -> Value io
+symbol =
+    Symbol
+
+
+nil : Value io
+nil =
+    Nil
+
+
+map : ValueMap io -> Value io
+map =
+    Map
+
+
+list : List (Value io) -> Value io
+list vs =
+    List <| List.map Located.unknown vs
+
+
+fn : Maybe String -> ({ self : Value io, k : Enclojure.Types.Continuation io } -> Enclojure.Types.Thunk io) -> Value io
+fn name constructor =
+    Fn name constructor
+
+
+throwable : Exception -> Value io
+throwable =
+    Throwable
