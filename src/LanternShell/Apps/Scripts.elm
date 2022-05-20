@@ -5,10 +5,9 @@ import Element exposing (Element)
 import Element.Background
 import Element.Input
 import Enclojure exposing (Env, EvalResult, Exception, Step)
-import Enclojure.Extra.Maybe exposing (orElse)
-import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime as Runtime exposing (emptyCallable)
-import Enclojure.Types exposing (Arity(..), Callable, Thunk(..))
+import Enclojure.Callable as Callable exposing (Callable)
+import Enclojure.Located as Located
+import Enclojure.Runtime as Runtime
 import Enclojure.Value as Value exposing (Value)
 import Enclojure.ValueMap exposing (ValueMap)
 import File.Download
@@ -61,7 +60,7 @@ type ConsoleEntry
     | UiTrace UiModel
     | Savepoint_ (Value MyIO) (Env MyIO) (Value MyIO -> Step MyIO)
     | Success (Value MyIO)
-    | Failure ( Located Exception, Env MyIO )
+    | Failure ( Exception, Env MyIO )
 
 
 type alias Console =
@@ -120,9 +119,10 @@ traceUi model console =
     UiTrace model :: console
 
 
-recordSavepoint : Value MyIO -> Env MyIO -> (Value MyIO -> Step MyIO) -> Console -> Console
-recordSavepoint val env toStep console =
-    Savepoint_ val env toStep :: console
+
+-- recordSavepoint : Value MyIO -> Env MyIO -> (Value MyIO -> Step MyIO) -> Console -> Console
+-- recordSavepoint val env toStep console =
+--     Savepoint_ val env toStep :: console
 
 
 scriptName : Script -> String
@@ -143,9 +143,10 @@ sleep =
     let
         arity1 val =
             val
-                |> Value.tryInt
-                |> Maybe.map toFloat
-                |> orElse (\_ -> Value.tryFloat val)
+                |> Value.tryOneOf
+                    [ Value.tryInt >> Maybe.map toFloat
+                    , Value.tryFloat
+                    ]
                 |> Result.fromMaybe (Value.exception "type error: sleep expects one numeric argument")
                 |> Result.andThen
                     (Process.sleep
@@ -155,9 +156,8 @@ sleep =
                         >> Ok
                     )
     in
-    { emptyCallable
-        | arity1 = Just (Fixed (Runtime.toFunction arity1))
-    }
+    Callable.new
+        |> Callable.setArity1 (Callable.fixedArity arity1)
 
 
 savepoint : Callable MyIO
@@ -166,9 +166,8 @@ savepoint =
         arity1 val =
             Ok (Runtime.sideEffect (Savepoint val))
     in
-    { emptyCallable
-        | arity1 = Just (Fixed (Runtime.toFunction arity1))
-    }
+    Callable.new
+        |> Callable.setArity1 (Callable.fixedArity arity1)
 
 
 type alias HttpRequest =
@@ -240,22 +239,24 @@ decodeHttpRequest value =
 http : Callable MyIO
 http =
     let
-        arity1 request env k =
+        arity1 request =
             case decodeHttpRequest request of
                 Ok req ->
-                    ( Ok ( Runtime.sideEffect (Http req), env )
-                    , Just
-                        (Thunk
-                            (\v rEnv ->
-                                Located.sameAs v ( Ok ( Runtime.const <| Located.getValue v, rEnv ), Just (Thunk k) )
-                            )
-                        )
-                    )
+                    { method = req.method
+                    , headers = req.headers
+                    , url = req.url
+                    , body = req.body
+                    , expect = responseToValue
+                    }
+                        |> Http
+                        |> Runtime.sideEffect
+                        |> Ok
 
                 Err exception ->
-                    ( Err ( exception, env ), Just (Thunk k) )
+                    Err exception
     in
-    { emptyCallable | arity1 = Just (Fixed arity1) }
+    Callable.new
+        |> Callable.setArity1 (Callable.fixedArity arity1)
 
 
 toTextPart : Value ui -> Result Exception TextFormat
@@ -458,18 +459,17 @@ ui =
                             |> Result.map (\cell -> Runtime.sideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
                     )
     in
-    { emptyCallable
-        | arity1 = Just (Fixed (Runtime.toFunction arity1))
-        , arity2 = Just (Fixed (Runtime.toFunction arity2))
-        , arity3 = Just (Fixed (Runtime.toFunction arity3))
-    }
+    Callable.new
+        |> Callable.setArity1 (Callable.fixedArity arity1)
+        |> Callable.setArity2 (Callable.fixedArity arity2)
+        |> Callable.setArity3 (Callable.fixedArity arity3)
 
 
 type MyIO
     = IOTask (Task.Task Exception (Value MyIO))
     | ShowUI (UI MyIO)
     | Savepoint (Value MyIO)
-    | Http HttpRequest
+    | Http (Lantern.Http.Request (Value MyIO))
 
 
 type Message
@@ -535,7 +535,7 @@ type Interpreter
     | ShowingUI UiModel (Env MyIO) (Value MyIO -> Step MyIO)
     | Running
     | Done (Value MyIO) (Env MyIO)
-    | Panic (Located Exception) (Env MyIO)
+    | Panic Exception (Env MyIO)
 
 
 responseToValue : Lantern.Http.Response -> Value MyIO
@@ -656,13 +656,13 @@ defaultEnv : Env MyIO
 defaultEnv =
     Enclojure.defaultEnv
         |> Runtime.setGlobalEnv "http/request"
-            (Value.fn (Just "http/request") (Runtime.toThunk http))
+            (Value.fn (Just "http/request") http)
         |> Runtime.setGlobalEnv "sleep"
-            (Value.fn (Just "sleep") (Runtime.toThunk sleep))
+            (Value.fn (Just "sleep") sleep)
         |> Runtime.setGlobalEnv "ui"
-            (Value.fn (Just "ui") (Runtime.toThunk ui))
+            (Value.fn (Just "ui") ui)
         |> Runtime.setGlobalEnv "<o>"
-            (Value.fn (Just "<o>") (Runtime.toThunk savepoint))
+            (Value.fn (Just "<o>") savepoint)
 
 
 handleEvalResult : EvalResult MyIO -> Env MyIO -> ( Interpreter, Cmd (Lantern.App.Message Message) )
@@ -672,7 +672,7 @@ handleEvalResult evalResult env =
             ( Done val env, Cmd.none )
 
         Enclojure.Error err ->
-            ( Panic (Located.unknown err) env, Cmd.none )
+            ( Panic err env, Cmd.none )
 
         Enclojure.Continue step ->
             ( Running, Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO step)) )
@@ -687,9 +687,7 @@ handleEvalResult evalResult env =
                         , url = request.url
                         , body = request.body
                         , expect =
-                            \response ->
-                                toStep (Ok (responseToValue response))
-                                    |> HandleIO
+                            request.expect >> Ok >> toStep >> HandleIO
                         }
                         |> Lantern.App.call
                     )
@@ -868,7 +866,7 @@ update msg appModel =
             updateEditor appModel
                 (\model ->
                     ( { model
-                        | interpreter = Panic (Located.unknown (Value.exception "Terminated")) Runtime.emptyEnv
+                        | interpreter = Panic (Value.exception "Terminated") Runtime.emptyEnv
                       }
                     , Cmd.none
                     )
@@ -938,7 +936,7 @@ update msg appModel =
                                                 Err ex ->
                                                     let
                                                         i =
-                                                            Panic (Located.unknown ex) env
+                                                            Panic ex env
                                                     in
                                                     ( i, printResult i model.console )
 
@@ -1255,7 +1253,7 @@ viewConsole context interpreter console options =
                                 ]
 
                         Failure ( e, _ ) ->
-                            Element.text <| Value.inspectLocated (Located.map Value.throwable e)
+                            Element.text <| Value.inspect (Value.throwable e)
 
                         UiTrace uiState ->
                             Element.column

@@ -32,8 +32,9 @@ module Enclojure.Value exposing
 
 import Array
 import Dict
+import Enclojure.Callable as Callable
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Types exposing (Callable, Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import File exposing (decoder)
@@ -386,9 +387,9 @@ list vs =
     List <| List.map Located.unknown vs
 
 
-fn : Maybe String -> ({ self : Value io, k : Enclojure.Types.Continuation io } -> Enclojure.Types.Thunk io) -> Value io
-fn name constructor =
-    Fn name constructor
+fn : Maybe String -> Callable io -> Value io
+fn name callable =
+    Fn name (Callable.toThunk callable)
 
 
 throwable : Exception -> Value io

@@ -1,20 +1,26 @@
 module Enclojure.Lib.String exposing (init)
 
+import Enclojure.Callable as Callable
 import Enclojure.Located as Located
-import Enclojure.Runtime as Runtime exposing (emptyCallable, toFunction)
-import Enclojure.Types as Types exposing (Arity(..), Exception(..), IO(..), Value(..))
+import Enclojure.Runtime as Runtime
+import Enclojure.Types as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
 import Enclojure.Value as Value exposing (inspect)
+
+
+emptyCallable : Callable io
+emptyCallable =
+    Callable.new
 
 
 init : Types.Env io -> Types.Env io
 init env =
     env
         |> Runtime.setGlobalEnv "string/join"
-            (Fn (Just "string/join") (Runtime.toThunk join))
+            (Fn (Just "string/join") (Callable.toThunk join))
         |> Runtime.setGlobalEnv "string/length"
-            (Fn (Just "string/length") (Runtime.toThunk length))
+            (Fn (Just "string/length") (Callable.toThunk length))
         |> Runtime.setGlobalEnv "string/split-lines"
-            (Fn (Just "string/split-lines") (Runtime.toThunk splitLines))
+            (Fn (Just "string/split-lines") (Callable.toThunk splitLines))
 
 
 splitLines : Types.Callable io
@@ -32,7 +38,7 @@ splitLines =
                     Err (Exception ("type error: expected string, got " ++ inspect val) [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed <| Callable.toArityFunction (arity1 >> Result.map Const)
     }
 
 
@@ -45,7 +51,7 @@ length =
                 |> Maybe.withDefault (Err (Exception ("type error: expected string, got " ++ inspect val) []))
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed <| Callable.toArityFunction (arity1 >> Result.map Const)
     }
 
 
@@ -65,6 +71,6 @@ join =
                 |> Maybe.withDefault (Err (Exception "type error: expected a separator and a sequence of strings" []))
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
-        , arity2 = Just <| Fixed <| toFunction (arity2 >> Result.map Const)
+        | arity1 = Just <| Fixed <| Callable.toArityFunction (arity1 >> Result.map Const)
+        , arity2 = Just <| Fixed <| Callable.toArityFunction (arity2 >> Result.map Const)
     }

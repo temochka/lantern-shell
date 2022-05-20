@@ -1,9 +1,10 @@
 module Enclojure.Lib exposing (init, prelude)
 
 import Array
+import Enclojure.Callable as Callable exposing (toArityFunction)
 import Enclojure.Json
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Runtime as Runtime exposing (emptyCallable, toFunction)
+import Enclojure.Runtime as Runtime
 import Enclojure.Types
     exposing
         ( Arity(..)
@@ -22,81 +23,86 @@ import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
 
 
+emptyCallable : Callable io
+emptyCallable =
+    Callable.new
+
+
 init : Env io -> Env io
 init env =
     env
         |> Runtime.setGlobalEnv "+"
-            (Fn (Just "+") (Runtime.toThunk plus))
+            (Fn (Just "+") (Callable.toThunk plus))
         |> Runtime.setGlobalEnv "-"
-            (Fn (Just "-") (Runtime.toThunk minus))
+            (Fn (Just "-") (Callable.toThunk minus))
         |> Runtime.setGlobalEnv "/"
-            (Fn (Just "/") (Runtime.toThunk div))
+            (Fn (Just "/") (Callable.toThunk div))
         |> Runtime.setGlobalEnv "*"
-            (Fn (Just "*") (Runtime.toThunk mul))
+            (Fn (Just "*") (Callable.toThunk mul))
         |> Runtime.setGlobalEnv "="
-            (Fn (Just "=") (Runtime.toThunk isEqual))
+            (Fn (Just "=") (Callable.toThunk isEqual))
         |> Runtime.setGlobalEnv "not="
-            (Fn (Just "not=") (Runtime.toThunk isNotEqual))
+            (Fn (Just "not=") (Callable.toThunk isNotEqual))
         |> Runtime.setGlobalEnv ">"
-            (Fn (Just ">") (Runtime.toThunk isGreaterThan))
+            (Fn (Just ">") (Callable.toThunk isGreaterThan))
         |> Runtime.setGlobalEnv ">="
-            (Fn (Just ">=") (Runtime.toThunk isGreaterThanOrEqual))
+            (Fn (Just ">=") (Callable.toThunk isGreaterThanOrEqual))
         |> Runtime.setGlobalEnv "<"
-            (Fn (Just "<") (Runtime.toThunk isLessThan))
+            (Fn (Just "<") (Callable.toThunk isLessThan))
         |> Runtime.setGlobalEnv "<="
-            (Fn (Just "<=") (Runtime.toThunk isLessThanOrEqual))
+            (Fn (Just "<=") (Callable.toThunk isLessThanOrEqual))
         |> Runtime.setGlobalEnv "apply"
-            (Fn (Just "apply") (Runtime.toThunk apply))
+            (Fn (Just "apply") (Callable.toThunk apply))
         |> Runtime.setGlobalEnv "assoc"
-            (Fn (Just "assoc") (Runtime.toThunk assoc))
+            (Fn (Just "assoc") (Callable.toThunk assoc))
         |> Runtime.setGlobalEnv "conj"
-            (Fn (Just "conj") (Runtime.toThunk conj))
+            (Fn (Just "conj") (Callable.toThunk conj))
         |> Runtime.setGlobalEnv "cons"
-            (Fn (Just "cons") (Runtime.toThunk cons))
+            (Fn (Just "cons") (Callable.toThunk cons))
         |> Runtime.setGlobalEnv "contains?"
-            (Fn (Just "contains?") (Runtime.toThunk contains))
+            (Fn (Just "contains?") (Callable.toThunk contains))
         |> Runtime.setGlobalEnv "dissoc"
-            (Fn (Just "dissoc") (Runtime.toThunk dissoc))
+            (Fn (Just "dissoc") (Callable.toThunk dissoc))
         |> Runtime.setGlobalEnv "first"
-            (Fn (Just "first") (Runtime.toThunk first))
+            (Fn (Just "first") (Callable.toThunk first))
         |> Runtime.setGlobalEnv "float?"
-            (Fn (Just "float?") (Runtime.toThunk isFloat))
+            (Fn (Just "float?") (Callable.toThunk isFloat))
         |> Runtime.setGlobalEnv "get"
-            (Fn (Just "get") (Runtime.toThunk get))
+            (Fn (Just "get") (Callable.toThunk get))
         |> Runtime.setGlobalEnv "json/encode"
-            (Fn (Just "json/encode") (Runtime.toThunk jsonEncode))
+            (Fn (Just "json/encode") (Callable.toThunk jsonEncode))
         |> Runtime.setGlobalEnv "json/decode"
-            (Fn (Just "json/decode") (Runtime.toThunk jsonDecode))
+            (Fn (Just "json/decode") (Callable.toThunk jsonDecode))
         |> Runtime.setGlobalEnv "integer?"
-            (Fn (Just "integer?") (Runtime.toThunk isInteger))
+            (Fn (Just "integer?") (Callable.toThunk isInteger))
         |> Runtime.setGlobalEnv "key"
-            (Fn (Just "key") (Runtime.toThunk key_))
+            (Fn (Just "key") (Callable.toThunk key_))
         |> Runtime.setGlobalEnv "list"
-            (Fn (Just "list") (Runtime.toThunk list))
+            (Fn (Just "list") (Callable.toThunk list))
         |> Runtime.setGlobalEnv "Exception."
-            (Fn (Just "Exception.") (Runtime.toThunk newException))
+            (Fn (Just "Exception.") (Callable.toThunk newException))
         |> Runtime.setGlobalEnv "not"
-            (Fn (Just "not") (Runtime.toThunk not_))
+            (Fn (Just "not") (Callable.toThunk not_))
         |> Runtime.setGlobalEnv "number?"
-            (Fn (Just "number?") (Runtime.toThunk isNumber))
+            (Fn (Just "number?") (Callable.toThunk isNumber))
         |> Runtime.setGlobalEnv "peek"
-            (Fn (Just "peek") (Runtime.toThunk peek))
+            (Fn (Just "peek") (Callable.toThunk peek))
         |> Runtime.setGlobalEnv "pr-str"
-            (Fn (Just "pr-str") (Runtime.toThunk prStr))
+            (Fn (Just "pr-str") (Callable.toThunk prStr))
         |> Runtime.setGlobalEnv "rem"
-            (Fn (Just "rem") (Runtime.toThunk rem))
+            (Fn (Just "rem") (Callable.toThunk rem))
         |> Runtime.setGlobalEnv "rest"
-            (Fn (Just "rest") (Runtime.toThunk rest_))
+            (Fn (Just "rest") (Callable.toThunk rest_))
         |> Runtime.setGlobalEnv "second"
-            (Fn (Just "second") (Runtime.toThunk second))
+            (Fn (Just "second") (Callable.toThunk second))
         |> Runtime.setGlobalEnv "seq"
-            (Fn (Just "seq") (Runtime.toThunk seq))
+            (Fn (Just "seq") (Callable.toThunk seq))
         |> Runtime.setGlobalEnv "str"
-            (Fn (Just "str") (Runtime.toThunk str))
+            (Fn (Just "str") (Callable.toThunk str))
         |> Runtime.setGlobalEnv "throw"
-            (Fn (Just "throw") (Runtime.toThunk throw))
+            (Fn (Just "throw") (Callable.toThunk throw))
         |> Runtime.setGlobalEnv "val"
-            (Fn (Just "val") (Runtime.toThunk val_))
+            (Fn (Just "val") (Callable.toThunk val_))
 
 
 jsonEncode : Callable io
@@ -106,7 +112,7 @@ jsonEncode =
             Enclojure.Json.encodeToString v |> String
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -120,7 +126,7 @@ jsonDecode =
                 |> Result.map Const
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction arity1
+        | arity1 = Just <| Fixed <| toArityFunction arity1
     }
 
 
@@ -131,7 +137,7 @@ not_ =
             Ok (Const (Bool (not (Runtime.isTruthy val))))
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toFunction arity1))
+        | arity1 = Just (Fixed (toArityFunction arity1))
     }
 
 
@@ -141,7 +147,7 @@ list =
         arity0 { rest } =
             Ok (Const (List (List.map Located.unknown rest)))
     in
-    { emptyCallable | arity0 = Just (Variadic (toFunction arity0)) }
+    { emptyCallable | arity0 = Just (Variadic (toArityFunction arity0)) }
 
 
 toNumbers : List (Value io) -> Result Exception (List Number)
@@ -174,14 +180,14 @@ varargOp { arity0, arity1, arity2 } =
                 (toNumbers rest)
     in
     { emptyCallable
-        | arity0 = arity0 |> Maybe.map (Number >> Const >> Ok >> always >> toFunction >> Fixed)
+        | arity0 = arity0 |> Maybe.map (Number >> Const >> Ok >> always >> toArityFunction >> Fixed)
         , arity1 =
             arity1
                 |> Maybe.map
                     (\fn ->
-                        Fixed <| toFunction <| (toNumber >> Result.map (fn >> Number >> Const))
+                        Fixed <| toArityFunction <| (toNumber >> Result.map (fn >> Number >> Const))
                     )
-        , arity2 = (wrappedArity2 >> Result.map Const) |> toFunction |> Variadic |> Just
+        , arity2 = (wrappedArity2 >> Result.map Const) |> toArityFunction |> Variadic |> Just
     }
 
 
@@ -318,7 +324,7 @@ rem =
                 (toNumber valB)
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toFunction <| (arity2 >> Result.map (Number >> Const))
+        | arity2 = Just <| Fixed <| toArityFunction <| (arity2 >> Result.map (Number >> Const))
     }
 
 
@@ -401,8 +407,8 @@ compOp { intOp, floatOp, stringOp } =
                             )
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (toFunction (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
+        , arity2 = Just (Variadic (toArityFunction (arity2 >> Result.map Const)))
     }
 
 
@@ -483,8 +489,8 @@ isEqual =
                         Ok (Bool False)
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (toFunction (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
+        , arity2 = Just (Variadic (toArityFunction (arity2 >> Result.map Const)))
     }
 
 
@@ -511,8 +517,8 @@ isNotEqual =
                         Ok (Bool False)
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
-        , arity2 = Just (Variadic (toFunction (arity2 >> Result.map Const)))
+        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
+        , arity2 = Just (Variadic (toArityFunction (arity2 >> Result.map Const)))
     }
 
 
@@ -527,7 +533,7 @@ str =
                 |> Ok
     in
     { emptyCallable
-        | arity0 = Just (Variadic (toFunction (arity0 >> Result.map Const)))
+        | arity0 = Just (Variadic (toArityFunction (arity0 >> Result.map Const)))
     }
 
 
@@ -542,7 +548,7 @@ prStr =
                 |> Ok
     in
     { emptyCallable
-        | arity0 = Just (Variadic (toFunction (arity0 >> Result.map Const)))
+        | arity0 = Just (Variadic (toArityFunction (arity0 >> Result.map Const)))
     }
 
 
@@ -592,7 +598,7 @@ seq =
                     Err (Exception (inspect coll ++ " is not sequable") [])
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
+        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
     }
 
 
@@ -714,7 +720,7 @@ conj =
                     Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
-        | arity2 = Just <| Variadic <| toFunction (arity2 >> Result.map Const)
+        | arity2 = Just <| Variadic <| toArityFunction (arity2 >> Result.map Const)
     }
 
 
@@ -747,7 +753,7 @@ contains =
                     Err (Exception ("don't know how to conj to " ++ inspect coll) [])
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toFunction (arity2 >> Result.map Const)
+        | arity2 = Just <| Fixed <| toArityFunction (arity2 >> Result.map Const)
     }
 
 
@@ -769,7 +775,7 @@ first =
                     )
     in
     { emptyCallable
-        | arity1 = Just (Fixed <| toFunction (arity1 >> Result.map Const))
+        | arity1 = Just (Fixed <| toArityFunction (arity1 >> Result.map Const))
     }
 
 
@@ -791,7 +797,7 @@ second =
                     )
     in
     { emptyCallable
-        | arity1 = Just (Fixed <| toFunction (arity1 >> Result.map Const))
+        | arity1 = Just (Fixed <| toArityFunction (arity1 >> Result.map Const))
     }
 
 
@@ -813,7 +819,7 @@ peek =
                     Err <| Exception ("Cannot use " ++ inspect val ++ " as a queue") []
     in
     { emptyCallable
-        | arity1 = Just (Fixed (toFunction (arity1 >> Result.map Const)))
+        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
     }
 
 
@@ -829,7 +835,7 @@ isNumber =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -845,7 +851,7 @@ isInteger =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -861,7 +867,7 @@ isFloat =
                     Bool False
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Const >> Ok)
+        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Const >> Ok)
     }
 
 
@@ -915,7 +921,7 @@ throw =
                     Err (Exception (inspect v ++ " is not throwable") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction arity1
+        | arity1 = Just <| Fixed <| toArityFunction arity1
     }
 
 
@@ -931,7 +937,7 @@ newException =
                     Err (Exception "exception message must be a string" [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction (arity1 >> Result.map Const)
+        | arity1 = Just <| Fixed <| toArityFunction (arity1 >> Result.map Const)
     }
 
 
@@ -1015,8 +1021,8 @@ get =
                 |> Maybe.withDefault default
     in
     { emptyCallable
-        | arity2 = Just <| Fixed <| toFunction (arity2 >> Const >> Ok)
-        , arity3 = Just <| Fixed <| toFunction (arity3 >> Const >> Ok)
+        | arity2 = Just <| Fixed <| toArityFunction (arity2 >> Const >> Ok)
+        , arity3 = Just <| Fixed <| toArityFunction (arity3 >> Const >> Ok)
     }
 
 
@@ -1096,7 +1102,7 @@ assoc =
                 _ ->
                     Err (Exception (inspect val ++ " is not associable") [])
     in
-    { emptyCallable | arity3 = Just <| Variadic <| toFunction (arity3 >> Result.map Const) }
+    { emptyCallable | arity3 = Just <| Variadic <| toArityFunction (arity3 >> Result.map Const) }
 
 
 dissoc : Callable io
@@ -1123,7 +1129,7 @@ dissoc =
                 _ ->
                     Err (Exception (inspect val ++ " is not dissociable") [])
     in
-    { emptyCallable | arity2 = Just <| Variadic <| toFunction (arity2 >> Result.map Const) }
+    { emptyCallable | arity2 = Just <| Variadic <| toArityFunction (arity2 >> Result.map Const) }
 
 
 key_ : Callable io
@@ -1138,7 +1144,7 @@ key_ =
                     Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction arity1
+        | arity1 = Just <| Fixed <| toArityFunction arity1
     }
 
 
@@ -1154,7 +1160,7 @@ val_ =
                     Err (Exception (inspect v ++ " is not a map entry") [])
     in
     { emptyCallable
-        | arity1 = Just <| Fixed <| toFunction arity1
+        | arity1 = Just <| Fixed <| toArityFunction arity1
     }
 
 
