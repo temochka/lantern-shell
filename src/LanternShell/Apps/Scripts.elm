@@ -4,13 +4,13 @@ import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
 import Element.Input
-import Enclojure exposing (Exception)
+import Enclojure exposing (Env, EvalResult, Exception, Step)
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime exposing (emptyCallable)
-import Enclojure.Types exposing (Env, IO(..), Step, Thunk(..))
+import Enclojure.Types exposing (Arity(..), Callable, Thunk(..))
 import Enclojure.Value as Value exposing (Value)
-import Enclojure.ValueMap
+import Enclojure.ValueMap exposing (ValueMap)
 import File.Download
 import Html.Events
 import Json.Decode
@@ -59,7 +59,7 @@ type Cell
 type ConsoleEntry
     = ConsoleString String
     | UiTrace UiModel
-    | Savepoint_ ( Located ( IO MyIO, Env MyIO ), Maybe (Thunk MyIO) )
+    | Savepoint_ (Value MyIO) (Env MyIO) (Value MyIO -> Step MyIO)
     | Success (Value MyIO)
     | Failure ( Located Exception, Env MyIO )
 
@@ -105,11 +105,11 @@ printLn string console =
 printResult : Interpreter -> Console -> Console
 printResult interpreter console =
     case interpreter of
-        Done ( value, _ ) ->
+        Done value _ ->
             Success value :: console
 
-        Panic e ->
-            Failure e :: console
+        Panic e env ->
+            Failure ( e, env ) :: console
 
         _ ->
             console
@@ -120,11 +120,9 @@ traceUi model console =
     UiTrace model :: console
 
 
-recordSavepoint : Located (Step MyIO) -> Console -> Console
-recordSavepoint (Located loc ( ret, thunk )) console =
-    ret
-        |> Result.map (\val -> Savepoint_ ( Located loc val, thunk ) :: console)
-        |> Result.withDefault console
+recordSavepoint : Value MyIO -> Env MyIO -> (Value MyIO -> Step MyIO) -> Console -> Console
+recordSavepoint val env toStep console =
+    Savepoint_ val env toStep :: console
 
 
 scriptName : Script -> String
@@ -140,7 +138,7 @@ scriptName { name } =
         "unnamed script"
 
 
-sleep : Enclojure.Types.Callable MyIO
+sleep : Callable MyIO
 sleep =
     let
         arity1 val =
@@ -153,23 +151,23 @@ sleep =
                     (Process.sleep
                         >> Task.map (\_ -> Value.nil)
                         >> IOTask
-                        >> SideEffect
+                        >> Runtime.sideEffect
                         >> Ok
                     )
     in
     { emptyCallable
-        | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
+        | arity1 = Just (Fixed (Runtime.toFunction arity1))
     }
 
 
-savepoint : Enclojure.Types.Callable MyIO
+savepoint : Callable MyIO
 savepoint =
     let
         arity1 val =
-            Ok (SideEffect (Savepoint val))
+            Ok (Runtime.sideEffect (Savepoint val))
     in
     { emptyCallable
-        | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
+        | arity1 = Just (Fixed (Runtime.toFunction arity1))
     }
 
 
@@ -239,17 +237,17 @@ decodeHttpRequest value =
             )
 
 
-http : Enclojure.Types.Callable MyIO
+http : Callable MyIO
 http =
     let
         arity1 request env k =
             case decodeHttpRequest request of
                 Ok req ->
-                    ( Ok ( SideEffect (Http req), env )
+                    ( Ok ( Runtime.sideEffect (Http req), env )
                     , Just
                         (Thunk
                             (\v rEnv ->
-                                Located.sameAs v ( Ok ( Const <| Located.getValue v, rEnv ), Just (Thunk k) )
+                                Located.sameAs v ( Ok ( Runtime.const <| Located.getValue v, rEnv ), Just (Thunk k) )
                             )
                         )
                     )
@@ -257,7 +255,7 @@ http =
                 Err exception ->
                     ( Err ( exception, env ), Just (Thunk k) )
     in
-    { emptyCallable | arity1 = Just (Enclojure.Types.Fixed arity1) }
+    { emptyCallable | arity1 = Just (Fixed arity1) }
 
 
 toTextPart : Value ui -> Result Exception TextFormat
@@ -437,14 +435,14 @@ toUi val =
             )
 
 
-ui : Enclojure.Types.Callable MyIO
+ui : Callable MyIO
 ui =
     let
         arity1 val =
             toUi val
                 |> Result.map
                     (\cell ->
-                        SideEffect <| ShowUI { cell = cell, watchFn = Value.nil, state = Enclojure.ValueMap.empty }
+                        Runtime.sideEffect <| ShowUI { cell = cell, watchFn = Value.nil, state = Enclojure.ValueMap.empty }
                     )
 
         arity2 ( uiVal, defaultsMap ) =
@@ -457,13 +455,13 @@ ui =
                 |> Result.andThen
                     (\m ->
                         toUi uiVal
-                            |> Result.map (\cell -> SideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
+                            |> Result.map (\cell -> Runtime.sideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
                     )
     in
     { emptyCallable
-        | arity1 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity1))
-        , arity2 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity2))
-        , arity3 = Just (Enclojure.Types.Fixed (Runtime.toFunction arity3))
+        | arity1 = Just (Fixed (Runtime.toFunction arity1))
+        , arity2 = Just (Fixed (Runtime.toFunction arity2))
+        , arity3 = Just (Fixed (Runtime.toFunction arity3))
     }
 
 
@@ -480,8 +478,7 @@ type Message
     | Stop
     | UpdateInputRequest InputKey InputCell String
     | UpdateScripts (Result Lantern.Error (List Script))
-    | HandleIO (Located (Step MyIO))
-    | Rewind (Located (Step MyIO))
+    | HandleIO (Step MyIO)
     | InspectValue (Value MyIO)
     | CreateScript
     | ScriptCreated (Result Lantern.Error Lantern.Query.WriterResult)
@@ -523,7 +520,7 @@ unsavedScript =
 
 
 type alias UI io =
-    { state : Enclojure.Types.ValueMap io
+    { state : ValueMap io
     , cell : Cell
     , watchFn : Value io
     }
@@ -535,10 +532,10 @@ type alias UiModel =
 
 type Interpreter
     = Stopped
-    | ShowingUI UiModel ( Env MyIO, Maybe (Thunk MyIO) )
+    | ShowingUI UiModel (Env MyIO) (Value MyIO -> Step MyIO)
     | Running
-    | Done ( Value MyIO, Env MyIO )
-    | Panic ( Located Exception, Env MyIO )
+    | Done (Value MyIO) (Env MyIO)
+    | Panic (Located Exception) (Env MyIO)
 
 
 responseToValue : Lantern.Http.Response -> Value MyIO
@@ -558,79 +555,6 @@ responseToValue response =
               , response.body |> Maybe.map Value.string |> Maybe.withDefault Value.nil |> Located.unknown
               )
             ]
-
-
-trampoline :
-    Located (Step MyIO)
-    -> Int
-    -> ( Interpreter, Cmd (Lantern.App.Message Message) )
-trampoline (Located loc ( result, thunk )) maxdepth =
-    case result of
-        Ok ( io, env ) ->
-            if maxdepth <= 0 then
-                ( Panic ( Located.unknown (Value.exception "Stack level too deep"), env ), Cmd.none )
-
-            else
-                case io of
-                    Const v ->
-                        case thunk of
-                            Just (Thunk continuation) ->
-                                trampoline (continuation (Located loc v) env) (maxdepth - 1)
-
-                            Nothing ->
-                                ( Done ( v, env ), Cmd.none )
-
-                    SideEffect se ->
-                        case se of
-                            Http request ->
-                                ( Running
-                                , Lantern.httpRequest
-                                    { method = request.method
-                                    , headers = request.headers
-                                    , url = request.url
-                                    , body = request.body
-                                    , expect =
-                                        \response ->
-                                            ( Ok ( Const (responseToValue response), env ), thunk )
-                                                |> Located loc
-                                                |> HandleIO
-                                    }
-                                    |> Lantern.App.call
-                                )
-
-                            IOTask task ->
-                                ( Running
-                                , task
-                                    |> Task.attempt
-                                        (\r ->
-                                            ( r
-                                                |> Result.mapError (\e -> ( e, env ))
-                                                |> Result.map (\v -> ( Const v, env ))
-                                            , thunk
-                                            )
-                                                |> Located loc
-                                                |> HandleIO
-                                                |> Lantern.App.Message
-                                        )
-                                )
-
-                            ShowUI uiState ->
-                                ( ShowingUI { enclojureUi = uiState, fuzzySelects = Dict.empty } ( env, thunk )
-                                , Cmd.none
-                                )
-
-                            Savepoint v ->
-                                ( Running
-                                , ( Ok ( Const v, env ), thunk )
-                                    |> Located loc
-                                    |> HandleIO
-                                    |> Lantern.App.Message
-                                    |> Task.succeed
-                                    |> Task.perform identity
-                                )
-
-        Err e ->
-            ( Panic (e |> Tuple.mapFirst (Located loc)), Cmd.none )
 
 
 updateBrowser :
@@ -694,8 +618,8 @@ updateRunner model updateFn =
 runWatchFn :
     Env MyIO
     -> Value MyIO
-    -> Enclojure.Types.ValueMap MyIO
-    -> Result (Located Exception) (Enclojure.Types.ValueMap MyIO)
+    -> ValueMap MyIO
+    -> Result Exception (ValueMap MyIO)
 runWatchFn env watchFn stateMap =
     case Value.tryNil watchFn of
         Just _ ->
@@ -703,26 +627,29 @@ runWatchFn env watchFn stateMap =
 
         _ ->
             let
-                ( interpreter, _ ) =
-                    trampoline
+                ( evalResult, _ ) =
+                    Enclojure.continueEval
+                        { maxOps = Just stackLimit }
                         (Runtime.apply (Located.unknown watchFn)
                             (Located.unknown (Value.list [ Value.map stateMap ]))
                             env
                             Enclojure.terminate
                         )
-                        stackLimit
             in
-            case interpreter of
-                Done ( val, _ ) ->
+            case evalResult of
+                Enclojure.Done val ->
                     val
                         |> Value.tryMap
-                        |> Result.fromMaybe (Located.unknown (Value.exception "type error: watch returned a non-map"))
+                        |> Result.fromMaybe (Value.exception "type error: watch returned a non-map")
 
-                Panic ( err, _ ) ->
+                Enclojure.Error err ->
                     Err err
 
-                _ ->
-                    Err (Located.unknown (Value.exception "runtime error: watch fn tried to run a side effect"))
+                Enclojure.RunIO _ _ ->
+                    Err (Value.exception "runtime error: watch fn tried to run a side effect")
+
+                Enclojure.Continue _ ->
+                    Err (Value.exception "runtime error: watch fn ran out of ops")
 
 
 defaultEnv : Env MyIO
@@ -738,11 +665,69 @@ defaultEnv =
             (Value.fn (Just "<o>") (Runtime.toThunk savepoint))
 
 
+handleEvalResult : EvalResult MyIO -> Env MyIO -> ( Interpreter, Cmd (Lantern.App.Message Message) )
+handleEvalResult evalResult env =
+    case evalResult of
+        Enclojure.Done val ->
+            ( Done val env, Cmd.none )
+
+        Enclojure.Error err ->
+            ( Panic (Located.unknown err) env, Cmd.none )
+
+        Enclojure.Continue step ->
+            ( Running, Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO step)) )
+
+        Enclojure.RunIO se toStep ->
+            case se of
+                Http request ->
+                    ( Running
+                    , Lantern.httpRequest
+                        { method = request.method
+                        , headers = request.headers
+                        , url = request.url
+                        , body = request.body
+                        , expect =
+                            \response ->
+                                toStep (Ok (responseToValue response))
+                                    |> HandleIO
+                        }
+                        |> Lantern.App.call
+                    )
+
+                IOTask task ->
+                    ( Running
+                    , task
+                        |> Task.attempt
+                            (\r ->
+                                toStep r
+                                    |> HandleIO
+                                    |> Lantern.App.Message
+                            )
+                    )
+
+                ShowUI uiState ->
+                    ( ShowingUI { enclojureUi = uiState, fuzzySelects = Dict.empty } env (Ok >> toStep)
+                    , Cmd.none
+                    )
+
+                Savepoint v ->
+                    ( Running
+                    , toStep (Ok v)
+                        |> HandleIO
+                        |> Lantern.App.Message
+                        |> Task.succeed
+                        |> Task.perform identity
+                    )
+
+
 runScript : EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) )
 runScript model =
     let
-        ( interpreter, retMsg ) =
-            trampoline (Enclojure.eval defaultEnv model.script.code) stackLimit
+        ( evalResult, retEnv ) =
+            Enclojure.eval { maxOps = Just stackLimit } defaultEnv model.script.code
+
+        ( interpreter, retCmd ) =
+            handleEvalResult evalResult retEnv
     in
     ( { model
         | interpreter = interpreter
@@ -751,7 +736,7 @@ runScript model =
                 |> printLn ("Starting " ++ scriptName model.script)
                 |> printResult interpreter
       }
-    , retMsg
+    , retCmd
     )
 
 
@@ -780,7 +765,7 @@ update msg appModel =
             updateRunner appModel
                 (\model ->
                     case model.interpreter of
-                        ShowingUI ({ fuzzySelects } as uiState) args ->
+                        ShowingUI ({ fuzzySelects } as uiState) env toStep ->
                             let
                                 updatedFuzzySelects =
                                     Dict.update id
@@ -790,7 +775,7 @@ update msg appModel =
                                         )
                                         fuzzySelects
                             in
-                            ( { model | interpreter = ShowingUI { uiState | fuzzySelects = updatedFuzzySelects } args }
+                            ( { model | interpreter = ShowingUI { uiState | fuzzySelects = updatedFuzzySelects } env toStep }
                             , Cmd.none
                             )
 
@@ -823,10 +808,10 @@ update msg appModel =
                     let
                         mEnv =
                             case model.interpreter of
-                                Done ( _, env ) ->
+                                Done _ env ->
                                     Just env
 
-                                Panic ( _, env ) ->
+                                Panic _ env ->
                                     Just env
 
                                 _ ->
@@ -836,8 +821,11 @@ update msg appModel =
                         |> Maybe.map
                             (\env ->
                                 let
-                                    ( interpreter, retMsg ) =
-                                        trampoline (Enclojure.eval env code) stackLimit
+                                    ( evalResult, retEnv ) =
+                                        Enclojure.eval { maxOps = Just stackLimit } env code
+
+                                    ( interpreter, retCmd ) =
+                                        handleEvalResult evalResult retEnv
                                 in
                                 ( { model
                                     | interpreter = interpreter
@@ -847,7 +835,7 @@ update msg appModel =
                                             |> printResult interpreter
                                     , repl = ""
                                   }
-                                , retMsg
+                                , retCmd
                                 )
                             )
                         |> Maybe.withDefault
@@ -880,43 +868,31 @@ update msg appModel =
             updateEditor appModel
                 (\model ->
                     ( { model
-                        | interpreter = Panic ( Located.unknown (Value.exception "Terminated"), Runtime.emptyEnv )
+                        | interpreter = Panic (Located.unknown (Value.exception "Terminated")) Runtime.emptyEnv
                       }
                     , Cmd.none
                     )
                 )
 
-        HandleIO ret ->
+        HandleIO step ->
             updateRunner appModel
                 (\model ->
                     let
-                        ( interpreter, retMsg ) =
-                            trampoline ret stackLimit
-                    in
-                    ( { model
-                        | interpreter = interpreter
-                        , console =
-                            model.console
-                                |> recordSavepoint ret
-                                |> printResult interpreter
-                      }
-                    , retMsg
-                    )
-                )
+                        ( evalResult, retEnv ) =
+                            Enclojure.continueEval { maxOps = Just stackLimit } step
 
-        Rewind ret ->
-            let
-                ( newAppModel, _ ) =
-                    updateEditor appModel (\model -> ( { model | interpreter = Running }, Cmd.none ))
-            in
-            update (HandleIO ret) newAppModel
+                        ( interpreter, retCmd ) =
+                            handleEvalResult evalResult retEnv
+                    in
+                    ( { model | interpreter = interpreter }, retCmd )
+                )
 
         UpdateInputRequest name inputType v ->
             updateRunner
                 appModel
                 (\model ->
                     case model.interpreter of
-                        ShowingUI ({ enclojureUi } as uiState) ( env, thunk ) ->
+                        ShowingUI ({ enclojureUi } as uiState) env toStep ->
                             case inputType of
                                 Button _ ->
                                     let
@@ -932,8 +908,8 @@ update msg appModel =
                                                 |> printResult model.interpreter
                                     in
                                     ( { model | interpreter = Running, console = console }
-                                    , ( Ok ( Const (Value.list [ exitCode, state ]), env ), thunk )
-                                        |> Located.unknown
+                                    , Value.list [ exitCode, state ]
+                                        |> toStep
                                         |> HandleIO
                                         |> Lantern.App.Message
                                         |> Task.succeed
@@ -955,14 +931,14 @@ update msg appModel =
                                                         updatedUi =
                                                             { enclojureUi | state = st }
                                                     in
-                                                    ( ShowingUI { uiState | enclojureUi = updatedUi } ( env, thunk )
+                                                    ( ShowingUI { uiState | enclojureUi = updatedUi } env toStep
                                                     , model.console
                                                     )
 
                                                 Err ex ->
                                                     let
                                                         i =
-                                                            Panic ( ex, env )
+                                                            Panic (Located.unknown ex) env
                                                     in
                                                     ( i, printResult i model.console )
 
@@ -1185,7 +1161,7 @@ renderUI context uiModel =
 activeUi : Interpreter -> Maybe UiModel
 activeUi interpreter =
     case interpreter of
-        ShowingUI model _ ->
+        ShowingUI model _ _ ->
             Just model
 
         _ ->
@@ -1199,7 +1175,7 @@ type alias ConsoleOptions =
 isDevModeOnlyEntry : ConsoleEntry -> Bool
 isDevModeOnlyEntry entry =
     case entry of
-        Savepoint_ _ ->
+        Savepoint_ _ _ _ ->
             True
 
         _ ->
@@ -1239,14 +1215,14 @@ viewConsole context interpreter console options =
                         ConsoleString s ->
                             Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
 
-                        Savepoint_ ( Located loc ( io, env ), thunk ) ->
+                        Savepoint_ v env toStep ->
                             let
                                 newEnv =
                                     case interpreter of
-                                        Done ( _, cEnv ) ->
+                                        Done _ cEnv ->
                                             { cEnv | local = env.local }
 
-                                        Panic ( _, cEnv ) ->
+                                        Panic _ cEnv ->
                                             { cEnv | local = env.local }
 
                                         _ ->
@@ -1255,19 +1231,20 @@ viewConsole context interpreter console options =
                                 rewindButton =
                                     LanternUi.Input.button context.theme
                                         []
-                                        { onPress = Just (Lantern.App.Message <| Rewind (Located loc ( Ok ( io, newEnv ), thunk )))
+                                        { onPress =
+                                            Just
+                                                (toStep v
+                                                    |> Enclojure.setEnv newEnv
+                                                    |> HandleIO
+                                                    |> Lantern.App.Message
+                                                )
                                         , label = Element.text "Rewind"
                                         }
                             in
                             Element.column
                                 [ Element.width Element.fill ]
                                 [ Element.paragraph [] [ Element.text "Savepoint", rewindButton ]
-                                , case io of
-                                    Const v ->
-                                        valueRow v
-
-                                    _ ->
-                                        Element.none
+                                , valueRow v
                                 ]
 
                         Success val ->

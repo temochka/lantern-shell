@@ -1,5 +1,6 @@
 module Enclojure.Runtime exposing
     ( apply
+    , const
     , emptyCallable
     , emptyEnv
     , fetchEnv
@@ -8,6 +9,7 @@ module Enclojure.Runtime exposing
     , setCurrentStackFrameLocation
     , setGlobalEnv
     , setLocalEnv
+    , sideEffect
     , throw
     , toFunction
     , toThunk
@@ -402,3 +404,13 @@ prettyTrace (Exception _ trace) =
 throw : Env io -> Exception -> Exception
 throw env (Exception msg _) =
     Exception msg env.stack
+
+
+sideEffect : io -> IO io
+sideEffect =
+    SideEffect
+
+
+const : Value io -> IO io
+const =
+    Const

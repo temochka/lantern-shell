@@ -4,7 +4,7 @@ import Array
 import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Env, Exception(..), Number(..), Value(..))
+import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Expect
@@ -21,8 +21,7 @@ type Expectation
 
 eval : String -> Result Exception (Value io)
 eval code =
-    Enclojure.evalPure Enclojure.init code
-        |> Result.mapError Located.getValue
+    Enclojure.evalPure { maxOps = Nothing } Enclojure.init code
         |> Result.map Tuple.first
 
 

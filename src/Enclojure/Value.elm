@@ -33,7 +33,7 @@ module Enclojure.Value exposing
 import Array
 import Dict
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Env, Exception(..), Number(..), Value(..))
+import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import File exposing (decoder)

@@ -1,4 +1,17 @@
-module Enclojure exposing (Exception, defaultEnv, eval, evalPure, init, terminate)
+module Enclojure exposing
+    ( Env
+    , EvalResult(..)
+    , Exception
+    , IO
+    , Step
+    , continueEval
+    , defaultEnv
+    , eval
+    , evalPure
+    , init
+    , setEnv
+    , terminate
+    )
 
 import Array exposing (Array)
 import Enclojure.Extra.Maybe exposing (orElse)
@@ -7,7 +20,7 @@ import Enclojure.Lib.String as LibString
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Reader
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Continuation, Env, Exception(..), IO(..), Number(..), Step, Thunk(..), Value(..))
+import Enclojure.Types exposing (Continuation, Env, Exception(..), IO(..), Number(..), Thunk(..), Value(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet exposing (ValueSet)
@@ -16,6 +29,14 @@ import Parser
 
 type alias Exception =
     Enclojure.Types.Exception
+
+
+type alias Env io =
+    Enclojure.Types.Env io
+
+
+type alias IO io =
+    Enclojure.Types.IO io
 
 
 resolveSymbol : Env io -> String -> Result Exception (Value io)
@@ -36,7 +57,7 @@ closureHack3 a b c f =
     f a b c
 
 
-evalExpression : Located (Value io) -> Env io -> Continuation io -> Located (Step io)
+evalExpression : Located (Value io) -> Env io -> Continuation io -> Located (Enclojure.Types.Step io)
 evalExpression mutableExpr mutableEnv mutableK =
     closureHack3
         mutableExpr
@@ -126,7 +147,7 @@ evalExpression mutableExpr mutableEnv mutableK =
         )
 
 
-evalVector : Located (Array (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalVector : Located (Array (Located (Value io))) -> Env io -> Continuation io -> Located (Enclojure.Types.Step io)
 evalVector (Located loc vecV) env k =
     Located loc
         ( Ok ( Const (Vector Array.empty), env )
@@ -161,7 +182,7 @@ evalVector (Located loc vecV) env k =
         )
 
 
-evalMap : Located (Enclojure.Types.ValueMap io) -> Env io -> Continuation io -> Located (Step io)
+evalMap : Located (Enclojure.Types.ValueMap io) -> Env io -> Continuation io -> Step io
 evalMap (Located mapLoc map) env k =
     Located mapLoc
         ( Ok ( Const (Map ValueMap.empty), env )
@@ -211,7 +232,7 @@ evalMap (Located mapLoc map) env k =
         )
 
 
-evalMapEntry : Located (Enclojure.Types.ValueMapEntry io) -> Env io -> Continuation io -> Located (Step io)
+evalMapEntry : Located (Enclojure.Types.ValueMapEntry io) -> Env io -> Continuation io -> Step io
 evalMapEntry (Located loc ( key, value )) env k =
     evalExpression (Located.unknown key)
         env
@@ -227,7 +248,7 @@ evalMapEntry (Located loc ( key, value )) env k =
         )
 
 
-evalSet : Located (ValueSet io) -> Env io -> Continuation io -> Located (Step io)
+evalSet : Located (ValueSet io) -> Env io -> Continuation io -> Step io
 evalSet (Located setLoc set) env k =
     Located setLoc
         ( Ok ( Const (Set ValueSet.empty), env )
@@ -499,7 +520,7 @@ exctractFnName exprs =
             ( Nothing, exprs )
 
 
-evalFn : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalFn : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalFn (Located loc exprs) fnEnv k =
     let
         ( name, arity ) =
@@ -596,7 +617,7 @@ scrubLocalEnv priorEnv k =
         Located.sameAs v ( Ok ( Const <| Located.getValue v, { env | local = priorEnv.local } ), Just (Thunk k) )
 
 
-evalLet : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalLet : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalLet (Located loc body) env k =
     let
         parseBindings bindings =
@@ -677,7 +698,7 @@ evalLet (Located loc body) env k =
                 )
 
 
-evalApply : Located (Value io) -> Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalApply : Located (Value io) -> Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalApply fnExpr (Located loc argExprs) env k =
     evalExpression fnExpr
         env
@@ -713,7 +734,7 @@ evalApply fnExpr (Located loc argExprs) env k =
         )
 
 
-evalQuote : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalQuote : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalQuote (Located loc exprs) env k =
     case exprs of
         [ arg ] ->
@@ -737,7 +758,7 @@ evalQuote (Located loc exprs) env k =
                 )
 
 
-evalDo : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalDo : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalDo (Located loc exprs) env k =
     Located loc
         ( Ok ( Const Nil, env )
@@ -752,7 +773,7 @@ evalDo (Located loc exprs) env k =
         )
 
 
-evalIf : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalIf : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalIf (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ :: _ ->
@@ -787,7 +808,7 @@ evalIf (Located loc args) env k =
             Located loc ( Err ( Value.exception "an empty if" |> Runtime.throw env, env ), Just (Thunk k) )
 
 
-evalDef : Located (List (Located (Value io))) -> Env io -> Continuation io -> Located (Step io)
+evalDef : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
 evalDef (Located loc args) env k =
     case args of
         _ :: _ :: _ :: _ ->
@@ -836,40 +857,15 @@ wrapInDo (Located loc vs) =
     Located loc (List (Located loc (Symbol "do") :: vs))
 
 
-prelude : Result (Located Exception) (List (Located (Value io)))
+prelude : Result Exception (List (Located (Value io)))
 prelude =
     Reader.parse Lib.prelude
-        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw defaultEnv >> Located.unknown)
+        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw defaultEnv)
 
 
 terminate : Continuation io
 terminate (Located pos v) env =
     Located pos ( Ok ( Const v, env ), Nothing )
-
-
-trampolinePure : Located ( Result ( Exception, Env io ) ( IO io, Env io ), Maybe (Thunk io) ) -> Result (Located Exception) ( Value io, Env io )
-trampolinePure (Located loc ( result, thunk )) =
-    case result of
-        Ok ( io, env ) ->
-            case io of
-                Const v ->
-                    case thunk of
-                        Just (Thunk continuation) ->
-                            trampolinePure (continuation (Located loc v) env)
-
-                        Nothing ->
-                            Ok ( v, env )
-
-                SideEffect _ ->
-                    Err
-                        (Located loc
-                            (Value.exception "Interpreter error: An unexpected side effect during init"
-                                |> Runtime.throw env
-                            )
-                        )
-
-        Err ( e, _ ) ->
-            Err (Located loc e)
 
 
 defaultEnv : Env io
@@ -884,7 +880,7 @@ init =
     prelude
         |> Result.map (Located.unknown >> wrapInDo)
         |> Result.map (\program -> evalExpression program defaultEnv terminate)
-        |> Result.andThen trampolinePure
+        |> Result.andThen (continueEvalPure { maxOps = Nothing })
         |> Result.map (\( _, env ) -> env)
         |> Result.withDefault defaultEnv
 
@@ -945,31 +941,25 @@ problemToString p =
             "bad repeat"
 
 
-evalPure : Env io -> String -> Result (Located Exception) ( Value io, Env io )
-evalPure initEnv code =
+type alias Step io =
+    Located (Enclojure.Types.Step io)
+
+
+type EvalResult io
+    = RunIO io (Result Exception (Value io) -> Step io)
+    | Continue (Step io)
+    | Error Exception
+    | Done (Value io)
+
+
+type alias EvalOptions =
+    { maxOps : Maybe Int }
+
+
+eval : EvalOptions -> Env io -> String -> ( EvalResult io, Env io )
+eval options initEnv code =
     Reader.parse code
         |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw initEnv)
-        |> Result.andThen
-            (\exprs ->
-                exprs
-                    |> List.head
-                    |> Maybe.map ((\lv -> Located.sameAs lv exprs) >> wrapInDo)
-                    |> Result.fromMaybe (Value.exception "Empty program" |> Runtime.throw initEnv)
-            )
-        |> Result.map
-            (\program ->
-                evalExpression program
-                    initEnv
-                    terminate
-            )
-        |> Result.mapError Located.unknown
-        |> Result.andThen trampolinePure
-
-
-eval : Env io -> String -> Located (Step io)
-eval initEnv code =
-    Reader.parse code
-        |> Result.mapError (deadEndsToString >> Value.exception >> Runtime.throw initEnv >> Located.unknown)
         |> Result.map2
             (\a b -> a ++ b)
             prelude
@@ -978,7 +968,7 @@ eval initEnv code =
                 exprs
                     |> List.head
                     |> Maybe.map ((\lv -> Located.sameAs lv exprs) >> wrapInDo)
-                    |> Result.fromMaybe (Located.unknown (Exception "Empty program" []))
+                    |> Result.fromMaybe (Exception "Empty program" [])
             )
         |> Result.map
             (\program ->
@@ -988,9 +978,97 @@ eval initEnv code =
             )
         |> (\r ->
                 case r of
-                    Ok v ->
-                        v
+                    Ok step ->
+                        continueEval options step
 
                     Err e ->
-                        Located.sameAs e ( Err ( Located.getValue e, initEnv ), Nothing )
+                        ( Error e, initEnv )
            )
+
+
+toPureResult : EvalResult io -> Env io -> Result Exception ( Value io, Env io )
+toPureResult evalResult retEnv =
+    case evalResult of
+        RunIO _ _ ->
+            Value.exception "pure eval attempted a side effect"
+                |> Runtime.throw retEnv
+                |> Err
+
+        Continue _ ->
+            Value.exception "pure eval exceeded allotted maxOps"
+                |> Runtime.throw retEnv
+                |> Err
+
+        Error ex ->
+            Err ex
+
+        Done val ->
+            Ok ( val, retEnv )
+
+
+evalPure : EvalOptions -> Env io -> String -> Result Exception ( Value io, Env io )
+evalPure options initEnv code =
+    let
+        ( evalResult, retEnv ) =
+            eval options initEnv code
+    in
+    toPureResult evalResult retEnv
+
+
+continueEvalPure : EvalOptions -> Step io -> Result Exception ( Value io, Env io )
+continueEvalPure options step =
+    let
+        ( evalResult, retEnv ) =
+            continueEval options step
+    in
+    toPureResult evalResult retEnv
+
+
+continueEval : EvalOptions -> Step io -> ( EvalResult io, Env io )
+continueEval options ((Located loc ( result, thunk )) as step) =
+    case result of
+        Ok ( io, env ) ->
+            let
+                atOpsLimit =
+                    options.maxOps |> Maybe.map (\maxOps -> maxOps <= 0) |> Maybe.withDefault False
+            in
+            if atOpsLimit then
+                ( Continue step, env )
+
+            else
+                case io of
+                    Const v ->
+                        case thunk of
+                            Just (Thunk continuation) ->
+                                continueEval
+                                    { options | maxOps = options.maxOps |> Maybe.map ((+) -1) }
+                                    (continuation (Located loc v) env)
+
+                            Nothing ->
+                                ( Done v, env )
+
+                    SideEffect se ->
+                        ( RunIO se
+                            (\r ->
+                                ( r
+                                    |> Result.map (\resultValue -> ( Const resultValue, env ))
+                                    |> Result.mapError (\ex -> ( ex, env ))
+                                , thunk
+                                )
+                                    |> Located loc
+                            )
+                        , env
+                        )
+
+        Err ( e, env ) ->
+            ( Error e, env )
+
+
+setEnv : Env io -> Step io -> Step io
+setEnv env (Located loc ( result, thunk )) =
+    case result of
+        Ok ( io, _ ) ->
+            Located loc ( Ok ( io, env ), thunk )
+
+        Err ( ex, _ ) ->
+            Located loc ( Err ( ex, env ), thunk )
