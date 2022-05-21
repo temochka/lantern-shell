@@ -58,7 +58,7 @@ type Cell
 type ConsoleEntry
     = ConsoleString String
     | UiTrace UiModel
-    | Savepoint_ (Value MyIO) (Env MyIO) (Value MyIO -> Step MyIO)
+    | Savepoint_ (Step MyIO)
     | Success (Value MyIO)
     | Failure ( Exception, Env MyIO )
 
@@ -119,10 +119,9 @@ traceUi model console =
     UiTrace model :: console
 
 
-
--- recordSavepoint : Value MyIO -> Env MyIO -> (Value MyIO -> Step MyIO) -> Console -> Console
--- recordSavepoint val env toStep console =
---     Savepoint_ val env toStep :: console
+recordSavepoint : Step MyIO -> Console -> Console
+recordSavepoint step console =
+    Savepoint_ step :: console
 
 
 scriptName : Script -> String
@@ -881,8 +880,11 @@ update msg appModel =
 
                         ( interpreter, retCmd ) =
                             handleEvalResult evalResult retEnv
+
+                        console =
+                            recordSavepoint step model.console
                     in
-                    ( { model | interpreter = interpreter }, retCmd )
+                    ( { model | interpreter = interpreter, console = console }, retCmd )
                 )
 
         UpdateInputRequest name inputType v ->
@@ -1173,7 +1175,7 @@ type alias ConsoleOptions =
 isDevModeOnlyEntry : ConsoleEntry -> Bool
 isDevModeOnlyEntry entry =
     case entry of
-        Savepoint_ _ _ _ ->
+        Savepoint_ _ ->
             True
 
         _ ->
@@ -1213,8 +1215,11 @@ viewConsole context interpreter console options =
                         ConsoleString s ->
                             Element.paragraph [ Element.width Element.fill ] [ Element.text s ]
 
-                        Savepoint_ v env toStep ->
+                        Savepoint_ step ->
                             let
+                                env =
+                                    Enclojure.getEnv step
+
                                 newEnv =
                                     case interpreter of
                                         Done _ cEnv ->
@@ -1231,7 +1236,7 @@ viewConsole context interpreter console options =
                                         []
                                         { onPress =
                                             Just
-                                                (toStep v
+                                                (step
                                                     |> Enclojure.setEnv newEnv
                                                     |> HandleIO
                                                     |> Lantern.App.Message
@@ -1242,7 +1247,7 @@ viewConsole context interpreter console options =
                             Element.column
                                 [ Element.width Element.fill ]
                                 [ Element.paragraph [] [ Element.text "Savepoint", rewindButton ]
-                                , valueRow v
+                                , Enclojure.getValue step |> Maybe.map valueRow |> Maybe.withDefault Element.none
                                 ]
 
                         Success val ->

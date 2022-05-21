@@ -15,7 +15,6 @@ module Enclojure.Runtime exposing
 
 import Dict
 import Enclojure.Callable as Callable exposing (toThunk)
-import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Types as Types
     exposing

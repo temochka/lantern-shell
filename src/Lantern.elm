@@ -24,7 +24,6 @@ import Json.Encode
 import Lantern.Decoders as Decoders
 import Lantern.Encoders as Encoders
 import Lantern.Errors
-import Lantern.Extra.Result
 import Lantern.Http
 import Lantern.LiveQuery exposing (LiveQuery(..))
 import Lantern.Log as Log exposing (Log)

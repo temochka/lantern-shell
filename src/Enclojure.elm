@@ -8,6 +8,8 @@ module Enclojure exposing
     , defaultEnv
     , eval
     , evalPure
+    , getEnv
+    , getValue
     , init
     , setEnv
     , terminate
@@ -1072,3 +1074,28 @@ setEnv env (Located loc ( result, thunk )) =
 
         Err ( ex, _ ) ->
             Located loc ( Err ( ex, env ), thunk )
+
+
+getEnv : Step io -> Env io
+getEnv (Located _ ( result, _ )) =
+    case result of
+        Ok ( _, env ) ->
+            env
+
+        Err ( _, env ) ->
+            env
+
+
+getValue : Step io -> Maybe (Value io)
+getValue (Located _ ( result, _ )) =
+    result
+        |> Result.toMaybe
+        |> Maybe.andThen
+            (\( io, _ ) ->
+                case io of
+                    Const v ->
+                        Just v
+
+                    _ ->
+                        Nothing
+            )

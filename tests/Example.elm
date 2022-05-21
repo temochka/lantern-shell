@@ -8,8 +8,6 @@ import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Expect
-import Fuzz exposing (Fuzzer, int, list, string)
-import Http exposing (Expect)
 import Test exposing (..)
 
 
