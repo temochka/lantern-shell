@@ -848,6 +848,32 @@ suite =
             , "(str (first {1 2}))" |> (expectValue <| String "[1 2]")
             , "(str #{})" |> (expectValue <| String "#{}")
             ]
+        , describe "string/blank?"
+            [ "(string/blank? \"\")" |> (expectValue <| Bool True)
+            , "(string/blank? \" \")" |> (expectValue <| Bool True)
+            , "(string/blank? \"  \")" |> (expectValue <| Bool True)
+            , "(string/blank? \"\\t\\n \")" |> (expectValue <| Bool True)
+            , "(string/blank? \"string\")" |> (expectValue <| Bool False)
+            ]
+        , describe "string/capitalize"
+            [ "(string/capitalize \"\")" |> (expectValue <| String "")
+            , "(string/capitalize \"A\")" |> (expectValue <| String "A")
+            , "(string/capitalize \"a\")" |> (expectValue <| String "A")
+            , "(string/capitalize \"freedom\")" |> (expectValue <| String "Freedom")
+            ]
+        , describe "string/ends-with?"
+            [ "(string/ends-with? \"foo\" \"oo\")" |> (expectValue <| Bool True)
+            , "(string/ends-with? \"foo\" \"fo\")" |> (expectValue <| Bool False)
+            ]
+        , describe "string/includes?"
+            [ "(string/includes? \"foo\" \"oo\")" |> (expectValue <| Bool True)
+            , "(string/includes? \"foo\" \"fo\")" |> (expectValue <| Bool True)
+            ]
+        , describe "string/index-of"
+            [ "(string/index-of \"foo\" \"o\")" |> (expectValue <| Number <| Int 1)
+            , "(string/index-of \"foo\" \"o\" 2)" |> (expectValue <| Number <| Int 2)
+            , "(string/index-of \"foo\" \"a\")" |> expectValue Nil
+            ]
         , describe "string/join"
             [ "(string/join nil)" |> (expectValue <| String "")
             , "(string/join [\"1\" \"2\" \"3\"])" |> (expectValue <| String "123")
@@ -856,14 +882,50 @@ suite =
             , "(string/join \", \" [1 2 3])" |> (expectValue <| String "1, 2, 3")
             , "(string/join \", \" nil)" |> (expectValue <| String "")
             ]
+        , describe "string/last-index-of"
+            [ "(string/last-index-of \"foo\" \"o\")" |> (expectValue <| Number <| Int 2)
+            , "(string/last-index-of \"foo\" \"o\" 1)" |> (expectValue <| Number <| Int 1)
+            , "(string/last-index-of \"foo\" \"a\")" |> expectValue Nil
+            ]
         , describe "string/length"
             [ "(string/length \"butterfly\")" |> (expectValue <| Number <| Int <| 9)
             , "(string/length \"\")" |> (expectValue <| Number <| Int <| 0)
+            ]
+        , describe "string/lower-case"
+            [ "(string/lower-case \"FOO\")" |> (expectValue <| String "foo")
+            , "(string/lower-case \"baR\")" |> (expectValue <| String "bar")
+            ]
+        , describe "string/reverse"
+            [ "(string/reverse \"OOFOO\")" |> (expectValue <| String "OOFOO")
+            , "(string/reverse \"baR\")" |> (expectValue <| String "Rab")
+            ]
+        , describe "string/split"
+            [ "(= (string/split \"foo bar\" \" \") [\"foo\" \"bar\"])" |> (expectValue <| Bool True)
             ]
         , describe "string/split-lines"
             [ "(= (string/split-lines \"a\\nb\\nc\") (list \"a\" \"b\" \"c\"))" |> (expectValue <| Bool True)
             , "(= (string/split-lines \"a\\n\\nb\") (list \"a\" \"\" \"b\"))" |> (expectValue <| Bool True)
             , "(= (string/split-lines \"\") (list \"\"))" |> (expectValue <| Bool True)
+            ]
+        , describe "string/starts-with?"
+            [ "(string/starts-with? \"foo\" \"fo\")" |> (expectValue <| Bool True)
+            , "(string/starts-with? \"foo\" \"oo\")" |> (expectValue <| Bool False)
+            ]
+        , describe "string/trim"
+            [ "(string/trim \"    \")" |> (expectValue <| String "")
+            , "(string/trim \"  A  \")" |> (expectValue <| String "A")
+            ]
+        , describe "string/triml"
+            [ "(string/triml \"    \")" |> (expectValue <| String "")
+            , "(string/triml \"  A  \")" |> (expectValue <| String "A  ")
+            ]
+        , describe "string/trimr"
+            [ "(string/trimr \"    \")" |> (expectValue <| String "")
+            , "(string/trimr \"  A  \")" |> (expectValue <| String "  A")
+            ]
+        , describe "string/upper-case"
+            [ "(string/upper-case \"FOO\")" |> (expectValue <| String "FOO")
+            , "(string/upper-case \"baR\")" |> (expectValue <| String "BAR")
             ]
         , describe "take"
             [ "(take 0 [])" |> (expectValue <| List [])

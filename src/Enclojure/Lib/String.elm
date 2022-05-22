@@ -5,6 +5,7 @@ import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime
 import Enclojure.Types as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
 import Enclojure.Value as Value exposing (inspect)
+import Html.Attributes exposing (start)
 
 
 emptyCallable : Callable io
@@ -14,13 +15,29 @@ emptyCallable =
 
 init : Types.Env io -> Types.Env io
 init env =
-    env
-        |> Runtime.setGlobalEnv "string/join"
-            (Fn (Just "string/join") (Callable.toThunk join))
-        |> Runtime.setGlobalEnv "string/length"
-            (Fn (Just "string/length") (Callable.toThunk length))
-        |> Runtime.setGlobalEnv "string/split-lines"
-            (Fn (Just "string/split-lines") (Callable.toThunk splitLines))
+    [ ( "string/blank?", isBlank )
+    , ( "string/capitalize", capitalize )
+    , ( "string/ends-with?", endsWith )
+    , ( "string/includes?", includes )
+    , ( "string/index-of", indexOf )
+    , ( "string/join", join )
+    , ( "string/last-index-of", lastIndexOf )
+    , ( "string/length", length )
+    , ( "string/lower-case", lowerCase )
+    , ( "string/reverse", reverse )
+    , ( "string/split-lines", splitLines )
+    , ( "string/split", split )
+    , ( "string/starts-with?", startsWith )
+    , ( "string/trim", trim )
+    , ( "string/triml", triml )
+    , ( "string/trimr", trimr )
+    , ( "string/upper-case", upperCase )
+    ]
+        |> List.foldl
+            (\( name, fn ) ->
+                Runtime.setGlobalEnv name (Fn (Just name) (Callable.toThunk fn))
+            )
+            env
 
 
 splitLines : Types.Callable io
@@ -73,4 +90,255 @@ join =
     { emptyCallable
         | arity1 = Just <| Fixed <| Callable.toArityFunction (arity1 >> Result.map Const)
         , arity2 = Just <| Fixed <| Callable.toArityFunction (arity2 >> Result.map Const)
+    }
+
+
+isBlank : Types.Callable io
+isBlank =
+    let
+        arity1 s =
+            s
+                |> Value.tryString
+                |> Maybe.map (String.trim >> String.isEmpty >> Bool >> Const)
+                |> Result.fromMaybe (Value.exception "type error: blank? expects a string")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+capitalize : Types.Callable io
+capitalize =
+    let
+        arity1 value =
+            value
+                |> Value.tryString
+                |> Maybe.map
+                    (\s ->
+                        String.uncons s
+                            |> Maybe.map (\( head, tail ) -> String.cons (Char.toUpper head) tail)
+                            |> Maybe.withDefault (String.toUpper s)
+                            |> String
+                            |> Const
+                    )
+                |> Result.fromMaybe (Value.exception "type error: capitalize expects a string")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+endsWith : Types.Callable io
+endsWith =
+    let
+        arity2 ( sValue, substrValue ) =
+            Maybe.map2 (\s substr -> String.endsWith substr s |> Bool |> Const)
+                (Value.tryString sValue)
+                (Value.tryString substrValue)
+                |> Result.fromMaybe (Value.exception "type error: ends-with? expects a string")
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+    }
+
+
+startsWith : Types.Callable io
+startsWith =
+    let
+        arity2 ( sValue, substrValue ) =
+            Maybe.map2 (\s substr -> String.startsWith substr s |> Bool |> Const)
+                (Value.tryString sValue)
+                (Value.tryString substrValue)
+                |> Result.fromMaybe (Value.exception "type error: starts-with? expects a string")
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+    }
+
+
+includes : Types.Callable io
+includes =
+    let
+        arity2 ( sValue, substrValue ) =
+            Maybe.map2 (\s substr -> String.contains substr s |> Bool |> Const)
+                (Value.tryString sValue)
+                (Value.tryString substrValue)
+                |> Result.fromMaybe (Value.exception "type error: includes? expects two string arguments")
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+    }
+
+
+indexOf : Types.Callable io
+indexOf =
+    let
+        arity2 ( sValue, substrValue ) =
+            Maybe.map2
+                (\s substr ->
+                    String.indexes substr s
+                        |> List.head
+                        |> Maybe.map Value.int
+                        |> Maybe.withDefault Nil
+                        |> Const
+                )
+                (Value.tryString sValue)
+                (Value.tryString substrValue)
+                |> Result.fromMaybe (Value.exception "type error: index-of expects two string arguments")
+
+        arity3 ( sValue, substrValue, fromIndexValue ) =
+            Maybe.map3
+                (\s substr fromIndex ->
+                    String.indexes substr s
+                        |> List.filter (\i -> i >= fromIndex)
+                        |> List.head
+                        |> Maybe.map Value.int
+                        |> Maybe.withDefault Nil
+                        |> Const
+                )
+                (Value.tryString sValue)
+                (Value.tryString substrValue)
+                (Value.tryInt fromIndexValue)
+                |> Result.fromMaybe (Value.exception "type error: last-index-of expects two string arguments and one int argument")
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        , arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+    }
+
+
+lastIndexOf : Types.Callable io
+lastIndexOf =
+    let
+        arity2 ( sValue, substrValue ) =
+            Maybe.map2
+                (\s substr ->
+                    String.indexes substr s
+                        |> List.reverse
+                        |> List.head
+                        |> Maybe.map Value.int
+                        |> Maybe.withDefault Nil
+                        |> Const
+                )
+                (Value.tryString sValue)
+                (Value.tryString substrValue)
+                |> Result.fromMaybe (Value.exception "type error: index-of expects two string arguments")
+
+        arity3 ( sValue, substrValue, fromIndexValue ) =
+            Maybe.map3
+                (\s substr fromIndex ->
+                    String.indexes substr s
+                        |> List.filter (\i -> i <= fromIndex)
+                        |> List.reverse
+                        |> List.head
+                        |> Maybe.map Value.int
+                        |> Maybe.withDefault Nil
+                        |> Const
+                )
+                (Value.tryString sValue)
+                (Value.tryString substrValue)
+                (Value.tryInt fromIndexValue)
+                |> Result.fromMaybe (Value.exception "type error: last-index-of expects two string arguments and one int argument")
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        , arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+    }
+
+
+lowerCase : Types.Callable io
+lowerCase =
+    let
+        arity1 sValue =
+            sValue
+                |> Value.tryString
+                |> Maybe.map (String.toLower >> String >> Const)
+                |> Result.fromMaybe (Value.exception "type error: lower-case expects one string argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+upperCase : Types.Callable io
+upperCase =
+    let
+        arity1 sValue =
+            sValue
+                |> Value.tryString
+                |> Maybe.map (String.toUpper >> String >> Const)
+                |> Result.fromMaybe (Value.exception "type error: upper-case expects one string argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+reverse : Types.Callable io
+reverse =
+    let
+        arity1 sValue =
+            sValue
+                |> Value.tryString
+                |> Maybe.map (String.reverse >> String >> Const)
+                |> Result.fromMaybe (Value.exception "type error: reverse expects one string argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+split : Types.Callable io
+split =
+    let
+        arity2 ( sValue, splitstrValue ) =
+            Maybe.map2 (\s splitStr -> String.split splitStr s |> List.map String |> Value.vectorFromList |> Const)
+                (Value.tryString sValue)
+                (Value.tryString splitstrValue)
+                |> Result.fromMaybe (Value.exception "type error: split expects two string arguments")
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+    }
+
+
+trim : Types.Callable io
+trim =
+    let
+        arity1 sValue =
+            sValue
+                |> Value.tryString
+                |> Maybe.map (String.trim >> String >> Const)
+                |> Result.fromMaybe (Value.exception "type error: trim expects one string argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+triml : Types.Callable io
+triml =
+    let
+        arity1 sValue =
+            sValue
+                |> Value.tryString
+                |> Maybe.map (String.trimLeft >> String >> Const)
+                |> Result.fromMaybe (Value.exception "type error: triml expects one string argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+trimr : Types.Callable io
+trimr =
+    let
+        arity1 sValue =
+            sValue
+                |> Value.tryString
+                |> Maybe.map (String.trimRight >> String >> Const)
+                |> Result.fromMaybe (Value.exception "type error: trimr expects one string argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
     }

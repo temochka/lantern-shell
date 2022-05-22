@@ -28,6 +28,8 @@ module Enclojure.Value exposing
     , tryString
     , trySymbol
     , tryVectorOf
+    , vector
+    , vectorFromList
     )
 
 import Array
@@ -385,6 +387,16 @@ map =
 list : List (Value io) -> Value io
 list vs =
     List <| List.map Located.unknown vs
+
+
+vectorFromList : List (Value io) -> Value io
+vectorFromList ls =
+    Vector <| Array.fromList <| List.map Located.unknown ls
+
+
+vector : Array.Array (Value io) -> Value io
+vector =
+    Vector << Array.map Located.unknown
 
 
 fn : Maybe String -> Callable io -> Value io
