@@ -26,6 +26,7 @@ empty =
     , maps = []
     , mapEntries = []
     , lists = []
+    , regexs = []
     , sets = []
     , throwables = []
     , vectors = []
@@ -102,6 +103,9 @@ insert k v m =
 
         MapEntry _ ->
             { m | mapEntries = ( k, v ) :: m.mapEntries }
+
+        Regex _ _ ->
+            { m | regexs = ( k, v ) :: m.regexs }
 
         Set _ ->
             { m | sets = ( k, v ) :: m.sets }
@@ -183,6 +187,13 @@ remove k m =
             in
             { m | mapEntries = newMapEntries }
 
+        Regex _ _ ->
+            let
+                newRegexs =
+                    m.regexs |> List.filter (Tuple.first >> (/=) k)
+            in
+            { m | regexs = newRegexs }
+
         Set _ ->
             let
                 newSets =
@@ -263,6 +274,10 @@ get k m =
             linearFind (Tuple.first >> (==) k) m.mapEntries
                 |> Maybe.map Tuple.second
 
+        Regex _ _ ->
+            linearFind (Tuple.first >> (==) k) m.regexs
+                |> Maybe.map Tuple.second
+
         Set _ ->
             linearFind (Tuple.first >> (==) k) m.sets
                 |> Maybe.map Tuple.second
@@ -322,6 +337,7 @@ toList m =
         ++ m.lists
         ++ m.sets
         ++ m.vectors
+        ++ m.regexs
 
 
 foldl : (Value io -> Located (Value io) -> a -> a) -> a -> ValueMap io -> a

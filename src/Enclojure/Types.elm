@@ -3,6 +3,7 @@ module Enclojure.Types exposing (..)
 import Array exposing (Array)
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located)
+import Regex exposing (Regex)
 import Set
 
 
@@ -56,6 +57,7 @@ type alias ValueMap io =
     , maps : List ( Value io, Located (Value io) )
     , mapEntries : List ( Value io, Located (Value io) )
     , lists : List ( Value io, Located (Value io) )
+    , regexs : List ( Value io, Located (Value io) )
     , refs : List ( Value io, Located (Value io) )
     , sets : List ( Value io, Located (Value io) )
     , throwables : List ( Value io, Located (Value io) )
@@ -77,6 +79,7 @@ type ValueSet io
         , mapEntries : List (ValueMapEntry io)
         , lists : List (List (Located (Value io)))
         , refs : List (Value io)
+        , regexs : List (Value io)
         , sets : List (ValueSet io)
         , throwables : List (Value io)
         , vectors : List (Array (Located (Value io)))
@@ -100,6 +103,7 @@ type Value io
     | Keyword String
     | Map (ValueMap io)
     | MapEntry (ValueMapEntry io)
+    | Regex String Regex
     | Set (ValueSet io)
     | Symbol String
     | Throwable Exception

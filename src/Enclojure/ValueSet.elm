@@ -22,6 +22,7 @@ empty =
         , maps = []
         , mapEntries = []
         , lists = []
+        , regexs = []
         , vectors = []
         , keywords = Set.empty
         , sets = []
@@ -99,6 +100,9 @@ insert v (Enclojure.Types.ValueSet set) =
 
             MapEntry e ->
                 { set | mapEntries = e :: set.mapEntries }
+
+            Regex _ _ ->
+                { set | regexs = v :: set.regexs }
 
             Set s ->
                 { set | sets = s :: set.sets }
@@ -181,6 +185,13 @@ remove v (Enclojure.Types.ValueSet set) =
                 in
                 { set | mapEntries = newMapEntries }
 
+            Regex _ _ ->
+                let
+                    newRegexs =
+                        set.regexs |> List.filter ((/=) v)
+                in
+                { set | regexs = newRegexs }
+
             Set s ->
                 let
                     newSets =
@@ -254,6 +265,7 @@ toList (Enclojure.Types.ValueSet set) =
         ++ List.map MapEntry set.mapEntries
         ++ List.map List set.lists
         ++ List.map Set set.sets
+        ++ set.regexs
         ++ set.throwables
         ++ List.map Vector set.vectors
 
@@ -305,6 +317,9 @@ member v (Enclojure.Types.ValueSet set) =
 
         MapEntry otherMapEntry ->
             List.member otherMapEntry set.mapEntries
+
+        Regex _ _ ->
+            List.member v set.regexs
 
         Set otherSet ->
             List.member otherSet set.sets

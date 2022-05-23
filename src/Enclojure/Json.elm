@@ -101,6 +101,9 @@ encode val =
         MapEntry ( k, Located _ v ) ->
             Json.Encode.list encode [ k, v ]
 
+        Regex s _ ->
+            Json.Encode.string s
+
         Set vs ->
             Json.Encode.list encode (ValueSet.toList vs)
 

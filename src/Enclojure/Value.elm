@@ -314,6 +314,9 @@ inspect value =
         MapEntry ( k, v ) ->
             inspect (Vector (Array.fromList [ Located.unknown k, v ]))
 
+        Regex s r ->
+            "#" ++ s
+
         Set set ->
             List.map (\v -> inspect v) (ValueSet.toList set)
                 |> String.join ", "

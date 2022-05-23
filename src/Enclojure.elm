@@ -112,6 +112,9 @@ evalExpression mutableExpr mutableEnv mutableK =
                 Ref _ _ ->
                     Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
+                Regex _ _ ->
+                    Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
+
                 Fn _ _ ->
                     Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
