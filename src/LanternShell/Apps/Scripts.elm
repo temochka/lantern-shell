@@ -1223,10 +1223,10 @@ viewConsole context interpreter console options =
                                 newEnv =
                                     case interpreter of
                                         Done _ cEnv ->
-                                            { cEnv | localScope = env.localScope }
+                                            { cEnv | lexicalScope = env.lexicalScope }
 
                                         Panic _ cEnv ->
-                                            { cEnv | localScope = env.localScope }
+                                            { cEnv | lexicalScope = env.lexicalScope }
 
                                         _ ->
                                             env

@@ -1,7 +1,7 @@
 module Enclojure.Runtime exposing
     ( apply
     , bindGlobal
-    , bindLocal
+    , bindLexical
     , const
     , emptyEnv
     , fetchEnv
@@ -25,7 +25,6 @@ import Enclojure.Types as Types
         , Exception(..)
         , IO(..)
         , Number(..)
-        , Scope
         , Step
         , Thunk(..)
         , Value(..)
@@ -40,43 +39,29 @@ emptyCallable =
     Callable.new
 
 
-newScope : Scope io
-newScope =
-    { atoms = Dict.empty
-    , atomIdGenerator = 0
-    , bindings = Dict.empty
-    }
-
-
 emptyEnv : Env io
 emptyEnv =
-    { globalScope = newScope
-    , localScope = newScope
+    { globalScope = Dict.empty
+    , lexicalScope = Dict.empty
+    , atoms = Dict.empty
+    , atomIdGenerator = 0
     , stack = [ { name = "user", location = Located.Unknown } ]
     }
 
 
-bindLocal : String -> Value io -> Env io -> Env io
-bindLocal key value ({ localScope } as env) =
-    let
-        newLocalScope =
-            { localScope | bindings = Dict.insert key value localScope.bindings }
-    in
-    { env | localScope = newLocalScope }
+bindLexical : String -> Value io -> Env io -> Env io
+bindLexical key value env =
+    { env | lexicalScope = Dict.insert key value env.lexicalScope }
 
 
 bindGlobal : String -> Value io -> Env io -> Env io
-bindGlobal key value ({ globalScope } as env) =
-    let
-        newGlobalScope =
-            { globalScope | bindings = Dict.insert key value globalScope.bindings }
-    in
-    { env | globalScope = newGlobalScope }
+bindGlobal key value env =
+    { env | globalScope = Dict.insert key value env.globalScope }
 
 
-fetchEnv : String -> Scope io -> Maybe (Value io)
-fetchEnv name scope =
-    Dict.get name scope.bindings
+fetchEnv : String -> Dict.Dict String (Value io) -> Maybe (Value io)
+fetchEnv =
+    Dict.get
 
 
 isTruthy : Value io -> Bool

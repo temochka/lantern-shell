@@ -120,15 +120,10 @@ type alias StackFrame =
     }
 
 
-type alias Scope io =
-    { atoms : Dict Int (Located (Value io))
-    , bindings : Dict String (Value io)
-    , atomIdGenerator : Int
-    }
-
-
 type alias Env io =
-    { globalScope : Scope io
-    , localScope : Scope io
+    { globalScope : Dict String (Value io)
+    , lexicalScope : Dict String (Value io)
+    , atoms : Dict Int (Located (Value io))
     , stack : List StackFrame
+    , atomIdGenerator : Int
     }
