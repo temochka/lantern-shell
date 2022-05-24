@@ -133,6 +133,7 @@ suite =
             , "#\"\\d+\"" |> expectRegex "\\d+"
             , "#\"(\\w+)\"" |> expectRegex "(\\w+)"
             , "#\"(\\n+)\"" |> expectRegex "(\n+)"
+            , "#\"++\"" |> expectException "invalid regex at row 1, col 6"
             ]
         , describe "maps"
             [ "{}" |> (expectValue <| Map ValueMap.empty)

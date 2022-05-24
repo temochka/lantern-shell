@@ -301,10 +301,9 @@ parser =
 regex : Parser (Value io)
 regex =
     (Parser.succeed identity
-        |. Parser.token "#"
+        |. (Parser.token "#" |> Parser.backtrackable)
         |= DoubleQuotedString.string
     )
-        |> Parser.backtrackable
         |> Parser.andThen
             (\pattern ->
                 Regex.fromString pattern
