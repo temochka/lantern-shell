@@ -21,6 +21,7 @@ import Enclojure.Value as Value exposing (inspect)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
+import Regex
 
 
 emptyCallable : Callable io
@@ -30,79 +31,51 @@ emptyCallable =
 
 init : Env io -> Env io
 init env =
-    env
-        |> Runtime.setGlobalEnv "+"
-            (Fn (Just "+") (Callable.toThunk plus))
-        |> Runtime.setGlobalEnv "-"
-            (Fn (Just "-") (Callable.toThunk minus))
-        |> Runtime.setGlobalEnv "/"
-            (Fn (Just "/") (Callable.toThunk div))
-        |> Runtime.setGlobalEnv "*"
-            (Fn (Just "*") (Callable.toThunk mul))
-        |> Runtime.setGlobalEnv "="
-            (Fn (Just "=") (Callable.toThunk isEqual))
-        |> Runtime.setGlobalEnv "not="
-            (Fn (Just "not=") (Callable.toThunk isNotEqual))
-        |> Runtime.setGlobalEnv ">"
-            (Fn (Just ">") (Callable.toThunk isGreaterThan))
-        |> Runtime.setGlobalEnv ">="
-            (Fn (Just ">=") (Callable.toThunk isGreaterThanOrEqual))
-        |> Runtime.setGlobalEnv "<"
-            (Fn (Just "<") (Callable.toThunk isLessThan))
-        |> Runtime.setGlobalEnv "<="
-            (Fn (Just "<=") (Callable.toThunk isLessThanOrEqual))
-        |> Runtime.setGlobalEnv "apply"
-            (Fn (Just "apply") (Callable.toThunk apply))
-        |> Runtime.setGlobalEnv "assoc"
-            (Fn (Just "assoc") (Callable.toThunk assoc))
-        |> Runtime.setGlobalEnv "conj"
-            (Fn (Just "conj") (Callable.toThunk conj))
-        |> Runtime.setGlobalEnv "cons"
-            (Fn (Just "cons") (Callable.toThunk cons))
-        |> Runtime.setGlobalEnv "contains?"
-            (Fn (Just "contains?") (Callable.toThunk contains))
-        |> Runtime.setGlobalEnv "dissoc"
-            (Fn (Just "dissoc") (Callable.toThunk dissoc))
-        |> Runtime.setGlobalEnv "first"
-            (Fn (Just "first") (Callable.toThunk first))
-        |> Runtime.setGlobalEnv "float?"
-            (Fn (Just "float?") (Callable.toThunk isFloat))
-        |> Runtime.setGlobalEnv "get"
-            (Fn (Just "get") (Callable.toThunk get))
-        |> Runtime.setGlobalEnv "json/encode"
-            (Fn (Just "json/encode") (Callable.toThunk jsonEncode))
-        |> Runtime.setGlobalEnv "json/decode"
-            (Fn (Just "json/decode") (Callable.toThunk jsonDecode))
-        |> Runtime.setGlobalEnv "integer?"
-            (Fn (Just "integer?") (Callable.toThunk isInteger))
-        |> Runtime.setGlobalEnv "key"
-            (Fn (Just "key") (Callable.toThunk key_))
-        |> Runtime.setGlobalEnv "list"
-            (Fn (Just "list") (Callable.toThunk list))
-        |> Runtime.setGlobalEnv "Exception."
-            (Fn (Just "Exception.") (Callable.toThunk newException))
-        |> Runtime.setGlobalEnv "not"
-            (Fn (Just "not") (Callable.toThunk not_))
-        |> Runtime.setGlobalEnv "number?"
-            (Fn (Just "number?") (Callable.toThunk isNumber))
-        |> Runtime.setGlobalEnv "peek"
-            (Fn (Just "peek") (Callable.toThunk peek))
-        |> Runtime.setGlobalEnv "pr-str"
-            (Fn (Just "pr-str") (Callable.toThunk prStr))
-        |> Runtime.setGlobalEnv "rem"
-            (Fn (Just "rem") (Callable.toThunk rem))
-        |> Runtime.setGlobalEnv "rest"
-            (Fn (Just "rest") (Callable.toThunk rest_))
-        |> Runtime.setGlobalEnv "second"
-            (Fn (Just "second") (Callable.toThunk second))
-        |> Runtime.setGlobalEnv "seq"
-            (Fn (Just "seq") (Callable.toThunk seq))
-        |> Runtime.setGlobalEnv "str"
-            (Fn (Just "str") (Callable.toThunk str))
-        |> Runtime.setGlobalEnv "throw"
-            (Fn (Just "throw") (Callable.toThunk throw))
-        |> Runtime.setGlobalEnv "val"
-            (Fn (Just "val") (Callable.toThunk val_))
+    [ ( "+", plus )
+    , ( "-", minus )
+    , ( "/", div )
+    , ( "*", mul )
+    , ( "=", isEqual )
+    , ( "not=", isNotEqual )
+    , ( ">", isGreaterThan )
+    , ( ">=", isGreaterThanOrEqual )
+    , ( "<", isLessThan )
+    , ( "<=", isLessThanOrEqual )
+    , ( "apply", apply )
+    , ( "assoc", assoc )
+    , ( "conj", conj )
+    , ( "cons", cons )
+    , ( "contains?", contains )
+    , ( "dissoc", dissoc )
+    , ( "first", first )
+    , ( "float?", isFloat )
+    , ( "get", get )
+    , ( "json/encode", jsonEncode )
+    , ( "json/decode", jsonDecode )
+    , ( "integer?", isInteger )
+    , ( "key", key_ )
+    , ( "list", list )
+    , ( "Exception.", newException )
+    , ( "not", not_ )
+    , ( "number?", isNumber )
+    , ( "peek", peek )
+    , ( "pr-str", prStr )
+    , ( "rem", rem )
+    , ( "re-find", reFind )
+    , ( "re-matches", reMatches )
+    , ( "re-seq", reSeq )
+    , ( "rest", rest_ )
+    , ( "second", second )
+    , ( "seq", seq )
+    , ( "str", str )
+    , ( "throw", throw )
+    , ( "val", val_ )
+    ]
+        |> List.foldl
+            (\( name, fn ) aEnv ->
+                Runtime.setGlobalEnv name (Fn (Just name) (Callable.toThunk fn)) aEnv
+            )
+            env
 
 
 jsonEncode : Callable io
@@ -1161,6 +1134,67 @@ val_ =
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| toArityFunction arity1
+    }
+
+
+reSeq : Callable io
+reSeq =
+    let
+        arity2 ( reValue, sValue ) =
+            Result.map2
+                (\re s -> Regex.find re s |> List.map (.match >> String) |> Value.list |> Const)
+                (Value.tryRegex reValue |> Result.fromMaybe (Value.exception "first argument to re-seq must be a regular expression"))
+                (Value.tryString sValue |> Result.fromMaybe (Value.exception "second argument to re-seq must be a string"))
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| toArityFunction arity2
+    }
+
+
+reFind : Callable io
+reFind =
+    let
+        arity2 ( reValue, sValue ) =
+            Result.map2
+                (\re s -> Regex.findAtMost 1 re s |> List.head |> Maybe.map (.match >> String) |> Maybe.withDefault Nil |> Const)
+                (Value.tryRegex reValue |> Result.fromMaybe (Value.exception "first argument to re-seq must be a regular expression"))
+                (Value.tryString sValue |> Result.fromMaybe (Value.exception "second argument to re-seq must be a string"))
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| toArityFunction arity2
+    }
+
+
+reMatches : Callable io
+reMatches =
+    let
+        arity2 ( reValue, sValue ) =
+            Result.map2
+                (\re s ->
+                    Regex.findAtMost 1 re s
+                        |> List.head
+                        |> Maybe.map
+                            (\match ->
+                                if match.match /= s then
+                                    Ok (Const Nil)
+
+                                else if List.isEmpty match.submatches then
+                                    Ok (Const (String match.match))
+
+                                else
+                                    (String match.match :: List.filterMap (Maybe.map String) match.submatches)
+                                        |> Value.list
+                                        |> Const
+                                        |> Ok
+                            )
+                        |> Maybe.withDefault (Ok <| Const <| Nil)
+                )
+                (Value.tryRegex reValue |> Result.fromMaybe (Value.exception "first argument to re-matches must be a regular expression"))
+                (Value.tryString sValue |> Result.fromMaybe (Value.exception "second argument to re-matches must be a string"))
+                |> Result.andThen identity
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
     }
 
 

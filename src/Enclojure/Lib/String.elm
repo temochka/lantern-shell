@@ -5,7 +5,7 @@ import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime
 import Enclojure.Types as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
 import Enclojure.Value as Value exposing (inspect)
-import Html.Attributes exposing (start)
+import Regex
 
 
 emptyCallable : Callable io
@@ -24,6 +24,7 @@ init env =
     , ( "string/last-index-of", lastIndexOf )
     , ( "string/length", length )
     , ( "string/lower-case", lowerCase )
+    , ( "string/replace", replace )
     , ( "string/reverse", reverse )
     , ( "string/split-lines", splitLines )
     , ( "string/split", split )
@@ -274,6 +275,47 @@ upperCase =
     }
 
 
+replaceMatch : String -> Regex.Match -> String
+replaceMatch pattern match =
+    match.submatches
+        |> List.indexedMap Tuple.pair
+        |> List.foldr
+            (\( i, mSubmatch ) a ->
+                case mSubmatch of
+                    Just submatch ->
+                        String.replace ("$" ++ String.fromInt (i + 1)) submatch a
+
+                    Nothing ->
+                        a
+            )
+            pattern
+
+
+replace : Types.Callable io
+replace =
+    let
+        arity3 ( sValue, matchValue, replacementValue ) =
+            Maybe.map3
+                (\s replaceMatchFn replacement ->
+                    replaceMatchFn replacement s
+                        |> String
+                        |> Const
+                )
+                (Value.tryString sValue)
+                (Value.tryOneOf
+                    [ Value.tryString >> Maybe.map String.replace
+                    , Value.tryRegex >> Maybe.map (\regex -> \replacement -> Regex.replace regex (replaceMatch replacement))
+                    ]
+                    matchValue
+                )
+                (Value.tryString replacementValue)
+                |> Result.fromMaybe (Value.exception "type error: wrong argument types to replace")
+    in
+    { emptyCallable
+        | arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+    }
+
+
 reverse : Types.Callable io
 reverse =
     let
@@ -292,10 +334,15 @@ split : Types.Callable io
 split =
     let
         arity2 ( sValue, splitstrValue ) =
-            Maybe.map2 (\s splitStr -> String.split splitStr s |> List.map String |> Value.vectorFromList |> Const)
-                (Value.tryString sValue)
-                (Value.tryString splitstrValue)
-                |> Result.fromMaybe (Value.exception "type error: split expects two string arguments")
+            Result.map2 (\s splitFn -> splitFn s |> List.map String |> Value.vectorFromList |> Const)
+                (Value.tryString sValue |> Result.fromMaybe (Value.exception "type error: the first argument to split should be a string"))
+                (Value.tryOneOf
+                    [ Value.tryString >> Maybe.map String.split
+                    , Value.tryRegex >> Maybe.map Regex.split
+                    ]
+                    splitstrValue
+                    |> Result.fromMaybe (Value.exception "type error: the second argument to split should be a string or a regular expression")
+                )
     in
     { emptyCallable
         | arity2 = Just <| Fixed <| Callable.toArityFunction arity2

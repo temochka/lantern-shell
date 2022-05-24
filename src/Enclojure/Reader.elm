@@ -5,9 +5,10 @@ import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
 import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
-import Enclojure.ValueMap as ValueMap exposing (ValueMap, ValueMapEntry)
+import Enclojure.ValueMap as ValueMap exposing (ValueMapEntry)
 import Enclojure.ValueSet as ValueSet
 import Parser exposing ((|.), (|=), Parser)
+import Regex
 import Set
 
 
@@ -153,6 +154,7 @@ uncommentedExpression =
         |. Parser.spaces
         |= Parser.oneOf
             [ lambda
+            , regex
             , string
             , list
             , vector
@@ -293,4 +295,18 @@ parser =
                                 Err (Exception e _) ->
                                     Parser.problem e
                        )
+            )
+
+
+regex : Parser (Value io)
+regex =
+    (Parser.succeed identity
+        |. (Parser.token "#" |> Parser.backtrackable)
+        |= DoubleQuotedString.string
+    )
+        |> Parser.andThen
+            (\pattern ->
+                Regex.fromString pattern
+                    |> Maybe.map (Regex pattern >> Parser.succeed)
+                    |> Maybe.withDefault (Parser.problem "invalid regex")
             )

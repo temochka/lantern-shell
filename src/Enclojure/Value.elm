@@ -24,6 +24,7 @@ module Enclojure.Value exposing
     , tryNil
     , tryOneOf
     , tryPatternOf2
+    , tryRegex
     , trySequenceOf
     , tryString
     , trySymbol
@@ -40,6 +41,7 @@ import Enclojure.Types exposing (Callable, Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import File exposing (decoder)
+import Regex exposing (Regex)
 
 
 type alias Value io =
@@ -95,6 +97,16 @@ tryString value =
     case value of
         String s ->
             Just s
+
+        _ ->
+            Nothing
+
+
+tryRegex : Value io -> Maybe Regex
+tryRegex value =
+    case value of
+        Regex _ r ->
+            Just r
 
         _ ->
             Nothing
@@ -313,6 +325,9 @@ inspect value =
 
         MapEntry ( k, v ) ->
             inspect (Vector (Array.fromList [ Located.unknown k, v ]))
+
+        Regex s r ->
+            "#" ++ s
 
         Set set ->
             List.map (\v -> inspect v) (ValueSet.toList set)

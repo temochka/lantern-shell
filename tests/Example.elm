@@ -8,6 +8,7 @@ import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Expect
+import Regex
 import Test exposing (..)
 
 
@@ -26,6 +27,27 @@ eval code =
 expectValue : Value io -> String -> Test
 expectValue value code =
     (\_ -> eval code |> Expect.equal (Ok value)) |> test code
+
+
+expectRegex : String -> String -> Test
+expectRegex expectedRegex code =
+    test code
+        (\_ ->
+            case eval code of
+                Ok (Regex actualRegex _) ->
+                    Expect.equal expectedRegex actualRegex
+
+                Err (Exception msg _) ->
+                    Expect.fail msg
+
+                _ ->
+                    Expect.fail "did not return a regular expression"
+        )
+
+
+regex : String -> Regex.Regex
+regex s =
+    Regex.fromString s |> Maybe.withDefault Regex.never
 
 
 expectException : String -> String -> Test
@@ -105,6 +127,14 @@ suite =
             ]
         , describe "vectors"
             [ "[]" |> (expectValue <| Vector Array.empty) ]
+        , describe "regular expressions"
+            [ "#\"\"" |> expectRegex ""
+            , "#\"abc\"" |> expectRegex "abc"
+            , "#\"\\d+\"" |> expectRegex "\\d+"
+            , "#\"(\\w+)\"" |> expectRegex "(\\w+)"
+            , "#\"(\\n+)\"" |> expectRegex "(\n+)"
+            , "#\"++\"" |> expectException "invalid regex at row 1, col 6"
+            ]
         , describe "maps"
             [ "{}" |> (expectValue <| Map ValueMap.empty)
             , "({:a 1} :a)" |> (expectValue <| Number <| Int 1)
@@ -789,6 +819,18 @@ suite =
             , "(= (repeat 1 nil) (list nil))" |> (expectValue <| Bool True)
             , "(= (repeat 5 1) (list 1 1 1 1 1))" |> (expectValue <| Bool True)
             ]
+        , describe "re-find"
+            [ "(re-find #\"\\d+\" \"abc\")" |> expectValue Nil
+            , "(re-find #\"\\d+\" \"abc13de002\")" |> (expectValue <| String "13")
+            ]
+        , describe "re-matches"
+            [ "(re-matches #\"hello\" \"hello, world\")" |> expectValue Nil
+            , "(re-matches #\"hello.+\" \"hello, world\")" |> (expectValue <| String "hello, world")
+            , "(re-matches #\"hello, (.+)\" \"hello, world\")"
+                |> (expectValue <| List [ Located.unknown (String "hello, world"), Located.unknown (String "world") ])
+            ]
+        , describe "re-seq"
+            [ "(= (re-seq #\"\\d\" \"01234\") (list \"0\" \"1\" \"2\" \"3\" \"4\"))" |> (expectValue <| Bool True) ]
         , describe "rest"
             [ "(= (rest (list 1 2 3)) (list 2 3))" |> (expectValue <| Bool True)
             , "(= (rest [1 2 3]) (list 2 3))" |> (expectValue <| Bool True)
@@ -895,12 +937,18 @@ suite =
             [ "(string/lower-case \"FOO\")" |> (expectValue <| String "foo")
             , "(string/lower-case \"baR\")" |> (expectValue <| String "bar")
             ]
+        , describe "string/replace"
+            [ "(string/replace \"The color is red\" #\"red\" \"blue\")" |> (expectValue <| String "The color is blue")
+            , "(string/replace \"The color is red\" \"red\" \"green\")" |> (expectValue <| String "The color is green")
+            , "(string/replace \"GOD\" #\"(.)(.)(.)\" \"$3$2$1\")" |> (expectValue <| String "DOG")
+            ]
         , describe "string/reverse"
             [ "(string/reverse \"OOFOO\")" |> (expectValue <| String "OOFOO")
             , "(string/reverse \"baR\")" |> (expectValue <| String "Rab")
             ]
         , describe "string/split"
             [ "(= (string/split \"foo bar\" \" \") [\"foo\" \"bar\"])" |> (expectValue <| Bool True)
+            , "(= (string/split \"a123b345c567d\" #\"[0-9]+\") [\"a\" \"b\" \"c\" \"d\"])" |> (expectValue <| Bool True)
             ]
         , describe "string/split-lines"
             [ "(= (string/split-lines \"a\\nb\\nc\") (list \"a\" \"b\" \"c\"))" |> (expectValue <| Bool True)
