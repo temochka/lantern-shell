@@ -4,7 +4,7 @@ import Array
 import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Types exposing (Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Expect
@@ -489,6 +489,8 @@ suite =
             , "(assoc-in [] [1 1 2] 42)" |> (expectException <| "index out of bounds")
             , "(= (assoc-in {:foo {} :bar 42} [:foo :buz] 3) {:foo {:buz 3} :bar 42})" |> (expectValue <| Bool True)
             ]
+        , describe "atom"
+            [ "(atom {})" |> (expectValue <| Ref <| Atom 0) ]
         , describe "concat"
             [ "(= (concat [1] [2 3] [4]) (list 1 2 3 4))" |> (expectValue <| Bool True)
             , "(= (concat [1 2 3] nil nil [4 5]) (list 1 2 3 4 5))" |> (expectValue <| Bool True)

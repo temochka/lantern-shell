@@ -17,6 +17,7 @@ module Enclojure.Value exposing
     , toMap
     , toSeq
     , toString
+    , tryAtom
     , tryDictOf
     , tryFloat
     , tryInt
@@ -25,6 +26,7 @@ module Enclojure.Value exposing
     , tryNil
     , tryOneOf
     , tryPatternOf2
+    , tryRef
     , tryRegex
     , trySequenceOf
     , tryString
@@ -98,6 +100,26 @@ tryString value =
     case value of
         String s ->
             Just s
+
+        _ ->
+            Nothing
+
+
+tryRef : Value io -> Maybe (Ref io)
+tryRef value =
+    case value of
+        Ref ref ->
+            Just ref
+
+        _ ->
+            Nothing
+
+
+tryAtom : Value io -> Maybe Int
+tryAtom value =
+    case value of
+        Ref (Atom id) ->
+            Just id
 
         _ ->
             Nothing

@@ -123,7 +123,7 @@ type alias StackFrame =
 type alias Env io =
     { globalScope : Dict String (Value io)
     , lexicalScope : Dict String (Value io)
-    , atoms : Dict Int (Located (Value io))
+    , atoms : Dict Int (Value io)
     , stack : List StackFrame
     , atomIdGenerator : Int
     }
