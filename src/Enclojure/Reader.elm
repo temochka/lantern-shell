@@ -301,7 +301,7 @@ parser =
 regex : Parser (Value io)
 regex =
     (Parser.succeed identity
-        |. Parser.symbol "#"
+        |. Parser.token "#"
         |= DoubleQuotedString.string
     )
         |> Parser.backtrackable

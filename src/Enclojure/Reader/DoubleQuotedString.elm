@@ -67,6 +67,7 @@ stringHelp revChunks =
                     |. token "u{"
                     |= unicode
                     |. token "}"
+                , Parser.succeed "\\"
                 ]
         , token "\""
             |> map (\_ -> Done <| Ok (String.join "" (List.reverse revChunks)))
