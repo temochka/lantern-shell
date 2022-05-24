@@ -73,7 +73,7 @@ init env =
     ]
         |> List.foldl
             (\( name, fn ) aEnv ->
-                Runtime.setGlobalEnv name (Fn (Just name) (Callable.toThunk fn)) aEnv
+                Runtime.bindGlobal name (Fn (Just name) (Callable.toThunk fn)) aEnv
             )
             env
 

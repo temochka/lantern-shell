@@ -91,10 +91,15 @@ type Number
     | Int Int
 
 
+type Ref io
+    = Var String (Value io)
+    | Atom Int
+
+
 type Value io
     = Number Number
     | String String
-    | Ref String (Located (Value io))
+    | Ref (Ref io)
     | Fn (Maybe String) ({ self : Value io, k : Continuation io } -> Thunk io)
     | List (List (Located (Value io)))
     | Vector (Array (Located (Value io)))
@@ -115,8 +120,15 @@ type alias StackFrame =
     }
 
 
+type alias Scope io =
+    { atoms : Dict Int (Located (Value io))
+    , bindings : Dict String (Value io)
+    , atomIdGenerator : Int
+    }
+
+
 type alias Env io =
-    { global : Dict String (Value io)
-    , local : Dict String (Value io)
+    { globalScope : Scope io
+    , localScope : Scope io
     , stack : List StackFrame
     }
