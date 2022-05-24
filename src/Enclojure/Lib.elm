@@ -385,60 +385,6 @@ compOp { intOp, floatOp, stringOp } =
     }
 
 
-areEqualValues : Value io -> Value io -> Bool
-areEqualValues a b =
-    let
-        compareLists listA listB =
-            case ( listA, listB ) of
-                ( headA :: restA, headB :: restB ) ->
-                    if areEqualValues (Located.getValue headA) (Located.getValue headB) then
-                        compareLists restA restB
-
-                    else
-                        False
-
-                ( [], [] ) ->
-                    True
-
-                _ ->
-                    False
-    in
-    -- referential equality
-    if a == b then
-        True
-        -- different metadata
-
-    else
-        case ( a, b ) of
-            ( List listA, List listB ) ->
-                compareLists listA listB
-
-            ( MapEntry ( keyA, Located _ valA ), Vector vB ) ->
-                case Array.toList vB of
-                    [ Located _ keyB, Located _ valB ] ->
-                        areEqualValues keyA keyB && areEqualValues valA valB
-
-                    _ ->
-                        False
-
-            ( Vector _, MapEntry _ ) ->
-                areEqualValues b a
-
-            ( MapEntry ( keyA, Located _ valA ), MapEntry ( keyB, Located _ valB ) ) ->
-                areEqualValues keyA keyB && areEqualValues valA valB
-
-            ( Vector vectorA, Vector vectorB ) ->
-                compareLists (Array.toList vectorA) (Array.toList vectorB)
-
-            ( Map mapA, Map mapB ) ->
-                compareLists
-                    (List.map (MapEntry >> Located.unknown) (ValueMap.toList mapA))
-                    (List.map (MapEntry >> Located.unknown) (ValueMap.toList mapB))
-
-            _ ->
-                False
-
-
 isEqual : Callable io
 isEqual =
     let
@@ -452,10 +398,10 @@ isEqual =
             in
             case rest of
                 [] ->
-                    Ok (Bool (areEqualValues a b))
+                    Ok (Bool (Value.isEqual a b))
 
                 nextVal1 :: nextRest ->
-                    if areEqualValues a b then
+                    if Value.isEqual a b then
                         arity2 { args = ( b, nextVal1 ), rest = nextRest }
 
                     else

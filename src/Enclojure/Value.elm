@@ -6,6 +6,7 @@ module Enclojure.Value exposing
     , inspect
     , inspectLocated
     , int
+    , isEqual
     , keyword
     , list
     , map
@@ -326,7 +327,7 @@ inspect value =
         MapEntry ( k, v ) ->
             inspect (Vector (Array.fromList [ Located.unknown k, v ]))
 
-        Regex s r ->
+        Regex s _ ->
             "#" ++ s
 
         Set set ->
@@ -422,3 +423,57 @@ fn name callable =
 throwable : Exception -> Value io
 throwable =
     Throwable
+
+
+isEqual : Value io -> Value io -> Bool
+isEqual a b =
+    let
+        compareLists listA listB =
+            case ( listA, listB ) of
+                ( headA :: restA, headB :: restB ) ->
+                    if isEqual (Located.getValue headA) (Located.getValue headB) then
+                        compareLists restA restB
+
+                    else
+                        False
+
+                ( [], [] ) ->
+                    True
+
+                _ ->
+                    False
+    in
+    -- referential equality
+    if a == b then
+        True
+        -- different metadata
+
+    else
+        case ( a, b ) of
+            ( List listA, List listB ) ->
+                compareLists listA listB
+
+            ( MapEntry ( keyA, Located _ valA ), Vector vB ) ->
+                case Array.toList vB of
+                    [ Located _ keyB, Located _ valB ] ->
+                        isEqual keyA keyB && isEqual valA valB
+
+                    _ ->
+                        False
+
+            ( Vector _, MapEntry _ ) ->
+                isEqual b a
+
+            ( MapEntry ( keyA, Located _ valA ), MapEntry ( keyB, Located _ valB ) ) ->
+                isEqual keyA keyB && isEqual valA valB
+
+            ( Vector vectorA, Vector vectorB ) ->
+                compareLists (Array.toList vectorA) (Array.toList vectorB)
+
+            ( Map mapA, Map mapB ) ->
+                compareLists
+                    (List.map (MapEntry >> Located.unknown) (ValueMap.toList mapA))
+                    (List.map (MapEntry >> Located.unknown) (ValueMap.toList mapB))
+
+            _ ->
+                False
