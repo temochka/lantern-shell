@@ -17,6 +17,7 @@ module Enclojure.Value exposing
     , toMap
     , toSeq
     , toString
+    , tryAtom
     , tryDictOf
     , tryFloat
     , tryInt
@@ -25,6 +26,7 @@ module Enclojure.Value exposing
     , tryNil
     , tryOneOf
     , tryPatternOf2
+    , tryRef
     , tryRegex
     , trySequenceOf
     , tryString
@@ -38,7 +40,7 @@ import Array
 import Dict
 import Enclojure.Callable as Callable
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Callable, Exception(..), Number(..), Value(..))
+import Enclojure.Types exposing (Callable, Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import File exposing (decoder)
@@ -98,6 +100,26 @@ tryString value =
     case value of
         String s ->
             Just s
+
+        _ ->
+            Nothing
+
+
+tryRef : Value io -> Maybe (Ref io)
+tryRef value =
+    case value of
+        Ref ref ->
+            Just ref
+
+        _ ->
+            Nothing
+
+
+tryAtom : Value io -> Maybe Int
+tryAtom value =
+    case value of
+        Ref (Atom id) ->
+            Just id
 
         _ ->
             Nothing
@@ -285,8 +307,13 @@ inspectLocated locatedValue =
 inspect : Value io -> String
 inspect value =
     case value of
-        Ref name _ ->
-            "#'" ++ name
+        Ref ref ->
+            case ref of
+                Atom id ->
+                    "<atom " ++ String.fromInt id ++ ">"
+
+                Var name _ ->
+                    "#'" ++ name
 
         String s ->
             "\"" ++ s ++ "\""

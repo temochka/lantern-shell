@@ -654,13 +654,13 @@ runWatchFn env watchFn stateMap =
 defaultEnv : Env MyIO
 defaultEnv =
     Enclojure.defaultEnv
-        |> Runtime.setGlobalEnv "http/request"
+        |> Runtime.bindGlobal "http/request"
             (Value.fn (Just "http/request") http)
-        |> Runtime.setGlobalEnv "sleep"
+        |> Runtime.bindGlobal "sleep"
             (Value.fn (Just "sleep") sleep)
-        |> Runtime.setGlobalEnv "ui"
+        |> Runtime.bindGlobal "ui"
             (Value.fn (Just "ui") ui)
-        |> Runtime.setGlobalEnv "<o>"
+        |> Runtime.bindGlobal "<o>"
             (Value.fn (Just "<o>") savepoint)
 
 
@@ -1223,10 +1223,10 @@ viewConsole context interpreter console options =
                                 newEnv =
                                     case interpreter of
                                         Done _ cEnv ->
-                                            { cEnv | local = env.local }
+                                            { cEnv | lexicalScope = env.lexicalScope }
 
                                         Panic _ cEnv ->
-                                            { cEnv | local = env.local }
+                                            { cEnv | lexicalScope = env.lexicalScope }
 
                                         _ ->
                                             env

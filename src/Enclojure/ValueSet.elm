@@ -1,6 +1,6 @@
 module Enclojure.ValueSet exposing (ValueSet, empty, fromList, insert, isEmpty, map, member, remove, toList)
 
-import Enclojure.Types exposing (IO, Number(..), Value(..))
+import Enclojure.Types exposing (Number(..), Value(..))
 import Set
 
 
@@ -63,7 +63,7 @@ insert v (Enclojure.Types.ValueSet set) =
             String string ->
                 { set | strings = Set.insert string set.strings }
 
-            Ref _ _ ->
+            Ref _ ->
                 { set | refs = v :: set.refs }
 
             List list ->
@@ -127,7 +127,7 @@ remove v (Enclojure.Types.ValueSet set) =
             String string ->
                 { set | strings = Set.remove string set.strings }
 
-            Ref _ _ ->
+            Ref _ ->
                 let
                     newRefs =
                         set.refs |> List.filter ((/=) v)
@@ -287,7 +287,7 @@ member v (Enclojure.Types.ValueSet set) =
         String string ->
             Set.member string set.strings
 
-        Ref _ _ ->
+        Ref _ ->
             False
 
         List otherList ->

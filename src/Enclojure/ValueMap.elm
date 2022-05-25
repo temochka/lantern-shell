@@ -66,7 +66,7 @@ insert k v m =
         String string ->
             { m | strings = Dict.insert string v m.strings }
 
-        Ref _ _ ->
+        Ref _ ->
             { m | refs = ( k, v ) :: m.refs }
 
         List _ ->
@@ -129,7 +129,7 @@ remove k m =
         String string ->
             { m | strings = Dict.remove string m.strings }
 
-        Ref _ _ ->
+        Ref _ ->
             let
                 newRefs =
                     m.refs |> List.filter (Tuple.first >> (/=) k)
@@ -238,7 +238,7 @@ get k m =
         String string ->
             Dict.get string m.strings
 
-        Ref _ _ ->
+        Ref _ ->
             linearFind (Tuple.first >> (==) k) m.refs
                 |> Maybe.map Tuple.second
 

@@ -3,7 +3,7 @@ module Enclojure.Json exposing (decodeFromString, encodeToString)
 import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Types exposing (Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import Json.Decode
@@ -74,8 +74,13 @@ encode val =
         String s ->
             Json.Encode.string s
 
-        Ref _ (Located _ v) ->
-            encode v
+        Ref ref ->
+            case ref of
+                Var n _ ->
+                    Json.Encode.string ("#'" ++ n)
+
+                Atom _ ->
+                    Json.Encode.string "<atom>"
 
         Fn _ _ ->
             Json.Encode.null

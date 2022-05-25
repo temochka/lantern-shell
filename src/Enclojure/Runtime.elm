@@ -1,13 +1,16 @@
 module Enclojure.Runtime exposing
-    ( apply
+    ( addAtom
+    , apply
+    , bindGlobal
+    , bindLexical
     , const
+    , deref
     , emptyEnv
     , fetchEnv
     , isTruthy
     , prettyTrace
+    , resetAtom
     , setCurrentStackFrameLocation
-    , setGlobalEnv
-    , setLocalEnv
     , sideEffect
     , throw
     , toFunction
@@ -25,6 +28,7 @@ import Enclojure.Types as Types
         , Exception(..)
         , IO(..)
         , Number(..)
+        , Ref(..)
         , Step
         , Thunk(..)
         , Value(..)
@@ -41,25 +45,57 @@ emptyCallable =
 
 emptyEnv : Env io
 emptyEnv =
-    { global = Dict.empty
-    , local = Dict.empty
+    { globalScope = Dict.empty
+    , lexicalScope = Dict.empty
+    , atoms = Dict.empty
+    , atomIdGenerator = 0
     , stack = [ { name = "user", location = Located.Unknown } ]
     }
 
 
-setLocalEnv : String -> Value io -> Env io -> Env io
-setLocalEnv key value env =
-    { env | local = Dict.insert key value env.local }
+bindLexical : String -> Value io -> Env io -> Env io
+bindLexical key value env =
+    { env | lexicalScope = Dict.insert key value env.lexicalScope }
 
 
-setGlobalEnv : String -> Value io -> Env io -> Env io
-setGlobalEnv key value env =
-    { env | global = Dict.insert key value env.global }
+bindGlobal : String -> Value io -> Env io -> Env io
+bindGlobal key value env =
+    { env | globalScope = Dict.insert key value env.globalScope }
+
+
+addAtom : Value io -> Env io -> ( Env io, Int )
+addAtom val env =
+    let
+        atomId =
+            env.atomIdGenerator
+
+        newEnv =
+            { env
+                | atoms = Dict.insert atomId val env.atoms
+                , atomIdGenerator = atomId + 1
+            }
+    in
+    ( newEnv, atomId )
 
 
 fetchEnv : String -> Dict.Dict String (Value io) -> Maybe (Value io)
 fetchEnv =
     Dict.get
+
+
+deref : Ref io -> Env io -> Value io
+deref ref env =
+    case ref of
+        Var _ value ->
+            value
+
+        Atom atomId ->
+            Dict.get atomId env.atoms |> Maybe.withDefault Nil
+
+
+resetAtom : Int -> Value io -> Env io -> Env io
+resetAtom atomId val env =
+    { env | atoms = Dict.insert atomId val env.atoms }
 
 
 isTruthy : Value io -> Bool

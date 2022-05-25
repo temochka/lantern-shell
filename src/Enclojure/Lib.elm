@@ -14,6 +14,7 @@ import Enclojure.Types
         , Exception(..)
         , IO(..)
         , Number(..)
+        , Ref(..)
         , Thunk(..)
         , Value(..)
         )
@@ -43,9 +44,11 @@ init env =
     , ( "<=", isLessThanOrEqual )
     , ( "apply", apply )
     , ( "assoc", assoc )
+    , ( "atom", atom )
     , ( "conj", conj )
     , ( "cons", cons )
     , ( "contains?", contains )
+    , ( "deref", deref )
     , ( "dissoc", dissoc )
     , ( "first", first )
     , ( "float?", isFloat )
@@ -64,18 +67,113 @@ init env =
     , ( "re-find", reFind )
     , ( "re-matches", reMatches )
     , ( "re-seq", reSeq )
+    , ( "reset!", reset )
     , ( "rest", rest_ )
     , ( "second", second )
     , ( "seq", seq )
     , ( "str", str )
+    , ( "swap!", swap )
     , ( "throw", throw )
     , ( "val", val_ )
     ]
         |> List.foldl
             (\( name, fn ) aEnv ->
-                Runtime.setGlobalEnv name (Fn (Just name) (Callable.toThunk fn)) aEnv
+                Runtime.bindGlobal name (Fn (Just name) (Callable.toThunk fn)) aEnv
             )
             env
+
+
+atom : Callable io
+atom =
+    let
+        arity1 v env k =
+            let
+                ( newEnv, atomId ) =
+                    Runtime.addAtom v env
+            in
+            ( Ok ( Const (Ref (Atom atomId)), newEnv ), Just (Thunk k) )
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed arity1
+    }
+
+
+deref : Callable io
+deref =
+    let
+        arity1 v env k =
+            Value.tryRef v
+                |> Maybe.map
+                    (\ref ->
+                        ( Ok ( Const (Runtime.deref ref env), env ), Just (Thunk k) )
+                    )
+                |> Maybe.withDefault
+                    ( Err ( Value.exception "type error: deref expects a ref as its argument", env )
+                    , Just (Thunk k)
+                    )
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed arity1
+    }
+
+
+reset : Callable io
+reset =
+    let
+        arity2 ( refVal, valVal ) env k =
+            case Value.tryAtom refVal of
+                Just atomId ->
+                    ( Ok ( Const valVal, env |> Runtime.resetAtom atomId valVal )
+                    , Just (Thunk k)
+                    )
+
+                Nothing ->
+                    ( Err ( Value.exception "type error: reset! expects an atom as its first argument", env )
+                    , Just (Thunk k)
+                    )
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed arity2
+    }
+
+
+swap : Callable io
+swap =
+    let
+        arity2 arity env k =
+            let
+                ( refVal, fnVal ) =
+                    arity.args
+
+                fnArgs =
+                    arity.rest
+            in
+            case Value.tryAtom refVal of
+                Just atomId ->
+                    let
+                        atomValue =
+                            Runtime.deref (Atom atomId) env
+                    in
+                    Runtime.apply
+                        (Located.unknown fnVal)
+                        (Located.unknown (Value.list (atomValue :: fnArgs)))
+                        env
+                        (\(Located loc retVal) retEnv ->
+                            Located loc
+                                ( Ok ( Const retVal, retEnv |> Runtime.resetAtom atomId retVal )
+                                , Just (Thunk k)
+                                )
+                        )
+                        |> Located.getValue
+
+                Nothing ->
+                    ( Err ( Value.exception "type error: swap! expects an atom as its first argument", env )
+                    , Just (Thunk k)
+                    )
+    in
+    { emptyCallable
+        | arity2 = Just <| Variadic arity2
+    }
 
 
 jsonEncode : Callable io

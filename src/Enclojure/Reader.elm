@@ -89,6 +89,8 @@ isAllowedSymbolSpecialChar c =
         == '$'
         || c
         == '_'
+        || c
+        == '!'
 
 
 symbolLike : Parser String

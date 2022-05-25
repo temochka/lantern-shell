@@ -4,7 +4,7 @@ import Array
 import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Types exposing (Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Expect
@@ -489,6 +489,8 @@ suite =
             , "(assoc-in [] [1 1 2] 42)" |> (expectException <| "index out of bounds")
             , "(= (assoc-in {:foo {} :bar 42} [:foo :buz] 3) {:foo {:buz 3} :bar 42})" |> (expectValue <| Bool True)
             ]
+        , describe "atom"
+            [ "(atom {})" |> (expectValue <| Ref <| Atom 0) ]
         , describe "concat"
             [ "(= (concat [1] [2 3] [4]) (list 1 2 3 4))" |> (expectValue <| Bool True)
             , "(= (concat [1 2 3] nil nil [4 5]) (list 1 2 3 4 5))" |> (expectValue <| Bool True)
@@ -545,6 +547,15 @@ suite =
             , "(= (dedupe [1 2 3 4 5]) (list 1 2 3 4 5))" |> (expectValue <| Bool True)
             , "(= (dedupe [1 1 1 1 1]) (list 1))" |> (expectValue <| Bool True)
             , "(= (dedupe [1 1 1 2 2]) (list 1 2))" |> (expectValue <| Bool True)
+            ]
+        , describe "deref"
+            [ "(deref (atom 42))" |> (expectValue <| Number <| Int 42)
+            , """
+              (def a (atom 0))
+              (let [b a
+                    a (atom 3)]
+                (+ (deref a) (deref b)))
+              """ |> (expectValue <| Number <| Int 3)
             ]
         , describe "drop"
             [ "(drop 0 [])" |> (expectValue <| List [])
@@ -831,6 +842,14 @@ suite =
             ]
         , describe "re-seq"
             [ "(= (re-seq #\"\\d\" \"01234\") (list \"0\" \"1\" \"2\" \"3\" \"4\"))" |> (expectValue <| Bool True) ]
+        , describe "reset!"
+            [ "(reset! (atom 42) 0)" |> (expectValue <| Number <| Int 0)
+            , """
+              (def a (atom 43))
+              (reset! a 42)
+              (deref a)
+              """ |> (expectValue <| Number <| Int 42)
+            ]
         , describe "rest"
             [ "(= (rest (list 1 2 3)) (list 2 3))" |> (expectValue <| Bool True)
             , "(= (rest [1 2 3]) (list 2 3))" |> (expectValue <| Bool True)
@@ -974,6 +993,20 @@ suite =
         , describe "string/upper-case"
             [ "(string/upper-case \"FOO\")" |> (expectValue <| String "FOO")
             , "(string/upper-case \"baR\")" |> (expectValue <| String "BAR")
+            ]
+        , describe "swap!"
+            [ "(swap! (atom 42) inc)" |> (expectValue <| Number <| Int 43)
+            , "(swap! (atom 42) - 2)" |> (expectValue <| Number <| Int 40)
+            , """
+              (def a (atom 0))
+              (def b a)
+              (def c (atom 2))
+
+              (swap! a inc)
+              (swap! b inc)
+              (swap! c inc)
+              (and (= (deref a) 2) (= (deref b) 2) (= (deref c) 3)))
+              """ |> (expectValue <| Bool True)
             ]
         , describe "take"
             [ "(take 0 [])" |> (expectValue <| List [])

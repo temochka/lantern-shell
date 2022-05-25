@@ -22,7 +22,7 @@ import Enclojure.Lib.String as LibString
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Reader
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Continuation, Env, Exception(..), IO(..), Number(..), Thunk(..), Value(..))
+import Enclojure.Types exposing (Continuation, Env, Exception(..), IO(..), Number(..), Ref(..), Thunk(..), Value(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet exposing (ValueSet)
@@ -43,8 +43,8 @@ type alias IO io =
 
 resolveSymbol : Env io -> String -> Result Exception (Value io)
 resolveSymbol env symbol =
-    Runtime.fetchEnv symbol env.local
-        |> orElse (\_ -> Runtime.fetchEnv symbol env.global)
+    Runtime.fetchEnv symbol env.lexicalScope
+        |> orElse (\_ -> Runtime.fetchEnv symbol env.globalScope)
         |> Result.fromMaybe (Value.exception ("Unknown symbol " ++ symbol) |> Runtime.throw env)
 
 
@@ -109,7 +109,7 @@ evalExpression mutableExpr mutableEnv mutableK =
                 Bool _ ->
                     Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
-                Ref _ _ ->
+                Ref _ ->
                     Located loc ( Ok ( Const expr, env ), Just (Thunk k) )
 
                 Regex _ _ ->
@@ -481,7 +481,7 @@ bindArgs (Located loc argsExpr) bindings env =
         List args ->
             mapArgs args bindings
                 |> Result.map
-                    (List.foldl (\( k, v ) aEnv -> Runtime.setLocalEnv k v aEnv) env)
+                    (List.foldl (\( k, v ) aEnv -> Runtime.bindLexical k v aEnv) env)
 
         _ ->
             Err (Located loc (Exception "Interpreter error: applied arguments are not a list" []))
@@ -540,12 +540,12 @@ evalFn (Located loc exprs) fnEnv k =
                             (\args callsiteEnv ->
                                 let
                                     callEnvResult =
-                                        { callsiteEnv | local = fnEnv.local }
+                                        { callsiteEnv | lexicalScope = fnEnv.lexicalScope }
                                             |> (name
-                                                    |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self)
+                                                    |> Maybe.map (\n -> Runtime.bindLexical n fn.self)
                                                     |> Maybe.withDefault identity
                                                )
-                                            |> Runtime.setLocalEnv "recur" fn.self
+                                            |> Runtime.bindLexical "recur" fn.self
                                             |> bindArgs args (Array.toList argBindings)
                                 in
                                 case callEnvResult of
@@ -571,12 +571,12 @@ evalFn (Located loc exprs) fnEnv k =
                         (\args callsiteEnv ->
                             let
                                 callEnvBodyResult =
-                                    { callsiteEnv | local = fnEnv.local }
+                                    { callsiteEnv | lexicalScope = fnEnv.lexicalScope }
                                         |> (name
-                                                |> Maybe.map (\n -> Runtime.setLocalEnv n fn.self)
+                                                |> Maybe.map (\n -> Runtime.bindLexical n fn.self)
                                                 |> Maybe.withDefault identity
                                            )
-                                        |> Runtime.setLocalEnv "recur" fn.self
+                                        |> Runtime.bindLexical "recur" fn.self
                                         |> (\env ->
                                                 mapBindingsToBodies signatures
                                                     |> Result.andThen
@@ -619,7 +619,7 @@ evalFn (Located loc exprs) fnEnv k =
 scrubLocalEnv : Env io -> Continuation io -> Continuation io
 scrubLocalEnv priorEnv k =
     \v env ->
-        Located.sameAs v ( Ok ( Const <| Located.getValue v, { env | local = priorEnv.local } ), Just (Thunk k) )
+        Located.sameAs v ( Ok ( Const <| Located.getValue v, { env | lexicalScope = priorEnv.lexicalScope } ), Just (Thunk k) )
 
 
 evalLet : Located (List (Located (Value io))) -> Env io -> Continuation io -> Step io
@@ -663,7 +663,7 @@ evalLet (Located loc body) env k =
                                                                 Ok <|
                                                                     ( Const Nil
                                                                     , destructuredBindings
-                                                                        |> List.foldl (\( name, v ) -> Runtime.setLocalEnv name v) retEnv
+                                                                        |> List.foldl (\( name, v ) -> Runtime.bindLexical name v) retEnv
                                                                     )
                                                             )
                                                     , Just (Thunk a)
@@ -828,8 +828,8 @@ evalDef (Located loc args) env k =
                 (\eret eenv ->
                     Located loc
                         ( Ok
-                            ( Const (Ref name eret)
-                            , Runtime.setGlobalEnv name (Located.getValue eret) eenv
+                            ( Const (Ref (Var name (Located.getValue eret)))
+                            , Runtime.bindLexical name (Located.getValue eret) eenv
                             )
                         , Just (Thunk k)
                         )
