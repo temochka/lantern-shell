@@ -1033,6 +1033,18 @@ get =
                     else
                         Nothing
 
+                String s ->
+                    case key of
+                        Number (Int i) ->
+                            if i < String.length s then
+                                s |> String.slice i (i + 1) |> String |> Just
+
+                            else
+                                Nothing
+
+                        _ ->
+                            Nothing
+
                 Nil ->
                     Nothing
 

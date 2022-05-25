@@ -684,6 +684,8 @@ suite =
             , "(get #{} 0)" |> expectValue Nil
             , "(get #{} 0 :default)" |> (expectValue <| Keyword "default")
             , "(get #{0} 0 :default)" |> (expectValue <| Number <| Int 0)
+            , "(get \"str\" 2)" |> (expectValue <| String "r")
+            , "(get \"str\" 3)" |> expectValue Nil
             ]
         , describe "get-in"
             [ "(get-in nil [:a 0 :b])" |> expectValue Nil
