@@ -1460,4 +1460,8 @@ prelude =
 (defn min
   [x & rst]
   (reduce #(if (< %1 %2) %1 %2) x rst))
+
+(defn abs
+  [x]
+  (if (neg? x) (* -1 x) x))
 """

@@ -450,6 +450,12 @@ suite =
             ]
 
         -- functions
+        , describe "abs"
+            [ "(abs 1)" |> (expectValue <| Number <| Int 1)
+            , "(abs -1)" |> (expectValue <| Number <| Int 1)
+            , "(abs 1.0)" |> (expectValue <| Number <| Float 1.0)
+            , "(abs -1.0)" |> (expectValue <| Number <| Float 1.0)
+            ]
         , describe "apply"
             [ "(apply + [])" |> (expectValue <| Number <| Int 0)
             , "(apply + [1])" |> (expectValue <| Number <| Int 1)
