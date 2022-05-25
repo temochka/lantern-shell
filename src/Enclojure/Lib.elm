@@ -67,6 +67,7 @@ init env =
     , ( "re-find", reFind )
     , ( "re-matches", reMatches )
     , ( "re-seq", reSeq )
+    , ( "reset!", reset )
     , ( "rest", rest_ )
     , ( "second", second )
     , ( "seq", seq )
@@ -113,6 +114,26 @@ deref =
     in
     { emptyCallable
         | arity1 = Just <| Fixed arity1
+    }
+
+
+reset : Callable io
+reset =
+    let
+        arity2 ( refVal, valVal ) env k =
+            case Value.tryAtom refVal of
+                Just atomId ->
+                    ( Ok ( Const valVal, env |> Runtime.resetAtom atomId valVal )
+                    , Just (Thunk k)
+                    )
+
+                Nothing ->
+                    ( Err ( Value.exception "type error: reset! expects an atom as its first argument", env )
+                    , Just (Thunk k)
+                    )
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed arity2
     }
 
 
