@@ -612,6 +612,13 @@ suite =
             , "(every? odd? [1 3 5])" |> (expectValue <| Bool True)
             , "(every? odd? [1 3 6])" |> (expectValue <| Bool False)
             ]
+        , describe "not-every?"
+            [ "(not-every? odd? nil)" |> (expectValue <| Bool False)
+            , "(not-every? odd? [])" |> (expectValue <| Bool False)
+            , "(not-every? (comp integer? key) {1 2 3 4 5 6})" |> (expectValue <| Bool False)
+            , "(not-every? odd? [1 3 5])" |> (expectValue <| Bool False)
+            , "(not-every? odd? [1 3 6])" |> (expectValue <| Bool True)
+            ]
         , describe "filter"
             [ "(filter pos? nil)" |> (expectValue <| List [])
             , "(= (filter odd? [1 2 3 4 5]) (list 1 3 5))" |> (expectValue <| Bool True)

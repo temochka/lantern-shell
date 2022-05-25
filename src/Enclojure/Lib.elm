@@ -1505,6 +1505,10 @@ prelude =
       false)
     true))
 
+(defn not-every?
+  [pred coll]
+  (not (every? pred coll)))
+
 (defn repeat [n x]
   (if (pos? n)
     (cons x (repeat (dec n) x))
