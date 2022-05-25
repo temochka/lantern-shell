@@ -563,6 +563,11 @@ suite =
                 (+ (deref a) (deref b)))
               """ |> (expectValue <| Number <| Int 3)
             ]
+        , describe "distinct?"
+            [ "(distinct? 1)" |> expectValue (Bool True)
+            , "(distinct? 1 2 3)" |> expectValue (Bool True)
+            , "(distinct? 1 2 3 3)" |> expectValue (Bool False)
+            ]
         , describe "drop"
             [ "(drop 0 [])" |> (expectValue <| List [])
             , "(drop 0 nil)" |> (expectValue <| List [])
@@ -618,6 +623,10 @@ suite =
             , "(not-every? (comp integer? key) {1 2 3 4 5 6})" |> (expectValue <| Bool False)
             , "(not-every? odd? [1 3 5])" |> (expectValue <| Bool False)
             , "(not-every? odd? [1 3 6])" |> (expectValue <| Bool True)
+            ]
+        , describe "false?"
+            [ "(false? true)" |> (expectValue <| Bool False)
+            , "(false? false)" |> (expectValue <| Bool True)
             ]
         , describe "filter"
             [ "(filter pos? nil)" |> (expectValue <| List [])
@@ -985,6 +994,10 @@ suite =
             , "(some pos? [0])" |> expectValue Nil
             , "(some #{5 4} [0 1 2 5])" |> (expectValue <| Number <| Int 5)
             ]
+        , describe "some?"
+            [ "(some? nil)" |> expectValue (Bool False)
+            , "(some? 42)" |> expectValue (Bool True)
+            ]
         , describe "str"
             [ "(str)" |> (expectValue <| String "")
             , "(str 42)" |> (expectValue <| String "42")
@@ -1133,6 +1146,10 @@ suite =
         , describe "throw"
             [ "(throw (Exception. \"hi\"))" |> (expectException <| "hi")
             , "(throw nil)" |> (expectException <| "nil is not throwable")
+            ]
+        , describe "true?"
+            [ "(true? true)" |> (expectValue <| Bool True)
+            , "(true? false)" |> (expectValue <| Bool False)
             ]
         , describe "update"
             [ "(= (update nil :foo assoc :bar 2) {:foo {:bar 2}})" |> (expectValue <| Bool True)

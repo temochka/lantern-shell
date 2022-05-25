@@ -1699,6 +1699,22 @@ prelude =
   [x]
   (= nil x))
 
+(defn true?
+  [x]
+  (= true x))
+
+(defn false?
+  [x]
+  (= false x))
+
+(defn some?
+  [x]
+  (not= nil x))
+
+(defn distinct?
+  [x & args]
+  (= (inc (count args)) (count (into #{x} args))))
+
 (defn max
   [x & rst]
   (reduce #(if (< %1 %2) %2 %1) x rst))
