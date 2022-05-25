@@ -815,6 +815,19 @@ suite =
             , "(not nil)" |> (expectValue <| Bool True)
             , "(not 42)" |> (expectValue <| Bool False)
             ]
+        , describe "not-empty"
+            [ "(not-empty \"str\")" |> (expectValue <| String "str")
+            , "(not-empty \"\")" |> expectValue Nil
+            , "(= (not-empty [1]) [1])" |> (expectValue <| Bool True)
+            , "(not-empty [])" |> expectValue Nil
+            , "(= (not-empty #{1}) #{1})" |> (expectValue <| Bool True)
+            , "(not-empty #{})" |> expectValue Nil
+            , "(= (not-empty (list 1)) (list 1))" |> (expectValue <| Bool True)
+            , "(not-empty (list))" |> expectValue Nil
+            , "(= (not-empty {1 2}) {1 2})" |> (expectValue <| Bool True)
+            , "(not-empty {})" |> expectValue Nil
+            , "(not-empty nil)" |> expectValue Nil
+            ]
         , describe "number?"
             [ "(number? 42)" |> (expectValue <| Bool True)
             , "(number? 42.5)" |> (expectValue <| Bool True)

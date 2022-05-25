@@ -1617,4 +1617,9 @@ prelude =
 (defn abs
   [x]
   (if (neg? x) (* -1 x) x))
+
+(defn not-empty
+  [coll]
+  (when (seq coll) coll))
+
 """
