@@ -608,6 +608,10 @@ suite =
             [ "(filter pos? nil)" |> (expectValue <| List [])
             , "(= (filter odd? [1 2 3 4 5]) (list 1 3 5))" |> (expectValue <| Bool True)
             ]
+        , describe "float"
+            [ "(float 1.0)" |> (expectValue <| Number <| Float 1.0)
+            , "(float 1)" |> (expectValue <| Number <| Float 1.0)
+            ]
         , describe "fnil"
             [ "((fnil inc 0) nil)" |> (expectValue <| Number <| Int 1) ]
         , describe "identity"
@@ -615,6 +619,10 @@ suite =
         , describe "inc"
             [ "(inc 0)" |> (expectValue <| Number <| Int 1)
             , "(inc -1)" |> (expectValue <| Number <| Int 0)
+            ]
+        , describe "int"
+            [ "(int 1)" |> (expectValue <| Number <| Int 1)
+            , "(int 42.0)" |> (expectValue <| Number <| Int 42)
             ]
         , describe "into"
             [ "(= (into [] (list 1 2 3 4)) [1 2 3 4])" |> (expectValue <| Bool True)

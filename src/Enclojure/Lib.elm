@@ -51,10 +51,13 @@ init env =
     , ( "deref", deref )
     , ( "dissoc", dissoc )
     , ( "first", first )
+    , ( "float", toFloat_ )
     , ( "float?", isFloat )
     , ( "get", get )
     , ( "json/encode", jsonEncode )
     , ( "json/decode", jsonDecode )
+    , ( "int", toInt )
+    , ( "int?", isInteger )
     , ( "integer?", isInteger )
     , ( "key", key_ )
     , ( "list", list )
@@ -1239,6 +1242,44 @@ reMatches =
     in
     { emptyCallable
         | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+    }
+
+
+toInt : Callable io
+toInt =
+    let
+        arity1 xVal =
+            case xVal of
+                Number (Float x) ->
+                    x |> floor |> Int |> Number |> Const |> Ok
+
+                Number (Int _) ->
+                    xVal |> Const |> Ok
+
+                _ ->
+                    Err (Value.exception "type error: int expects a numeric argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+toFloat_ : Callable io
+toFloat_ =
+    let
+        arity1 xVal =
+            case xVal of
+                Number (Float _) ->
+                    xVal |> Const |> Ok
+
+                Number (Int x) ->
+                    x |> toFloat |> Float |> Number |> Const |> Ok
+
+                _ ->
+                    Err (Value.exception "type error: float expects a numeric argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
     }
 
 
