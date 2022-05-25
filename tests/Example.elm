@@ -822,6 +822,17 @@ suite =
             , "(not nil)" |> (expectValue <| Bool True)
             , "(not 42)" |> (expectValue <| Bool False)
             ]
+        , describe "not-any?"
+            [ "(not-any? nil nil)" |> expectValue (Bool True)
+            , "(not-any? pos? nil)" |> expectValue (Bool True)
+            , "(not-any? pos? [])" |> expectValue (Bool True)
+            , "(not-any? pos? ())" |> expectValue (Bool True)
+            , "(not-any? pos? {})" |> expectValue (Bool True)
+            , "(not-any? pos? #{})" |> expectValue (Bool True)
+            , "(not-any? pos? [0 2])" |> (expectValue <| Bool False)
+            , "(not-any? pos? [0])" |> expectValue (Bool True)
+            , "(not-any? #{5 4} [0 1 2 5])" |> (expectValue <| Bool False)
+            ]
         , describe "not-empty"
             [ "(not-empty \"str\")" |> (expectValue <| String "str")
             , "(not-empty \"\")" |> expectValue Nil

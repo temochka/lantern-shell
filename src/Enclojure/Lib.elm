@@ -1509,6 +1509,10 @@ prelude =
   [pred coll]
   (not (every? pred coll)))
 
+(defn not-any?
+  [pred coll]
+  (not (some pred coll)))
+
 (defn repeat [n x]
   (if (pos? n)
     (cons x (repeat (dec n) x))
