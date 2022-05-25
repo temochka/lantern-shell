@@ -61,6 +61,7 @@ init env =
     , ( "int?", isInteger )
     , ( "integer?", isInteger )
     , ( "key", key_ )
+    , ( "keyword?", isKeyword )
     , ( "list", list )
     , ( "Exception.", newException )
     , ( "not", not_ )
@@ -76,6 +77,7 @@ init env =
     , ( "second", second )
     , ( "seq", seq )
     , ( "str", str )
+    , ( "symbol?", isSymbol )
     , ( "swap!", swap )
     , ( "throw", throw )
     , ( "val", val_ )
@@ -540,6 +542,40 @@ isNotEqual =
     { emptyCallable
         | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
         , arity2 = Just (Variadic (toArityFunction (arity2 >> Result.map Const)))
+    }
+
+
+isSymbol : Callable io
+isSymbol =
+    let
+        arity1 v =
+            v
+                |> Value.trySymbol
+                |> Maybe.map (always True)
+                |> Maybe.withDefault False
+                |> Bool
+                |> Const
+                |> Ok
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+isKeyword : Callable io
+isKeyword =
+    let
+        arity1 v =
+            v
+                |> Value.tryKeyword
+                |> Maybe.map (always True)
+                |> Maybe.withDefault False
+                |> Bool
+                |> Const
+                |> Ok
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
     }
 
 

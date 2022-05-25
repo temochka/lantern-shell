@@ -735,6 +735,10 @@ suite =
             ]
         , describe "key"
             [ "(key (first {1 2}))" |> (expectValue <| Number <| Int 1) ]
+        , describe "keyword?"
+            [ "(keyword? 'keyword)" |> (expectValue <| Bool <| False)
+            , "(keyword? :keyword)" |> (expectValue <| Bool <| True)
+            ]
         , describe "last"
             [ "(last nil)" |> expectValue Nil
             , "(last [])" |> expectValue Nil
@@ -1048,6 +1052,10 @@ suite =
               (swap! c inc)
               (and (= (deref a) 2) (= (deref b) 2) (= (deref c) 3)))
               """ |> (expectValue <| Bool True)
+            ]
+        , describe "symbol?"
+            [ "(symbol? 'symbol)" |> (expectValue <| Bool <| True)
+            , "(symbol? :symbol)" |> (expectValue <| Bool <| False)
             ]
         , describe "take"
             [ "(take 0 [])" |> (expectValue <| List [])
