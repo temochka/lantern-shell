@@ -51,6 +51,7 @@ init env =
     , ( "count", count )
     , ( "deref", deref )
     , ( "dissoc", dissoc )
+    , ( "Exception.", newException )
     , ( "empty", empty )
     , ( "first", first )
     , ( "float", toFloat_ )
@@ -64,7 +65,8 @@ init env =
     , ( "key", key_ )
     , ( "keyword?", isKeyword )
     , ( "list", list )
-    , ( "Exception.", newException )
+    , ( "list?", isList )
+    , ( "map?", isMap )
     , ( "not", not_ )
     , ( "number?", isNumber )
     , ( "peek", peek )
@@ -77,11 +79,13 @@ init env =
     , ( "rest", rest_ )
     , ( "second", second )
     , ( "seq", seq )
+    , ( "set?", isSet )
     , ( "str", str )
     , ( "symbol?", isSymbol )
     , ( "swap!", swap )
     , ( "throw", throw )
     , ( "val", val_ )
+    , ( "vector?", isVector )
     ]
         |> List.foldl
             (\( name, fn ) aEnv ->
@@ -574,6 +578,70 @@ isKeyword =
                 |> Bool
                 |> Const
                 |> Ok
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+isList : Callable io
+isList =
+    let
+        arity1 v =
+            case v of
+                List _ ->
+                    Bool True |> Const |> Ok
+
+                _ ->
+                    Bool False |> Const |> Ok
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+isVector : Callable io
+isVector =
+    let
+        arity1 v =
+            case v of
+                Vector _ ->
+                    Bool True |> Const |> Ok
+
+                _ ->
+                    Bool False |> Const |> Ok
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+isSet : Callable io
+isSet =
+    let
+        arity1 v =
+            case v of
+                Set _ ->
+                    Bool True |> Const |> Ok
+
+                _ ->
+                    Bool False |> Const |> Ok
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+isMap : Callable io
+isMap =
+    let
+        arity1 v =
+            case v of
+                Map _ ->
+                    Bool True |> Const |> Ok
+
+                _ ->
+                    Bool False |> Const |> Ok
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| Callable.toArityFunction arity1

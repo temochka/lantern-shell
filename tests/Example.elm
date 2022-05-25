@@ -766,6 +766,10 @@ suite =
             [ "(list nil nil)" |> (expectValue <| List [ Located.unknown Nil, Located.unknown Nil ])
             , "(list)" |> (expectValue <| List [])
             ]
+        , describe "list?"
+            [ "(list? (list))" |> (expectValue <| Bool True)
+            , "(list? [])" |> (expectValue <| Bool False)
+            ]
         , describe "mod"
             [ "(mod 5 2)" |> (expectValue <| Number <| Int 1)
             , "(mod 7 -2)" |> (expectValue <| Number <| Int -1)
@@ -777,6 +781,10 @@ suite =
             [ "(map inc nil)" |> (expectValue <| List [])
             , "(= (map inc [1 2 3]) (list 2 3 4))" |> (expectValue <| Bool True)
             , "(= (map #(key %) {1 2}) (list 1))" |> (expectValue <| Bool True)
+            ]
+        , describe "map?"
+            [ "(map? {})" |> expectValue (Bool True)
+            , "(map? [])" |> expectValue (Bool False)
             ]
         , describe "mapcat"
             [ "(= (mapcat (fn [i] [i i]) [1 2 3]) (list 1 1 2 2 3 3))" |> (expectValue <| Bool True)
@@ -958,6 +966,10 @@ suite =
             , "(= (seq {1 2}) (list [1 2]))" |> (expectValue <| Bool True)
             , "(= (seq #{1}) (list 1))" |> (expectValue <| Bool True)
             ]
+        , describe "set?"
+            [ "(set? #{})" |> expectValue (Bool True)
+            , "(set? [])" |> expectValue (Bool False)
+            ]
         , describe "some"
             [ "(some nil nil)" |> expectValue Nil
             , "(some pos? nil)" |> expectValue Nil
@@ -1132,6 +1144,10 @@ suite =
             ]
         , describe "val"
             [ "(val (first {1 2}))" |> (expectValue <| Number <| Int 2)
+            ]
+        , describe "vector?"
+            [ "(vector? [])" |> (expectValue <| Bool True)
+            , "(vector? {})" |> (expectValue <| Bool False)
             ]
         , describe "zero?"
             [ "(zero? 3)" |> (expectValue <| Bool False)

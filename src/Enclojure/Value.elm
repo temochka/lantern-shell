@@ -22,6 +22,7 @@ module Enclojure.Value exposing
     , tryFloat
     , tryInt
     , tryKeyword
+    , tryListOf
     , tryMap
     , tryNil
     , tryOneOf
@@ -241,6 +242,18 @@ tryVectorOf extract value =
     case value of
         Vector v ->
             Array.toList v
+                |> List.map Located.getValue
+                |> extractAll extract
+
+        _ ->
+            Nothing
+
+
+tryListOf : (Value io -> Maybe a) -> Value io -> Maybe (List a)
+tryListOf extract value =
+    case value of
+        List l ->
+            l
                 |> List.map Located.getValue
                 |> extractAll extract
 
