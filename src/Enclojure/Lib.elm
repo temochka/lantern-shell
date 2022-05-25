@@ -1453,4 +1453,11 @@ prelude =
   [x]
   (= nil x))
 
+(defn max
+  [x & rst]
+  (reduce #(if (< %1 %2) %2 %1) x rst))
+
+(defn min
+  [x & rst]
+  (reduce #(if (< %1 %2) %1 %2) x rst))
 """

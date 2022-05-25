@@ -741,6 +741,16 @@ suite =
             ]
         , describe "map-indexed"
             [ "(= (map-indexed (fn [i e] [i e]) [1 2 3]) (list [0 1] [1 2] [2 3]))" |> (expectValue <| Bool True) ]
+        , describe "max"
+            [ "(max 1)" |> (expectValue <| Number <| Int 1)
+            , "(max 1 2)" |> (expectValue <| Number <| Int 2)
+            , "(max 3 1 2)" |> (expectValue <| Number <| Int 3)
+            ]
+        , describe "min"
+            [ "(min 1)" |> (expectValue <| Number <| Int 1)
+            , "(min 1 2)" |> (expectValue <| Number <| Int 1)
+            , "(min 3 1 2)" |> (expectValue <| Number <| Int 1)
+            ]
         , describe "neg?"
             [ "(neg? 3)" |> (expectValue <| Bool False)
             , "(neg? 0)" |> (expectValue <| Bool False)
