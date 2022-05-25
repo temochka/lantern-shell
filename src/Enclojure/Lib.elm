@@ -67,6 +67,7 @@ init env =
     , ( "list", list )
     , ( "list?", isList )
     , ( "map?", isMap )
+    , ( "map-entry?", isMapEntry )
     , ( "not", not_ )
     , ( "number?", isNumber )
     , ( "peek", peek )
@@ -638,6 +639,22 @@ isMap =
         arity1 v =
             case v of
                 Map _ ->
+                    Bool True |> Const |> Ok
+
+                _ ->
+                    Bool False |> Const |> Ok
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+isMapEntry : Callable io
+isMapEntry =
+    let
+        arity1 v =
+            case v of
+                MapEntry _ ->
                     Bool True |> Const |> Ok
 
                 _ ->

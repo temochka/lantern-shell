@@ -786,6 +786,10 @@ suite =
             [ "(map? {})" |> expectValue (Bool True)
             , "(map? [])" |> expectValue (Bool False)
             ]
+        , describe "map-entry?"
+            [ "(map-entry? (first {1 2}))" |> expectValue (Bool True)
+            , "(map-entry? [])" |> expectValue (Bool False)
+            ]
         , describe "mapcat"
             [ "(= (mapcat (fn [i] [i i]) [1 2 3]) (list 1 1 2 2 3 3))" |> (expectValue <| Bool True)
             , "(= (mapcat identity [[1 2] nil [3 4]]) (list 1 2 3 4))" |> (expectValue <| Bool True)
