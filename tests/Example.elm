@@ -635,6 +635,14 @@ suite =
             , "((comp inc inc dec) 3)" |> (expectValue <| Number <| Int 4)
             , "((comp #(* 2 %) inc #(* 3 %)) 3)" |> (expectValue <| Number <| Int 20)
             ]
+        , describe "count"
+            [ "(count nil)" |> (expectValue <| Number <| Int 0)
+            , "(count [1 2 3])" |> (expectValue <| Number <| Int 3)
+            , "(count (list 1 2 3 4))" |> (expectValue <| Number <| Int 4)
+            , "(count {1 2 3 4})" |> (expectValue <| Number <| Int 2)
+            , "(count #{1 2 3 4 5})" |> (expectValue <| Number <| Int 5)
+            , "(count \"123456\")" |> (expectValue <| Number <| Int 6)
+            ]
         , describe "dissoc"
             [ "(dissoc {:a 42} :a)" |> (expectValue <| Map ValueMap.empty)
             , "(dissoc {:a nil} :b)"

@@ -48,6 +48,7 @@ init env =
     , ( "conj", conj )
     , ( "cons", cons )
     , ( "contains?", contains )
+    , ( "count", count )
     , ( "deref", deref )
     , ( "dissoc", dissoc )
     , ( "first", first )
@@ -1277,6 +1278,37 @@ toFloat_ =
 
                 _ ->
                     Err (Value.exception "type error: float expects a numeric argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+count : Callable io
+count =
+    let
+        arity1 collVal =
+            case collVal of
+                Vector array ->
+                    Array.length array |> Int |> Number |> Const |> Ok
+
+                List l ->
+                    List.length l |> Int |> Number |> Const |> Ok
+
+                String string ->
+                    String.length string |> Int |> Number |> Const |> Ok
+
+                Map valueMap ->
+                    valueMap |> ValueMap.toList |> List.length |> Int |> Number |> Const |> Ok
+
+                Set valueSet ->
+                    valueSet |> ValueSet.toList |> List.length |> Int |> Number |> Const |> Ok
+
+                Nil ->
+                    Int 0 |> Number |> Const |> Ok
+
+                _ ->
+                    Err (Value.exception "type error: count expects a collection or a string")
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
