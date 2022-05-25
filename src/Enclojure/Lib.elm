@@ -51,6 +51,7 @@ init env =
     , ( "count", count )
     , ( "deref", deref )
     , ( "dissoc", dissoc )
+    , ( "empty", empty )
     , ( "first", first )
     , ( "float", toFloat_ )
     , ( "float?", isFloat )
@@ -1357,6 +1358,37 @@ count =
 
                 _ ->
                     Err (Value.exception "type error: count expects a collection or a string")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+empty : Callable io
+empty =
+    let
+        arity1 collVal =
+            case collVal of
+                List _ ->
+                    List [] |> Const |> Ok
+
+                Vector _ ->
+                    Array.empty |> Vector |> Const |> Ok
+
+                Map _ ->
+                    ValueMap.empty |> Map |> Const |> Ok
+
+                Set _ ->
+                    ValueSet.empty |> Set |> Const |> Ok
+
+                String _ ->
+                    String "" |> Const |> Ok
+
+                Nil ->
+                    Const Nil |> Ok
+
+                _ ->
+                    Err (Value.exception "type error: empty expects a collection argument")
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| Callable.toArityFunction arity1

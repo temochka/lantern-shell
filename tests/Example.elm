@@ -581,6 +581,14 @@ suite =
             , "(= (drop-while odd? [2 3]) (list 2 3))" |> (expectValue <| Bool True)
             , "(= (drop-while even? [1 2 3]) (list 1 2 3))" |> (expectValue <| Bool True)
             ]
+        , describe "empty"
+            [ "(empty nil)" |> expectValue Nil
+            , "(empty [1 2])" |> expectValue (Vector Array.empty)
+            , "(empty (list 1 2 3))" |> expectValue (List [])
+            , "(empty {1 2})" |> expectValue (Map ValueMap.empty)
+            , "(empty #{1 2 3})" |> expectValue (Set ValueSet.empty)
+            , "(empty \"foo\")" |> expectValue (String "")
+            ]
         , describe "empty?"
             [ "(empty? nil)" |> (expectValue <| Bool True)
             , "(empty? [])" |> (expectValue <| Bool True)
