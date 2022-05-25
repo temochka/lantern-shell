@@ -994,6 +994,13 @@ suite =
             [ "(string/replace \"The color is red\" #\"red\" \"blue\")" |> (expectValue <| String "The color is blue")
             , "(string/replace \"The color is red\" \"red\" \"green\")" |> (expectValue <| String "The color is green")
             , "(string/replace \"GOD\" #\"(.)(.)(.)\" \"$3$2$1\")" |> (expectValue <| String "DOG")
+            , "(string/replace \"go-go-go-go\" #\"o\" \"a\")" |> (expectValue <| String "ga-ga-ga-ga")
+            ]
+        , describe "string/replace-first"
+            [ "(string/replace-first \"The color is red\" #\"red\" \"blue\")" |> (expectValue <| String "The color is blue")
+            , "(string/replace-first \"The color is red\" \"red\" \"green\")" |> (expectValue <| String "The color is green")
+            , "(string/replace-first \"GOD\" #\"(.)(.)(.)\" \"$3$2$1\")" |> (expectValue <| String "DOG")
+            , "(string/replace-first \"go-go-go-go\" #\"o\" \"a\")" |> (expectValue <| String "ga-go-go-go")
             ]
         , describe "string/reverse"
             [ "(string/reverse \"OOFOO\")" |> (expectValue <| String "OOFOO")

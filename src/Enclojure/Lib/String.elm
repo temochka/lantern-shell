@@ -25,6 +25,7 @@ init env =
     , ( "string/length", length )
     , ( "string/lower-case", lowerCase )
     , ( "string/replace", replace )
+    , ( "string/replace-first", replaceFirst )
     , ( "string/reverse", reverse )
     , ( "string/split-lines", splitLines )
     , ( "string/split", split )
@@ -310,6 +311,31 @@ replace =
                 )
                 (Value.tryString replacementValue)
                 |> Result.fromMaybe (Value.exception "type error: wrong argument types to replace")
+    in
+    { emptyCallable
+        | arity3 = Just <| Fixed <| Callable.toArityFunction arity3
+    }
+
+
+replaceFirst : Types.Callable io
+replaceFirst =
+    let
+        arity3 ( sValue, matchValue, replacementValue ) =
+            Maybe.map3
+                (\s replaceMatchFn replacement ->
+                    replaceMatchFn replacement s
+                        |> String
+                        |> Const
+                )
+                (Value.tryString sValue)
+                (Value.tryOneOf
+                    [ Value.tryString >> Maybe.map String.replace
+                    , Value.tryRegex >> Maybe.map (\regex -> \replacement -> Regex.replaceAtMost 1 regex (replaceMatch replacement))
+                    ]
+                    matchValue
+                )
+                (Value.tryString replacementValue)
+                |> Result.fromMaybe (Value.exception "type error: wrong argument types to replace-first")
     in
     { emptyCallable
         | arity3 = Just <| Fixed <| Callable.toArityFunction arity3
