@@ -1695,18 +1695,26 @@ prelude =
   ([m ks f & args]
    (assoc-in m ks (apply f (get-in m ks) args))))
 
-(defn -dedupe
+(defn dedupe
+  [coll]
+  (if (seq coll)
+    (let [el (first coll)
+          rst (drop-while #(= el %) (rest coll))]
+      (cons el (dedupe rst)))
+    ()))
+
+(defn -distinct
   [seen coll]
   (if (seq coll)
     (let [el (first coll)]
       (if (contains? seen el)
-        (-dedupe seen (rest coll))
-        (cons el (-dedupe (conj seen el) (rest coll)))))
+        (-distinct seen (rest coll))
+        (cons el (-distinct (conj seen el) (rest coll)))))
     ()))
 
-(defn dedupe
+(defn distinct
   [coll]
-  (-dedupe #{} coll))
+  (-distinct #{} coll))
 
 (defn fnil
   [f default]

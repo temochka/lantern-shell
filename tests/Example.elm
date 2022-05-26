@@ -558,6 +558,7 @@ suite =
             , "(= (dedupe [1 2 3 4 5]) (list 1 2 3 4 5))" |> (expectValue <| Bool True)
             , "(= (dedupe [1 1 1 1 1]) (list 1))" |> (expectValue <| Bool True)
             , "(= (dedupe [1 1 1 2 2]) (list 1 2))" |> (expectValue <| Bool True)
+            , "(= (dedupe [1 1 1 2 2 1 1]) (list 1 2 1))" |> (expectValue <| Bool True)
             ]
         , describe "deref"
             [ "(deref (atom 42))" |> (expectValue <| Number <| Int 42)
@@ -567,6 +568,16 @@ suite =
                     a (atom 3)]
                 (+ (deref a) (deref b)))
               """ |> (expectValue <| Number <| Int 3)
+            ]
+        , describe "distinct"
+            [ "(= (distinct ()) ())" |> (expectValue <| Bool True)
+            , "(= (distinct []) ())" |> (expectValue <| Bool True)
+            , "(= (distinct #{}) ())" |> (expectValue <| Bool True)
+            , "(= (distinct {}) ())" |> (expectValue <| Bool True)
+            , "(= (distinct [1 2 3 4 5]) (list 1 2 3 4 5))" |> (expectValue <| Bool True)
+            , "(= (distinct [1 1 1 1 1]) (list 1))" |> (expectValue <| Bool True)
+            , "(= (distinct [1 1 1 2 2]) (list 1 2))" |> (expectValue <| Bool True)
+            , "(= (distinct [1 1 1 2 2 1 1]) (list 1 2))" |> (expectValue <| Bool True)
             ]
         , describe "distinct?"
             [ "(distinct? 1)" |> expectValue (Bool True)
