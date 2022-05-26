@@ -762,6 +762,10 @@ suite =
             , "(integer? \"42\")" |> (expectValue <| Bool False)
             , "(integer? nil)" |> (expectValue <| Bool False)
             ]
+        , describe "keep"
+            [ "(= (keep #{1 3 5} (range 10)) (list 1 3 5))" |> (expectValue <| Bool True) ]
+        , describe "keep-indexed"
+            [ "(= (keep-indexed #(when (< %1 %2) %2) (range 10 1 -1)) (list 10 9 8 7 6))" |> (expectValue <| Bool True) ]
         , describe "key"
             [ "(key (first {1 2}))" |> (expectValue <| Number <| Int 1) ]
         , describe "keys"

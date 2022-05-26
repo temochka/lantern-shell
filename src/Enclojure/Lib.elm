@@ -1779,4 +1779,23 @@ prelude =
            (and (< end start) (neg? step)))
     (cons start (range (+ step start) end step))
     ())))
+
+(defn keep [f coll]
+  (if (seq coll)
+    (let [el (first coll)]
+      (if-let [v (f el)]
+        (cons v (keep f (rest coll)))
+        (keep f (rest coll))))
+    (list)))
+
+(defn -keep-indexed [i f coll]
+  (if (seq coll)
+    (let [el (first coll)]
+      (if-let [v (f i el)]
+        (cons v (-keep-indexed (inc i) f (rest coll)))
+        (-keep-indexed (inc i) f (rest coll))))
+    (list)))
+
+(defn keep-indexed [f coll]
+  (-keep-indexed 0 f coll))
 """
