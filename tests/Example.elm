@@ -759,6 +759,9 @@ suite =
             ]
         , describe "key"
             [ "(key (first {1 2}))" |> (expectValue <| Number <| Int 1) ]
+        , describe "keys"
+            [ "(= (keys {1 2 3 4}) (list 1 3))" |> (expectValue <| Bool True)
+            ]
         , describe "keyword?"
             [ "(keyword? 'keyword)" |> (expectValue <| Bool <| False)
             , "(keyword? :keyword)" |> (expectValue <| Bool <| True)
@@ -1165,6 +1168,9 @@ suite =
             ]
         , describe "val"
             [ "(val (first {1 2}))" |> (expectValue <| Number <| Int 2)
+            ]
+        , describe "vals"
+            [ "(= (vals {1 2 3 4}) (list 2 4))" |> (expectValue <| Bool True)
             ]
         , describe "vector?"
             [ "(vector? [])" |> (expectValue <| Bool True)

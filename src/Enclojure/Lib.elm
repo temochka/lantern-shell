@@ -63,6 +63,7 @@ init env =
     , ( "int?", isInteger )
     , ( "integer?", isInteger )
     , ( "key", key_ )
+    , ( "keys", keys )
     , ( "keyword?", isKeyword )
     , ( "list", list )
     , ( "list?", isList )
@@ -86,6 +87,7 @@ init env =
     , ( "swap!", swap )
     , ( "throw", throw )
     , ( "val", val_ )
+    , ( "vals", vals )
     , ( "vector?", isVector )
     ]
         |> List.foldl
@@ -1268,12 +1270,12 @@ dissoc =
                 ( val, firstKey ) =
                     signature.args
 
-                keys =
+                dissocKeys =
                     firstKey :: signature.rest
             in
             case val of
                 Map m ->
-                    keys
+                    dissocKeys
                         |> List.foldr (\k a -> ValueMap.remove k a) m
                         |> Map
                         |> Ok
@@ -1474,6 +1476,34 @@ empty =
 
                 _ ->
                     Err (Value.exception "type error: empty expects a collection argument")
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+keys : Callable io
+keys =
+    let
+        arity1 mVal =
+            mVal
+                |> Value.tryMap
+                |> Result.fromMaybe (Value.exception "keys expects a single map argument")
+                |> Result.map (ValueMap.keys >> Value.list >> Const)
+    in
+    { emptyCallable
+        | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+vals : Callable io
+vals =
+    let
+        arity1 mVal =
+            mVal
+                |> Value.tryMap
+                |> Result.fromMaybe (Value.exception "vals expects a single map argument")
+                |> Result.map (ValueMap.values >> Value.list >> Const)
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| Callable.toArityFunction arity1

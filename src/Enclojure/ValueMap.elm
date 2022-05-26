@@ -1,7 +1,22 @@
-module Enclojure.ValueMap exposing (ValueMap, ValueMapEntry, empty, foldl, fromList, get, insert, isEmpty, map, member, remove, toList)
+module Enclojure.ValueMap exposing
+    ( ValueMap
+    , ValueMapEntry
+    , empty
+    , foldl
+    , fromList
+    , get
+    , insert
+    , isEmpty
+    , keys
+    , map
+    , member
+    , remove
+    , toList
+    , values
+    )
 
 import Dict
-import Enclojure.Located exposing (Located(..))
+import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Types exposing (Number(..), Value(..))
 
 
@@ -354,3 +369,13 @@ fromList entries =
 map : (ValueMapEntry io -> ValueMapEntry io) -> ValueMap io -> ValueMap io
 map f m =
     m |> toList |> List.map f |> fromList
+
+
+values : ValueMap io -> List (Value io)
+values m =
+    m |> toList |> List.map (Tuple.second >> Located.getValue)
+
+
+keys : ValueMap io -> List (Value io)
+keys m =
+    m |> toList |> List.map Tuple.first
