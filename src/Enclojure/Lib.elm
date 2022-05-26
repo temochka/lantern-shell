@@ -71,6 +71,7 @@ init env =
     , ( "map-entry?", isMapEntry )
     , ( "not", not_ )
     , ( "number?", isNumber )
+    , ( "nth", nth )
     , ( "peek", peek )
     , ( "pr-str", prStr )
     , ( "rem", rem )
@@ -1507,6 +1508,53 @@ vals =
     in
     { emptyCallable
         | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
+    }
+
+
+nth_ : Value io -> Value io -> Maybe (Value io) -> Result Exception (IO io)
+nth_ collVal indexVal defaultVal =
+    indexVal
+        |> Value.tryInt
+        |> Result.fromMaybe (Value.exception "type error: nth expects an integer index")
+        |> Result.andThen
+            (\index ->
+                case collVal of
+                    String s ->
+                        if String.length s <= index then
+                            defaultVal
+                                |> Maybe.map Const
+                                |> Result.fromMaybe (Value.exception "index out of bounds")
+
+                        else
+                            String.slice index (index + 1) s |> String |> Const |> Ok
+
+                    Vector a ->
+                        case Array.get index a of
+                            Just v ->
+                                v |> Located.getValue |> Const |> Ok
+
+                            Nothing ->
+                                defaultVal
+                                    |> Maybe.map Const
+                                    |> Result.fromMaybe (Value.exception "index out of bounds")
+
+                    _ ->
+                        Err (Value.exception "type error: nth is not supported on this type")
+            )
+
+
+nth : Callable io
+nth =
+    let
+        arity2 ( collVal, indexVal ) =
+            nth_ collVal indexVal Nothing
+
+        arity3 ( collVal, indexVal, defaultVal ) =
+            nth_ collVal indexVal (Just defaultVal)
+    in
+    { emptyCallable
+        | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
+        , arity3 = Just <| Fixed <| Callable.toArityFunction arity3
     }
 
 

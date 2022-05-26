@@ -5,6 +5,7 @@ import Enclojure
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
 import Enclojure.Types exposing (Exception(..), Number(..), Ref(..), Value(..))
+import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Expect
@@ -889,6 +890,16 @@ suite =
             , "(= (not-empty {1 2}) {1 2})" |> (expectValue <| Bool True)
             , "(not-empty {})" |> expectValue Nil
             , "(not-empty nil)" |> expectValue Nil
+            ]
+        , describe "nth"
+            [ "(nth [1 2 3] 1)" |> expectValue (Value.int 2)
+            , "(nth [1 2 3] 2)" |> expectValue (Value.int 3)
+            , "(nth [1 2 3] 3)" |> expectException "index out of bounds"
+            , "(nth [1 2 3] 3 4)" |> expectValue (Value.int 4)
+            , "(nth \"123\" 1)" |> expectValue (Value.string "2")
+            , "(nth \"123\" 2)" |> expectValue (Value.string "3")
+            , "(nth \"123\" 3)" |> expectException "index out of bounds"
+            , "(nth \"123\" 3 \"4\")" |> expectValue (Value.string "4")
             ]
         , describe "number?"
             [ "(number? 42)" |> (expectValue <| Bool True)
