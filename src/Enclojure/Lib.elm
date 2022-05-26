@@ -1761,4 +1761,22 @@ prelude =
   [coll]
   (when (seq coll) coll))
 
+(defn repeatedly
+  [n f]
+  (if (< n 1)
+    ()
+    (cons (f) (repeatedly (dec n) f))))
+
+(defn assert
+  ([x] (assert x "assertion error"))
+  ([x message] (when-not x (throw (Exception. message)))))
+
+(defn range
+  ([end] (range 0 end 1))
+  ([start end] (range start end 1))
+  ([start end step]
+   (if (or (and (< start end) (pos? step))
+           (and (< end start) (neg? step)))
+    (cons start (range (+ step start) end step))
+    ())))
 """

@@ -462,6 +462,11 @@ suite =
             , "(apply + [1 2 3])" |> (expectValue <| Number <| Int 6)
             , "(apply + 1 2 [3])" |> (expectValue <| Number <| Int 6)
             ]
+        , describe "assert"
+            [ "(assert true)" |> expectValue Nil
+            , "(assert false)" |> expectException "assertion error"
+            , "(assert false \"my assertion error\")" |> expectException "my assertion error"
+            ]
         , describe "assoc"
             [ "(assoc nil :a 1)"
                 |> (expectValue <| Map <| ValueMap.fromList [ ( Keyword "a", Located.unknown <| Number <| Int 1 ) ])
@@ -905,6 +910,19 @@ suite =
             , "(pr-str (first {1 2}))" |> (expectValue <| String "[1 2]")
             , "(pr-str #{})" |> (expectValue <| String "#{}")
             ]
+        , describe "range"
+            [ "(range 0)" |> expectValue (List [])
+            , "(range -5)" |> expectValue (List [])
+            , "(= (range 5) (list 0 1 2 3 4))" |> expectValue (Bool True)
+            , "(range 0 0)" |> expectValue (List [])
+            , "(range 0 -5)" |> expectValue (List [])
+            , "(= (range 5 10) (list 5 6 7 8 9))" |> expectValue (Bool True)
+            , "(range 0 0 0)" |> expectValue (List [])
+            , "(range 0 5 0)" |> expectValue (List [])
+            , "(range 0 5 -1)" |> expectValue (List [])
+            , "(= (range 2 10 2) (list 2 4 6 8))" |> expectValue (Bool True)
+            , "(= (range 10 -11 -5) (list 10 5 0 -5 -10))" |> expectValue (Bool True)
+            ]
         , describe "reduce"
             [ "(reduce + [])" |> (expectValue <| Number <| Int 0)
             , "(reduce + 2 [])" |> (expectValue <| Number <| Int 2)
@@ -930,6 +948,12 @@ suite =
             , "(= (repeat -1 nil) ())" |> (expectValue <| Bool True)
             , "(= (repeat 1 nil) (list nil))" |> (expectValue <| Bool True)
             , "(= (repeat 5 1) (list 1 1 1 1 1))" |> (expectValue <| Bool True)
+            ]
+        , describe "repeatedly"
+            [ "(= (repeatedly 0 #(inc 0)) ())" |> (expectValue <| Bool True)
+            , "(= (repeatedly -1 #(inc 0)) ())" |> (expectValue <| Bool True)
+            , "(= (repeatedly 1 #(inc 0)) (list 1))" |> (expectValue <| Bool True)
+            , "(= (repeatedly 5 #(inc 0)) (list 1 1 1 1 1))" |> (expectValue <| Bool True)
             ]
         , describe "re-find"
             [ "(re-find #\"\\d+\" \"abc\")" |> expectValue Nil
