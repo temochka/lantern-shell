@@ -4,6 +4,7 @@ import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Types exposing (Exception(..), Value(..))
+import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 
 
@@ -83,6 +84,10 @@ macroexpand i (Located loc value) =
                     expandDefn i (Located loc args)
                         |> Result.map Expanded
 
+                (Located _ (Symbol "doseq")) :: args ->
+                    expandDoseq i (Located loc args)
+                        |> Result.map Expanded
+
                 (Located _ (Symbol "if-let")) :: args ->
                     expandIfLet i (Located loc args)
                         |> Result.map Expanded
@@ -149,6 +154,90 @@ expandDefn i (Located loc args) =
 
         _ ->
             Err (Exception "Argument error: invalid arguments to defn" [])
+
+
+expandDoseq : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
+expandDoseq i (Located loc args) =
+    case args of
+        (Located bindingsPos (Vector bindings)) :: body ->
+            case Array.toList bindings of
+                (Located letPos (Keyword "let")) :: ((Located _ (Vector _)) as letBindings) :: rest ->
+                    expandDoseq
+                        i
+                        (Located loc (Located bindingsPos (Value.vectorFromLocatedList rest) :: body))
+                        |> Result.map
+                            (\( retI, ret ) ->
+                                ( retI
+                                , Located loc
+                                    (List
+                                        [ Located letPos (Symbol "let")
+                                        , letBindings
+                                        , ret
+                                        ]
+                                    )
+                                )
+                            )
+
+                (Located whenPos (Keyword "when")) :: whenCond :: rest ->
+                    expandDoseq
+                        i
+                        (Located loc (Located bindingsPos (Value.vectorFromLocatedList rest) :: body))
+                        |> Result.map
+                            (\( retI, ret ) ->
+                                ( retI
+                                , Located whenPos
+                                    (List
+                                        [ Located whenPos (Symbol "do")
+                                        , Located whenPos
+                                            (List
+                                                [ Located whenPos (Symbol "when")
+                                                , whenCond
+                                                , ret
+                                                ]
+                                            )
+                                        , Located whenPos Nil
+                                        ]
+                                    )
+                                )
+                            )
+
+                ((Located mapLoc _) as mapArg) :: mappedSeq :: rest ->
+                    expandDoseq
+                        i
+                        (Located loc (Located bindingsPos (Value.vectorFromLocatedList rest) :: body))
+                        |> Result.map
+                            (\( retI, ret ) ->
+                                ( retI
+                                , Located mapLoc
+                                    (List
+                                        [ Located mapLoc (Symbol "do")
+                                        , Located mapLoc
+                                            (List
+                                                [ Located mapLoc (Symbol "map")
+                                                , Located mapLoc
+                                                    (List
+                                                        [ Located mapLoc (Symbol "fn")
+                                                        , Located mapLoc (Value.vectorFromLocatedList [ mapArg ])
+                                                        , ret
+                                                        ]
+                                                    )
+                                                , mappedSeq
+                                                ]
+                                            )
+                                        , Located mapLoc Nil
+                                        ]
+                                    )
+                                )
+                            )
+
+                [ _ ] ->
+                    Err (Value.exception "Argument error: uneven number of bindings to doseq")
+
+                [] ->
+                    Ok ( i, Located loc (List (Located loc (Symbol "do") :: body)) )
+
+        _ ->
+            Err (Value.exception "Argument error: invalid arguments to doseq")
 
 
 expandIfLet : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )

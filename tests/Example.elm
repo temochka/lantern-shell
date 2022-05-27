@@ -396,6 +396,28 @@ suite =
                  """
                 |> (expectValue <| Number <| Int 13)
             ]
+        , describe "doseq"
+            [ "(doseq [] 1)" |> expectValue (Value.int 1)
+            , "(doseq [:let [a 3]] a)" |> expectValue (Value.int 3)
+            , """
+              (def foo (atom 0))
+
+              (doseq [a [1 2 3 4 5]] (swap! foo + a))
+
+              (deref foo)
+              """ |> expectValue (Value.int 15)
+            , """
+              (def foo (atom 0))
+
+              (doseq [a [1 2 3]
+                      :let [aa (* a a)]
+                      b [2 3 4]
+                      :when (< b aa)]
+                (swap! foo + (* a b)))
+
+              (deref foo)
+              """ |> expectValue (Value.int 37)
+            ]
         , describe "if-let"
             [ "(if-let [a nil] a :else)" |> (expectValue <| Keyword "else")
             , "(if-let [a :then] a :else)" |> (expectValue <| Keyword "then")
