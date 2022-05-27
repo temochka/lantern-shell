@@ -917,6 +917,13 @@ suite =
             , "(peek [1 2 3])" |> (expectValue <| Number <| Int 3)
             , "(peek nil)" |> expectValue Nil
             ]
+        , describe "pop"
+            [ "(= (pop (list 1 2 3)) (list 2 3))" |> expectValue (Bool True)
+            , "(= (pop [1 2 3]) [1 2])" |> expectValue (Bool True)
+            , "(pop [])" |> expectException "Can't pop an empty vector"
+            , "(pop ())" |> expectException "Can't pop an empty list"
+            , "(pop nil)" |> expectValue Nil
+            ]
         , describe "pos?"
             [ "(pos? 3)" |> (expectValue <| Bool True)
             , "(pos? 0)" |> (expectValue <| Bool False)

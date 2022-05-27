@@ -18,7 +18,7 @@ import Enclojure.Types
         , Thunk(..)
         , Value(..)
         )
-import Enclojure.Value as Value exposing (inspect)
+import Enclojure.Value as Value exposing (inspect, inspectType)
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet
 import Html exposing (s)
@@ -73,6 +73,7 @@ init env =
     , ( "number?", isNumber )
     , ( "nth", nth )
     , ( "peek", peek )
+    , ( "pop", pop )
     , ( "pr-str", prStr )
     , ( "rem", rem )
     , ( "re-find", reFind )
@@ -962,7 +963,35 @@ peek =
                     Ok Nil
 
                 _ ->
-                    Err <| Exception ("Cannot use " ++ inspect val ++ " as a queue") []
+                    Err <| Exception ("Cannot use " ++ inspectType val ++ " as a queue") []
+    in
+    { emptyCallable
+        | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))
+    }
+
+
+pop : Callable io
+pop =
+    let
+        arity1 val =
+            case val of
+                List l ->
+                    List.tail l
+                        |> Maybe.map List
+                        |> Result.fromMaybe (Value.exception "Can't pop an empty list")
+
+                Vector v ->
+                    if Array.isEmpty v then
+                        Err (Value.exception "Can't pop an empty vector")
+
+                    else
+                        Array.slice 0 -1 v |> Vector |> Ok
+
+                Nil ->
+                    Ok Nil
+
+                _ ->
+                    Err <| Exception ("Can't use " ++ inspectType val ++ " as a queue") []
     in
     { emptyCallable
         | arity1 = Just (Fixed (toArityFunction (arity1 >> Result.map Const)))

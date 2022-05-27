@@ -5,6 +5,7 @@ module Enclojure.Value exposing
     , fn
     , inspect
     , inspectLocated
+    , inspectType
     , int
     , isEqual
     , keyword
@@ -517,3 +518,62 @@ isEqual a b =
 
             _ ->
                 False
+
+
+inspectType : Value io -> String
+inspectType val =
+    case val of
+        Number n ->
+            case n of
+                Int _ ->
+                    "Integer"
+
+                Float _ ->
+                    "Float"
+
+        String _ ->
+            "String"
+
+        Ref r ->
+            case r of
+                Atom _ ->
+                    "Atom"
+
+                Var _ _ ->
+                    "Var"
+
+        Fn _ _ ->
+            "Function"
+
+        List _ ->
+            "List"
+
+        Vector _ ->
+            "Vector"
+
+        Nil ->
+            "Nil"
+
+        Bool _ ->
+            "Bool"
+
+        Keyword _ ->
+            "Keyword"
+
+        Map _ ->
+            "Map"
+
+        MapEntry _ ->
+            "MapEntry"
+
+        Regex _ _ ->
+            "Regex"
+
+        Set _ ->
+            "Set"
+
+        Symbol _ ->
+            "Symbol"
+
+        Throwable _ ->
+            "Throwable"
