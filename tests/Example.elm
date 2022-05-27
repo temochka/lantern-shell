@@ -1078,6 +1078,13 @@ suite =
             , "(= (seq {1 2}) (list [1 2]))" |> (expectValue <| Bool True)
             , "(= (seq #{1}) (list 1))" |> (expectValue <| Bool True)
             ]
+        , describe "set"
+            [ "(set nil)" |> expectValue (Set ValueSet.empty)
+            , "(= (set #{0}) #{0})" |> expectValue (Bool True)
+            , "(= (set [1]) #{1})" |> expectValue (Bool True)
+            , "(= (set (list 2)) #{2})" |> expectValue (Bool True)
+            , "(= (set {1 2}) #{[1 2]})" |> expectValue (Bool True)
+            ]
         , describe "set?"
             [ "(set? #{})" |> expectValue (Bool True)
             , "(set? [])" |> expectValue (Bool False)

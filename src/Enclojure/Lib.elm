@@ -83,6 +83,7 @@ init env =
     , ( "rest", rest_ )
     , ( "second", second )
     , ( "seq", seq )
+    , ( "set", set )
     , ( "set?", isSet )
     , ( "str", str )
     , ( "symbol?", isSymbol )
@@ -621,6 +622,21 @@ isVector =
     { emptyCallable
         | arity1 = Just <| Fixed <| Callable.toArityFunction arity1
     }
+
+
+set : Callable io
+set =
+    let
+        arity1 val =
+            case val of
+                Set _ ->
+                    Ok (Const val)
+
+                _ ->
+                    Value.toSeq val
+                        |> Result.map (List.map Located.getValue >> ValueSet.fromList >> Set >> Const)
+    in
+    { emptyCallable | arity1 = Just <| Fixed <| Callable.toArityFunction arity1 }
 
 
 isSet : Callable io
