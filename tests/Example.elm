@@ -418,6 +418,17 @@ suite =
               (deref foo)
               """ |> expectValue (Value.int 37)
             ]
+        , describe "for"
+            [ "(= (for [i (range 5)] i) [0 1 2 3 4])" |> expectValue (Bool True)
+            , """
+              (= (for [i (range 5)
+                       j (range 5)
+                       :let [x (* i j)]
+                       :when (and (pos? x) (even? x))]
+                    x)
+                 [2 4 2 4 6 8 6 12 4 8 12 16])
+              """ |> expectValue (Bool True)
+            ]
         , describe "if-let"
             [ "(if-let [a nil] a :else)" |> (expectValue <| Keyword "else")
             , "(if-let [a :then] a :else)" |> (expectValue <| Keyword "then")

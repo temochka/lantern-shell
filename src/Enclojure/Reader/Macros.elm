@@ -88,6 +88,10 @@ macroexpand i (Located loc value) =
                     expandDoseq i (Located loc args)
                         |> Result.map Expanded
 
+                (Located _ (Symbol "for")) :: args ->
+                    expandFor i (Located loc args)
+                        |> Result.map Expanded
+
                 (Located _ (Symbol "if-let")) :: args ->
                     expandIfLet i (Located loc args)
                         |> Result.map Expanded
@@ -238,6 +242,48 @@ expandDoseq i (Located loc args) =
 
         _ ->
             Err (Value.exception "Argument error: invalid arguments to doseq")
+
+
+expandFor : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
+expandFor i (Located loc args) =
+    let
+        id =
+            "for__" ++ String.fromInt i ++ "__auto__"
+    in
+    case args of
+        ((Located _ (Vector _)) as bindings) :: (Located _ body) :: [] ->
+            Ok
+                ( i + 1
+                , Located loc
+                    (List
+                        [ Located loc (Symbol "let")
+                        , Located loc
+                            (Value.vectorFromList
+                                [ Value.symbol id
+                                , Value.list [ Value.symbol "atom", Value.vectorFromList [] ]
+                                ]
+                            )
+                        , Located loc
+                            (List
+                                [ Located loc (Symbol "doseq")
+                                , bindings
+                                , Located loc
+                                    (Value.list
+                                        [ Value.symbol "swap!"
+                                        , Value.symbol id
+                                        , Value.symbol "conj"
+                                        , body
+                                        ]
+                                    )
+                                ]
+                            )
+                        , Located loc (Value.list [ Symbol "deref", Value.symbol id ])
+                        ]
+                    )
+                )
+
+        _ ->
+            Err (Value.exception "for expects a vector of bindings followed by the body")
 
 
 expandIfLet : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
