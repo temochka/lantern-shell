@@ -3,7 +3,7 @@ module Enclojure.Reader.Macros exposing (macroexpandAll)
 import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Exception(..), Value(..))
+import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 
@@ -88,6 +88,10 @@ macroexpand i (Located loc value) =
                     expandDoseq i (Located loc args)
                         |> Result.map Expanded
 
+                (Located _ (Symbol "dotimes")) :: args ->
+                    expandDotimes i (Located loc args)
+                        |> Result.map Expanded
+
                 (Located _ (Symbol "for")) :: args ->
                     expandFor i (Located loc args)
                         |> Result.map Expanded
@@ -158,6 +162,29 @@ expandDefn i (Located loc args) =
 
         _ ->
             Err (Exception "Argument error: invalid arguments to defn" [])
+
+
+expandDotimes : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )
+expandDotimes i (Located loc args) =
+    case args of
+        (Located _ (Vector bindings)) :: body ->
+            case Array.toList bindings of
+                (Located _ ((Symbol _) as binding)) :: (Located _ ((Number (Int _)) as nTimes)) :: [] ->
+                    Ok
+                        ( i
+                        , (Located loc (Value.symbol "doseq")
+                            :: Located loc (Value.vectorFromList [ binding, Value.list [ Value.symbol "range", nTimes ] ])
+                            :: body
+                          )
+                            |> List
+                            |> Located loc
+                        )
+
+                _ ->
+                    Err (Value.exception "Argument error: invalid arguments to dotimes")
+
+        _ ->
+            Err (Value.exception "Argument error: invalid arguments to dotimes")
 
 
 expandDoseq : Int -> Located (List (Located (Value io))) -> Result Exception ( Int, Located (Value io) )

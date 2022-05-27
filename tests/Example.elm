@@ -418,6 +418,12 @@ suite =
               (deref foo)
               """ |> expectValue (Value.int 37)
             ]
+        , describe "dotimes"
+            [ """
+             (def foo (atom 0))
+             (dotimes [i 5] (swap! foo + i))
+             (deref foo)
+             """ |> expectValue (Value.int 10) ]
         , describe "for"
             [ "(= (for [i (range 5)] i) [0 1 2 3 4])" |> expectValue (Bool True)
             , """
