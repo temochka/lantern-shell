@@ -36,6 +36,7 @@ module Enclojure.Value exposing
     , tryVectorOf
     , vector
     , vectorFromList
+    , vectorFromLocatedList
     )
 
 import Array
@@ -444,6 +445,11 @@ map =
 list : List (Value io) -> Value io
 list vs =
     List <| List.map Located.unknown vs
+
+
+vectorFromLocatedList : List (Located (Value io)) -> Value io
+vectorFromLocatedList ls =
+    Vector <| Array.fromList ls
 
 
 vectorFromList : List (Value io) -> Value io

@@ -1229,6 +1229,16 @@ suite =
         , describe "vals"
             [ "(= (vals {1 2 3 4}) (list 2 4))" |> (expectValue <| Bool True)
             ]
+        , describe "vec"
+            [ "(= (vec {1 2}) [[1 2]])" |> (expectValue <| Bool True)
+            , "(= (vec (list 3 4)) [3 4])" |> (expectValue <| Bool True)
+            , "(= (vec [4 5]) [4 5])" |> (expectValue <| Bool True)
+            , "(= (vec #{1}) [1])" |> (expectValue <| Bool True)
+            ]
+        , describe "vector"
+            [ "(= (vector 1 2 3 4 5 6) [1 2 3 4 5 6])" |> expectValue (Bool True)
+            , "(vector)" |> expectValue (Vector Array.empty)
+            ]
         , describe "vector?"
             [ "(vector? [])" |> (expectValue <| Bool True)
             , "(vector? {})" |> (expectValue <| Bool False)

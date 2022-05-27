@@ -90,6 +90,8 @@ init env =
     , ( "throw", throw )
     , ( "val", val_ )
     , ( "vals", vals )
+    , ( "vec", vec )
+    , ( "vector", vector )
     , ( "vector?", isVector )
     ]
         |> List.foldl
@@ -1585,6 +1587,31 @@ nth =
         | arity2 = Just <| Fixed <| Callable.toArityFunction arity2
         , arity3 = Just <| Fixed <| Callable.toArityFunction arity3
     }
+
+
+vec : Callable io
+vec =
+    let
+        arity1 collVal =
+            case collVal of
+                Vector _ ->
+                    collVal |> Const |> Ok
+
+                _ ->
+                    collVal
+                        |> Value.toSeq
+                        |> Result.map (Value.vectorFromLocatedList >> Const)
+    in
+    { emptyCallable | arity1 = Just <| Fixed <| Callable.toArityFunction arity1 }
+
+
+vector : Callable io
+vector =
+    let
+        arity0 signature =
+            Value.vectorFromList signature.rest |> Const |> Ok
+    in
+    { emptyCallable | arity0 = Just <| Variadic <| Callable.toArityFunction arity0 }
 
 
 prelude : String
