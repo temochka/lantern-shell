@@ -42,8 +42,8 @@ module Enclojure.Value exposing
 import Array
 import Dict
 import Enclojure.Callable as Callable
+import Enclojure.Common exposing (Callable, Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Callable, Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMap)
 import Enclojure.ValueSet as ValueSet
 import File exposing (decoder)
@@ -51,7 +51,7 @@ import Regex exposing (Regex)
 
 
 type alias Value io =
-    Enclojure.Types.Value io
+    Enclojure.Common.Value io
 
 
 toSeq : Value io -> Result Exception (List (Located (Value io)))

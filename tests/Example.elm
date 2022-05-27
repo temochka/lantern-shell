@@ -2,9 +2,9 @@ module Example exposing (..)
 
 import Array
 import Enclojure
+import Enclojure.Common exposing (Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Exception(..), Number(..), Ref(..), Value(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet

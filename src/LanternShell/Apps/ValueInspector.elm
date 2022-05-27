@@ -5,7 +5,7 @@ import Element exposing (Element)
 import Element.Background
 import Element.Input
 import Enclojure.Located as Located
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 import Html.Events

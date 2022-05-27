@@ -16,13 +16,13 @@ module Enclojure exposing
     )
 
 import Array exposing (Array)
+import Enclojure.Common exposing (Continuation, Env, Exception(..), IO(..), Number(..), Ref(..), Thunk(..), Value(..))
 import Enclojure.Extra.Maybe exposing (orElse)
 import Enclojure.Lib as Lib
 import Enclojure.Lib.String as LibString
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader as Reader
 import Enclojure.Runtime as Runtime
-import Enclojure.Types exposing (Continuation, Env, Exception(..), IO(..), Number(..), Ref(..), Thunk(..), Value(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 import Enclojure.ValueSet as ValueSet exposing (ValueSet)
@@ -30,15 +30,15 @@ import Parser
 
 
 type alias Exception =
-    Enclojure.Types.Exception
+    Enclojure.Common.Exception
 
 
 type alias Env io =
-    Enclojure.Types.Env io
+    Enclojure.Common.Env io
 
 
 type alias IO io =
-    Enclojure.Types.IO io
+    Enclojure.Common.IO io
 
 
 resolveSymbol : Env io -> String -> Result Exception (Value io)
@@ -59,7 +59,7 @@ closureHack3 a b c f =
     f a b c
 
 
-evalExpression : Located (Value io) -> Env io -> Continuation io -> Located (Enclojure.Types.Step io)
+evalExpression : Located (Value io) -> Env io -> Continuation io -> Located (Enclojure.Common.Step io)
 evalExpression mutableExpr mutableEnv mutableK =
     closureHack3
         mutableExpr
@@ -152,7 +152,7 @@ evalExpression mutableExpr mutableEnv mutableK =
         )
 
 
-evalVector : Located (Array (Located (Value io))) -> Env io -> Continuation io -> Located (Enclojure.Types.Step io)
+evalVector : Located (Array (Located (Value io))) -> Env io -> Continuation io -> Located (Enclojure.Common.Step io)
 evalVector (Located loc vecV) env k =
     Located loc
         ( Ok ( Const (Vector Array.empty), env )
@@ -187,7 +187,7 @@ evalVector (Located loc vecV) env k =
         )
 
 
-evalMap : Located (Enclojure.Types.ValueMap io) -> Env io -> Continuation io -> Step io
+evalMap : Located (Enclojure.Common.ValueMap io) -> Env io -> Continuation io -> Step io
 evalMap (Located mapLoc map) env k =
     Located mapLoc
         ( Ok ( Const (Map ValueMap.empty), env )
@@ -237,7 +237,7 @@ evalMap (Located mapLoc map) env k =
         )
 
 
-evalMapEntry : Located (Enclojure.Types.ValueMapEntry io) -> Env io -> Continuation io -> Step io
+evalMapEntry : Located (Enclojure.Common.ValueMapEntry io) -> Env io -> Continuation io -> Step io
 evalMapEntry (Located loc ( key, value )) env k =
     evalExpression (Located.unknown key)
         env
@@ -947,7 +947,7 @@ problemToString p =
 
 
 type alias Step io =
-    Located (Enclojure.Types.Step io)
+    Located (Enclojure.Common.Step io)
 
 
 type EvalResult io

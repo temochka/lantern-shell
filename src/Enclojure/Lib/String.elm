@@ -3,7 +3,7 @@ module Enclojure.Lib.String exposing (init)
 import Enclojure.Callable as Callable
 import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime
-import Enclojure.Types as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
+import Enclojure.Common as Types exposing (Arity(..), Callable, Exception(..), IO(..), Value(..))
 import Enclojure.Value as Value exposing (inspect)
 import Regex
 

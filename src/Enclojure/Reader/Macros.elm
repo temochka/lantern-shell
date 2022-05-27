@@ -3,7 +3,7 @@ module Enclojure.Reader.Macros exposing (macroexpandAll)
 import Array
 import Dict exposing (Dict)
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
 import Enclojure.Value as Value
 import Enclojure.ValueMap as ValueMap
 

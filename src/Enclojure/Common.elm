@@ -1,4 +1,4 @@
-module Enclojure.Types exposing (..)
+module Enclojure.Common exposing (..)
 
 import Array exposing (Array)
 import Dict exposing (Dict)

@@ -5,7 +5,7 @@ import Enclojure.Callable as Callable exposing (toArityFunction)
 import Enclojure.Json
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Runtime as Runtime
-import Enclojure.Types
+import Enclojure.Common
     exposing
         ( Arity(..)
         , Callable

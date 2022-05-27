@@ -4,7 +4,7 @@ import Array
 import Enclojure.Located as Located exposing (Located(..))
 import Enclojure.Reader.DoubleQuotedString as DoubleQuotedString
 import Enclojure.Reader.Macros as Macros
-import Enclojure.Types exposing (Exception(..), Number(..), Value(..))
+import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
 import Enclojure.ValueMap as ValueMap exposing (ValueMapEntry)
 import Enclojure.ValueSet as ValueSet
 import Parser exposing ((|.), (|=), Parser)

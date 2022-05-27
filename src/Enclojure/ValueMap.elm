@@ -16,16 +16,16 @@ module Enclojure.ValueMap exposing
     )
 
 import Dict
+import Enclojure.Common exposing (Number(..), Value(..))
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Number(..), Value(..))
 
 
 type alias ValueMap io =
-    Enclojure.Types.ValueMap io
+    Enclojure.Common.ValueMap io
 
 
 type alias ValueMapEntry io =
-    Enclojure.Types.ValueMapEntry io
+    Enclojure.Common.ValueMapEntry io
 
 
 empty : ValueMap io

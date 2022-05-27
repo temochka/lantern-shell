@@ -11,13 +11,13 @@ module Enclojure.Callable exposing
     , variadicArity
     )
 
+import Enclojure.Common exposing (Arity(..), Continuation, Env, Exception(..), IO, Step, Thunk(..), Value(..))
 import Enclojure.Extra.Maybe
 import Enclojure.Located as Located exposing (Located(..))
-import Enclojure.Types exposing (Arity(..), Continuation, Env, Exception(..), IO, Step, Thunk(..), Value(..))
 
 
 type alias Callable io =
-    Enclojure.Types.Callable io
+    Enclojure.Common.Callable io
 
 
 new : Callable io
@@ -39,34 +39,34 @@ toArityFunction fn =
         )
 
 
-setArity0 : Enclojure.Types.Arity io () -> Callable io -> Callable io
+setArity0 : Enclojure.Common.Arity io () -> Callable io -> Callable io
 setArity0 arity callable =
     { callable | arity0 = Just arity }
 
 
-setArity1 : Enclojure.Types.Arity io (Value io) -> Callable io -> Callable io
+setArity1 : Enclojure.Common.Arity io (Value io) -> Callable io -> Callable io
 setArity1 arity callable =
     { callable | arity1 = Just arity }
 
 
-setArity2 : Enclojure.Types.Arity io ( Value io, Value io ) -> Callable io -> Callable io
+setArity2 : Enclojure.Common.Arity io ( Value io, Value io ) -> Callable io -> Callable io
 setArity2 arity callable =
     { callable | arity2 = Just arity }
 
 
-setArity3 : Enclojure.Types.Arity io ( Value io, Value io, Value io ) -> Callable io -> Callable io
+setArity3 : Enclojure.Common.Arity io ( Value io, Value io, Value io ) -> Callable io -> Callable io
 setArity3 arity callable =
     { callable | arity3 = Just arity }
 
 
-fixedArity : (a -> Result Exception (IO io)) -> Enclojure.Types.Arity io a
+fixedArity : (a -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
 fixedArity fn =
-    Enclojure.Types.Fixed <| toArityFunction fn
+    Enclojure.Common.Fixed <| toArityFunction fn
 
 
-variadicArity : ({ args : a, rest : List (Value io) } -> Result Exception (IO io)) -> Enclojure.Types.Arity io a
+variadicArity : ({ args : a, rest : List (Value io) } -> Result Exception (IO io)) -> Enclojure.Common.Arity io a
 variadicArity fn =
-    Enclojure.Types.Variadic <| toArityFunction fn
+    Enclojure.Common.Variadic <| toArityFunction fn
 
 
 toThunk : Callable io -> { self : Value io, k : Continuation io } -> Thunk io
