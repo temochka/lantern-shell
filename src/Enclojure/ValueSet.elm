@@ -66,8 +66,8 @@ insert v (Enclojure.Common.ValueSet set) =
             Ref _ ->
                 { set | refs = v :: set.refs }
 
-            List list ->
-                { set | lists = list :: set.lists }
+            List _ ->
+                { set | lists = v :: set.lists }
 
             Nil ->
                 { set | nil = Just v }
@@ -95,23 +95,23 @@ insert v (Enclojure.Common.ValueSet set) =
             Fn _ _ ->
                 { set | fns = v :: set.fns }
 
-            Map m ->
-                { set | maps = m :: set.maps }
+            Map _ ->
+                { set | maps = v :: set.maps }
 
-            MapEntry e ->
-                { set | mapEntries = e :: set.mapEntries }
+            MapEntry _ ->
+                { set | mapEntries = v :: set.mapEntries }
 
             Regex _ _ ->
                 { set | regexs = v :: set.regexs }
 
-            Set s ->
-                { set | sets = s :: set.sets }
+            Set _ ->
+                { set | sets = v :: set.sets }
 
             Throwable _ ->
                 { set | throwables = v :: set.throwables }
 
-            Vector vector ->
-                { set | vectors = vector :: set.vectors }
+            Vector _ ->
+                { set | vectors = v :: set.vectors }
 
 
 remove : Value io -> ValueSet io -> ValueSet io
@@ -134,10 +134,10 @@ remove v (Enclojure.Common.ValueSet set) =
                 in
                 { set | refs = newRefs }
 
-            List list ->
+            List _ ->
                 let
                     newLists =
-                        set.lists |> List.filter ((/=) list)
+                        set.lists |> List.filter ((/=) v)
                 in
                 { set | lists = newLists }
 
@@ -171,17 +171,17 @@ remove v (Enclojure.Common.ValueSet set) =
                 in
                 { set | fns = newFns }
 
-            Map m ->
+            Map _ ->
                 let
                     newMaps =
-                        set.maps |> List.filter ((/=) m)
+                        set.maps |> List.filter ((/=) v)
                 in
                 { set | maps = newMaps }
 
-            MapEntry e ->
+            MapEntry _ ->
                 let
                     newMapEntries =
-                        set.mapEntries |> List.filter ((/=) e)
+                        set.mapEntries |> List.filter ((/=) v)
                 in
                 { set | mapEntries = newMapEntries }
 
@@ -192,20 +192,20 @@ remove v (Enclojure.Common.ValueSet set) =
                 in
                 { set | regexs = newRegexs }
 
-            Set s ->
+            Set _ ->
                 let
                     newSets =
-                        set.sets |> List.filter ((/=) s)
+                        set.sets |> List.filter ((/=) v)
                 in
                 { set | sets = newSets }
 
             Throwable _ ->
                 set
 
-            Vector vector ->
+            Vector _ ->
                 let
                     newVectors =
-                        set.vectors |> List.filter ((/=) vector)
+                        set.vectors |> List.filter ((/=) v)
                 in
                 { set | vectors = newVectors }
 
@@ -261,13 +261,13 @@ toList (Enclojure.Common.ValueSet set) =
         ++ symbols
         ++ set.refs
         ++ set.fns
-        ++ List.map Map set.maps
-        ++ List.map MapEntry set.mapEntries
-        ++ List.map List set.lists
-        ++ List.map Set set.sets
+        ++ set.maps
+        ++ set.mapEntries
+        ++ set.lists
+        ++ set.sets
         ++ set.regexs
         ++ set.throwables
-        ++ List.map Vector set.vectors
+        ++ set.vectors
 
 
 map : (Value io -> Value io) -> ValueSet io -> ValueSet io
@@ -290,8 +290,8 @@ member v (Enclojure.Common.ValueSet set) =
         Ref _ ->
             False
 
-        List otherList ->
-            List.member otherList set.lists
+        List _ ->
+            List.member v set.lists
 
         Nil ->
             set.nil /= Nothing
@@ -312,20 +312,20 @@ member v (Enclojure.Common.ValueSet set) =
         Fn _ _ ->
             False
 
-        Map otherMap ->
-            List.member otherMap set.maps
+        Map _ ->
+            List.member v set.maps
 
-        MapEntry otherMapEntry ->
-            List.member otherMapEntry set.mapEntries
+        MapEntry _ ->
+            List.member v set.mapEntries
 
         Regex _ _ ->
             List.member v set.regexs
 
-        Set otherSet ->
-            List.member otherSet set.sets
+        Set _ ->
+            List.member v set.sets
 
         Throwable _ ->
             False
 
-        Vector vector ->
-            List.member vector set.vectors
+        Vector _ ->
+            List.member v set.vectors
