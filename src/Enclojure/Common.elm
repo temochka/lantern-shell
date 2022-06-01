@@ -15,6 +15,7 @@ module Enclojure.Common exposing
     , ValueMapEntry
     , ValueSet(..)
     , areEqualValues
+    , linearFind
     )
 
 import Array exposing (Array)
@@ -260,3 +261,17 @@ areEqualValues a b =
 
             _ ->
                 False
+
+
+linearFind : (a -> Bool) -> List a -> Maybe a
+linearFind f l =
+    case l of
+        [] ->
+            Nothing
+
+        a :: rest ->
+            if f a then
+                Just a
+
+            else
+                linearFind f rest

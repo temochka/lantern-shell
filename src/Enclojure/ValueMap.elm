@@ -16,7 +16,7 @@ module Enclojure.ValueMap exposing
     )
 
 import Dict
-import Enclojure.Common exposing (Number(..), Value(..))
+import Enclojure.Common exposing (Number(..), Value(..), ValueMap, ValueMapEntry, areEqualValues, linearFind)
 import Enclojure.Located as Located exposing (Located(..))
 
 
@@ -58,6 +58,20 @@ isEmpty m =
         && Dict.isEmpty m.keywords
 
 
+insertOtherValue : Value io -> Located (Value io) -> List (ValueMapEntry io) -> List (ValueMapEntry io)
+insertOtherValue k v list =
+    case list of
+        (( existingKey, _ ) as entry) :: rst ->
+            if areEqualValues existingKey k then
+                ( k, v ) :: rst
+
+            else
+                entry :: insertOtherValue k v rst
+
+        [] ->
+            [ ( k, v ) ]
+
+
 insert : Value io -> Located (Value io) -> ValueMap io -> ValueMap io
 insert k v m =
     case k of
@@ -86,7 +100,7 @@ insert k v m =
             { m | symbols = Dict.insert symbol v m.symbols }
 
         _ ->
-            { m | otherValues = ( k, v ) :: m.otherValues }
+            { m | otherValues = insertOtherValue k v m.otherValues }
 
 
 remove : Value io -> ValueMap io -> ValueMap io
@@ -117,21 +131,7 @@ remove k m =
             { m | symbols = Dict.remove symbol m.symbols }
 
         _ ->
-            { m | otherValues = m.otherValues |> List.filter (Tuple.first >> (/=) k) }
-
-
-linearFind : (a -> Bool) -> List a -> Maybe a
-linearFind f l =
-    case l of
-        [] ->
-            Nothing
-
-        a :: rest ->
-            if f a then
-                Just a
-
-            else
-                linearFind f rest
+            { m | otherValues = m.otherValues |> List.filter (Tuple.first >> areEqualValues k >> not) }
 
 
 get : Value io -> ValueMap io -> Maybe (Located (Value io))
@@ -162,7 +162,7 @@ get k m =
             Dict.get symbol m.symbols
 
         _ ->
-            linearFind (Tuple.first >> (==) k) m.otherValues
+            linearFind (Tuple.first >> areEqualValues k) m.otherValues
                 |> Maybe.map Tuple.second
 
 
