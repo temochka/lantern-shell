@@ -14,20 +14,12 @@ empty =
         { ints = Set.empty
         , floats = Set.empty
         , strings = Set.empty
-        , refs = []
         , nil = False
         , true = False
         , false = False
         , symbols = Set.empty
-        , fns = []
-        , maps = []
-        , mapEntries = []
-        , lists = []
-        , regexs = []
-        , vectors = []
         , keywords = Set.empty
-        , sets = []
-        , throwables = []
+        , otherValues = []
         }
 
 
@@ -36,7 +28,7 @@ isEmpty (Enclojure.Common.ValueSet m) =
     Set.isEmpty m.ints
         && Set.isEmpty m.floats
         && Set.isEmpty m.strings
-        && List.isEmpty m.refs
+        && List.isEmpty m.otherValues
         && m.nil
         == False
         && m.true
@@ -44,12 +36,6 @@ isEmpty (Enclojure.Common.ValueSet m) =
         && m.false
         == False
         && Set.isEmpty m.symbols
-        && List.isEmpty m.fns
-        && List.isEmpty m.maps
-        && List.isEmpty m.mapEntries
-        && List.isEmpty m.lists
-        && List.isEmpty m.sets
-        && List.isEmpty m.vectors
         && Set.isEmpty m.keywords
 
 
@@ -66,12 +52,6 @@ insert v (Enclojure.Common.ValueSet set) =
             String string ->
                 { set | strings = Set.insert string set.strings }
 
-            Ref _ ->
-                { set | refs = v :: set.refs }
-
-            List _ ->
-                { set | lists = v :: set.lists }
-
             Nil ->
                 { set | nil = True }
 
@@ -87,26 +67,8 @@ insert v (Enclojure.Common.ValueSet set) =
             Symbol symbol ->
                 { set | symbols = Set.insert symbol set.symbols }
 
-            Fn _ _ ->
-                { set | fns = v :: set.fns }
-
-            Map _ ->
-                { set | maps = v :: set.maps }
-
-            MapEntry _ ->
-                { set | mapEntries = v :: set.mapEntries }
-
-            Regex _ _ ->
-                { set | regexs = v :: set.regexs }
-
-            Set _ ->
-                { set | sets = v :: set.sets }
-
-            Throwable _ ->
-                { set | throwables = v :: set.throwables }
-
-            Vector _ ->
-                { set | vectors = v :: set.vectors }
+            _ ->
+                { set | otherValues = v :: set.otherValues }
 
 
 remove : Value io -> ValueSet io -> ValueSet io
@@ -121,20 +83,6 @@ remove v (Enclojure.Common.ValueSet set) =
 
             String string ->
                 { set | strings = Set.remove string set.strings }
-
-            Ref _ ->
-                let
-                    newRefs =
-                        set.refs |> List.filter ((/=) v)
-                in
-                { set | refs = newRefs }
-
-            List _ ->
-                let
-                    newLists =
-                        set.lists |> List.filter ((/=) v)
-                in
-                { set | lists = newLists }
 
             Nil ->
                 { set | nil = False }
@@ -151,50 +99,8 @@ remove v (Enclojure.Common.ValueSet set) =
             Symbol symbol ->
                 { set | symbols = Set.remove symbol set.symbols }
 
-            Fn _ _ ->
-                let
-                    newFns =
-                        set.fns |> List.filter ((/=) v)
-                in
-                { set | fns = newFns }
-
-            Map _ ->
-                let
-                    newMaps =
-                        set.maps |> List.filter ((/=) v)
-                in
-                { set | maps = newMaps }
-
-            MapEntry _ ->
-                let
-                    newMapEntries =
-                        set.mapEntries |> List.filter ((/=) v)
-                in
-                { set | mapEntries = newMapEntries }
-
-            Regex _ _ ->
-                let
-                    newRegexs =
-                        set.regexs |> List.filter ((/=) v)
-                in
-                { set | regexs = newRegexs }
-
-            Set _ ->
-                let
-                    newSets =
-                        set.sets |> List.filter ((/=) v)
-                in
-                { set | sets = newSets }
-
-            Throwable _ ->
-                set
-
-            Vector _ ->
-                let
-                    newVectors =
-                        set.vectors |> List.filter ((/=) v)
-                in
-                { set | vectors = newVectors }
+            _ ->
+                { set | otherValues = set.otherValues |> List.filter ((/=) v) }
 
 
 fromList : List (Value io) -> ValueSet io
@@ -250,15 +156,7 @@ toList (Enclojure.Common.ValueSet set) =
         ++ falses
         ++ keywords
         ++ symbols
-        ++ set.refs
-        ++ set.fns
-        ++ set.maps
-        ++ set.mapEntries
-        ++ set.lists
-        ++ set.sets
-        ++ set.regexs
-        ++ set.throwables
-        ++ set.vectors
+        ++ set.otherValues
 
 
 map : (Value io -> Value io) -> ValueSet io -> ValueSet io
@@ -278,12 +176,6 @@ member v (Enclojure.Common.ValueSet set) =
         String string ->
             Set.member string set.strings
 
-        Ref _ ->
-            False
-
-        List _ ->
-            List.member v set.lists
-
         Nil ->
             set.nil
 
@@ -299,23 +191,5 @@ member v (Enclojure.Common.ValueSet set) =
         Symbol symbol ->
             Set.member symbol set.symbols
 
-        Fn _ _ ->
-            False
-
-        Map _ ->
-            List.member v set.maps
-
-        MapEntry _ ->
-            List.member v set.mapEntries
-
-        Regex _ _ ->
-            List.member v set.regexs
-
-        Set _ ->
-            List.member v set.sets
-
-        Throwable _ ->
-            False
-
-        Vector _ ->
-            List.member v set.vectors
+        _ ->
+            List.member v set.otherValues

@@ -92,15 +92,7 @@ type ValueSet io
         , false : Bool
         , keywords : Set.Set String
         , symbols : Set.Set String
-        , fns : List (Value io)
-        , maps : List (Value io)
-        , mapEntries : List (Value io)
-        , lists : List (Value io)
-        , refs : List (Value io)
-        , regexs : List (Value io)
-        , sets : List (Value io)
-        , throwables : List (Value io)
-        , vectors : List (Value io)
+        , otherValues : List (Value io)
         }
 
 
@@ -242,15 +234,7 @@ areEqualSets (ValueSet a) (ValueSet b) =
                 == b.keywords
                 && a.symbols
                 == b.symbols
-                && areEqualLists a.fns b.fns
-                && areEqualLists a.maps b.maps
-                && areEqualLists a.mapEntries b.mapEntries
-                && areEqualLists a.lists b.lists
-                && areEqualLists a.refs b.refs
-                && areEqualLists a.regexs b.regexs
-                && areEqualLists a.sets b.sets
-                && areEqualLists a.throwables b.throwables
-                && areEqualLists a.vectors b.vectors
+                && areEqualLists a.otherValues b.otherValues
            )
 
 
