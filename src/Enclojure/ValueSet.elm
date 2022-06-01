@@ -15,8 +15,9 @@ empty =
         , floats = Set.empty
         , strings = Set.empty
         , refs = []
-        , nil = Nothing
-        , bools = { true = False, false = False }
+        , nil = False
+        , true = False
+        , false = False
         , symbols = Set.empty
         , fns = []
         , maps = []
@@ -37,9 +38,11 @@ isEmpty (Enclojure.Common.ValueSet m) =
         && Set.isEmpty m.strings
         && List.isEmpty m.refs
         && m.nil
-        == Nothing
-        && m.bools
-        == { true = False, false = False }
+        == False
+        && m.true
+        == False
+        && m.false
+        == False
         && Set.isEmpty m.symbols
         && List.isEmpty m.fns
         && List.isEmpty m.maps
@@ -70,21 +73,13 @@ insert v (Enclojure.Common.ValueSet set) =
                 { set | lists = v :: set.lists }
 
             Nil ->
-                { set | nil = Just v }
+                { set | nil = True }
 
-            Bool bool ->
-                let
-                    oldBools =
-                        set.bools
+            Bool True ->
+                { set | true = True }
 
-                    bools =
-                        if bool then
-                            { oldBools | true = True }
-
-                        else
-                            { oldBools | false = True }
-                in
-                { set | bools = bools }
+            Bool False ->
+                { set | false = True }
 
             Keyword keyword ->
                 { set | keywords = Set.insert keyword set.keywords }
@@ -142,21 +137,13 @@ remove v (Enclojure.Common.ValueSet set) =
                 { set | lists = newLists }
 
             Nil ->
-                { set | nil = Nothing }
+                { set | nil = False }
 
-            Bool bool ->
-                let
-                    oldBools =
-                        set.bools
+            Bool True ->
+                { set | true = False }
 
-                    bools =
-                        if bool then
-                            { oldBools | true = False }
-
-                        else
-                            { oldBools | false = False }
-                in
-                { set | bools = bools }
+            Bool False ->
+                { set | false = False }
 
             Keyword keyword ->
                 { set | keywords = Set.remove keyword set.keywords }
@@ -229,17 +216,21 @@ toList (Enclojure.Common.ValueSet set) =
             Set.toList set.strings |> List.map String
 
         nils =
-            set.nil |> Maybe.map List.singleton |> Maybe.withDefault []
+            if set.nil then
+                [ Nil ]
+
+            else
+                []
 
         trues =
-            if set.bools.true then
+            if set.true then
                 [ Bool True ]
 
             else
                 []
 
         falses =
-            if set.bools.false then
+            if set.false then
                 [ Bool False ]
 
             else
@@ -294,14 +285,13 @@ member v (Enclojure.Common.ValueSet set) =
             List.member v set.lists
 
         Nil ->
-            set.nil /= Nothing
+            set.nil
 
-        Bool bool ->
-            if bool then
-                set.bools.true
+        Bool False ->
+            set.false
 
-            else
-                set.bools.false
+        Bool True ->
+            set.true
 
         Keyword keyword ->
             Set.member keyword set.keywords

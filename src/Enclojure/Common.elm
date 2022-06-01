@@ -87,8 +87,9 @@ type ValueSet io
         { ints : Set.Set Int
         , floats : Set.Set Float
         , strings : Set.Set String
-        , nil : Maybe (Value io)
-        , bools : { true : Bool, false : Bool }
+        , nil : Bool
+        , true : Bool
+        , false : Bool
         , keywords : Set.Set String
         , symbols : Set.Set String
         , fns : List (Value io)
@@ -233,8 +234,10 @@ areEqualSets (ValueSet a) (ValueSet b) =
                 == b.strings
                 && a.nil
                 == b.nil
-                && a.bools
-                == b.bools
+                && a.true
+                == b.true
+                && a.false
+                == b.false
                 && a.keywords
                 == b.keywords
                 && a.symbols
