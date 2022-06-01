@@ -1,6 +1,6 @@
 module Enclojure.ValueSet exposing (ValueSet, empty, fromList, insert, isEmpty, map, member, remove, toList)
 
-import Enclojure.Common exposing (Number(..), Value(..))
+import Enclojure.Common exposing (Number(..), Value(..), areEqualValues)
 import Set
 
 
@@ -39,6 +39,20 @@ isEmpty (Enclojure.Common.ValueSet m) =
         && Set.isEmpty m.keywords
 
 
+insertOtherValue : Value io -> List (Value io) -> List (Value io)
+insertOtherValue v list =
+    case list of
+        existingValue :: rst ->
+            if areEqualValues existingValue v then
+                existingValue :: rst
+
+            else
+                existingValue :: insertOtherValue v rst
+
+        [] ->
+            [ v ]
+
+
 insert : Value io -> ValueSet io -> ValueSet io
 insert v (Enclojure.Common.ValueSet set) =
     Enclojure.Common.ValueSet <|
@@ -68,7 +82,7 @@ insert v (Enclojure.Common.ValueSet set) =
                 { set | symbols = Set.insert symbol set.symbols }
 
             _ ->
-                { set | otherValues = v :: set.otherValues }
+                { set | otherValues = insertOtherValue v set.otherValues }
 
 
 remove : Value io -> ValueSet io -> ValueSet io
@@ -100,7 +114,7 @@ remove v (Enclojure.Common.ValueSet set) =
                 { set | symbols = Set.remove symbol set.symbols }
 
             _ ->
-                { set | otherValues = set.otherValues |> List.filter ((/=) v) }
+                { set | otherValues = set.otherValues |> List.filter (areEqualValues v >> not) }
 
 
 fromList : List (Value io) -> ValueSet io
