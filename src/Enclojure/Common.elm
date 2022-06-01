@@ -66,19 +66,12 @@ type alias ValueMap io =
     { ints : Dict Int (Located (Value io))
     , floats : Dict Float (Located (Value io))
     , strings : Dict String (Located (Value io))
-    , nil : Maybe (Located (Value io))
-    , bools : { true : Maybe (Located (Value io)), false : Maybe (Located (Value io)) }
     , keywords : Dict String (Located (Value io))
     , symbols : Dict String (Located (Value io))
-    , fns : List ( Value io, Located (Value io) )
-    , maps : List ( Value io, Located (Value io) )
-    , mapEntries : List ( Value io, Located (Value io) )
-    , lists : List ( Value io, Located (Value io) )
-    , regexs : List ( Value io, Located (Value io) )
-    , refs : List ( Value io, Located (Value io) )
-    , sets : List ( Value io, Located (Value io) )
-    , throwables : List ( Value io, Located (Value io) )
-    , vectors : List ( Value io, Located (Value io) )
+    , nil : Maybe (Located (Value io))
+    , true : Maybe (Located (Value io))
+    , false : Maybe (Located (Value io))
+    , otherValues : List ( Value io, Located (Value io) )
     }
 
 
@@ -200,17 +193,9 @@ areEqualMaps a b =
                 && areEqualDictEntries String (Dict.toList a.keywords) (Dict.toList b.keywords)
                 && areEqualDictEntries String (Dict.toList a.symbols) (Dict.toList b.symbols)
                 && (a.nil == b.nil || (Maybe.map2 areEqualValues (a.nil |> Maybe.map Located.getValue) (b.nil |> Maybe.map Located.getValue) |> Maybe.withDefault False))
-                && (a.bools.true == b.bools.true || (Maybe.map2 areEqualValues (a.bools.true |> Maybe.map Located.getValue) (b.bools.true |> Maybe.map Located.getValue) |> Maybe.withDefault False))
-                && (a.bools.false == b.bools.false || (Maybe.map2 areEqualValues (a.bools.false |> Maybe.map Located.getValue) (b.bools.false |> Maybe.map Located.getValue) |> Maybe.withDefault False))
-                && areEqualDictEntries identity a.fns b.fns
-                && areEqualDictEntries identity a.maps b.maps
-                && areEqualDictEntries identity a.mapEntries b.mapEntries
-                && areEqualDictEntries identity a.lists b.lists
-                && areEqualDictEntries identity a.regexs b.regexs
-                && areEqualDictEntries identity a.refs b.refs
-                && areEqualDictEntries identity a.sets b.sets
-                && areEqualDictEntries identity a.throwables b.throwables
-                && areEqualDictEntries identity a.vectors b.vectors
+                && (a.true == b.true || (Maybe.map2 areEqualValues (a.true |> Maybe.map Located.getValue) (b.true |> Maybe.map Located.getValue) |> Maybe.withDefault False))
+                && (a.false == b.false || (Maybe.map2 areEqualValues (a.false |> Maybe.map Located.getValue) (b.false |> Maybe.map Located.getValue) |> Maybe.withDefault False))
+                && areEqualDictEntries identity a.otherValues b.otherValues
            )
 
 

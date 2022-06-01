@@ -33,19 +33,12 @@ empty =
     { ints = Dict.empty
     , floats = Dict.empty
     , strings = Dict.empty
-    , refs = []
     , nil = Nothing
-    , bools = { true = Nothing, false = Nothing }
+    , true = Nothing
+    , false = Nothing
     , symbols = Dict.empty
-    , fns = []
-    , maps = []
-    , mapEntries = []
-    , lists = []
-    , regexs = []
-    , sets = []
-    , throwables = []
-    , vectors = []
     , keywords = Dict.empty
+    , otherValues = []
     }
 
 
@@ -54,18 +47,14 @@ isEmpty m =
     Dict.isEmpty m.ints
         && Dict.isEmpty m.floats
         && Dict.isEmpty m.strings
-        && List.isEmpty m.refs
         && m.nil
         == Nothing
-        && m.bools
-        == { true = Nothing, false = Nothing }
+        && m.true
+        == Nothing
+        && m.false
+        == Nothing
         && Dict.isEmpty m.symbols
-        && List.isEmpty m.fns
-        && List.isEmpty m.maps
-        && List.isEmpty m.mapEntries
-        && List.isEmpty m.lists
-        && List.isEmpty m.sets
-        && List.isEmpty m.vectors
+        && List.isEmpty m.otherValues
         && Dict.isEmpty m.keywords
 
 
@@ -81,28 +70,14 @@ insert k v m =
         String string ->
             { m | strings = Dict.insert string v m.strings }
 
-        Ref _ ->
-            { m | refs = ( k, v ) :: m.refs }
-
-        List _ ->
-            { m | lists = ( k, v ) :: m.lists }
-
         Nil ->
             { m | nil = Just v }
 
-        Bool bool ->
-            let
-                oldBools =
-                    m.bools
+        Bool True ->
+            { m | true = Just v }
 
-                bools =
-                    if bool then
-                        { oldBools | true = Just v }
-
-                    else
-                        { oldBools | false = Just v }
-            in
-            { m | bools = bools }
+        Bool False ->
+            { m | false = Just v }
 
         Keyword keyword ->
             { m | keywords = Dict.insert keyword v m.keywords }
@@ -110,26 +85,8 @@ insert k v m =
         Symbol symbol ->
             { m | symbols = Dict.insert symbol v m.symbols }
 
-        Fn _ _ ->
-            { m | fns = ( k, v ) :: m.fns }
-
-        Map _ ->
-            { m | maps = ( k, v ) :: m.maps }
-
-        MapEntry _ ->
-            { m | mapEntries = ( k, v ) :: m.mapEntries }
-
-        Regex _ _ ->
-            { m | regexs = ( k, v ) :: m.regexs }
-
-        Set _ ->
-            { m | sets = ( k, v ) :: m.sets }
-
-        Throwable _ ->
-            { m | throwables = ( k, v ) :: m.throwables }
-
-        Vector _ ->
-            { m | vectors = ( k, v ) :: m.vectors }
+        _ ->
+            { m | otherValues = ( k, v ) :: m.otherValues }
 
 
 remove : Value io -> ValueMap io -> ValueMap io
@@ -144,36 +101,14 @@ remove k m =
         String string ->
             { m | strings = Dict.remove string m.strings }
 
-        Ref _ ->
-            let
-                newRefs =
-                    m.refs |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | refs = newRefs }
-
-        List _ ->
-            let
-                newLists =
-                    m.lists |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | lists = newLists }
-
         Nil ->
             { m | nil = Nothing }
 
-        Bool bool ->
-            let
-                oldBools =
-                    m.bools
+        Bool True ->
+            { m | true = Nothing }
 
-                bools =
-                    if bool then
-                        { oldBools | true = Nothing }
-
-                    else
-                        { oldBools | false = Nothing }
-            in
-            { m | bools = bools }
+        Bool False ->
+            { m | false = Nothing }
 
         Keyword keyword ->
             { m | keywords = Dict.remove keyword m.keywords }
@@ -181,50 +116,8 @@ remove k m =
         Symbol symbol ->
             { m | symbols = Dict.remove symbol m.symbols }
 
-        Fn _ _ ->
-            let
-                newFns =
-                    m.fns |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | fns = newFns }
-
-        Map _ ->
-            let
-                newMaps =
-                    m.maps |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | maps = newMaps }
-
-        MapEntry _ ->
-            let
-                newMapEntries =
-                    m.mapEntries |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | mapEntries = newMapEntries }
-
-        Regex _ _ ->
-            let
-                newRegexs =
-                    m.regexs |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | regexs = newRegexs }
-
-        Set _ ->
-            let
-                newSets =
-                    m.sets |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | sets = newSets }
-
-        Throwable _ ->
-            m
-
-        Vector _ ->
-            let
-                newVectors =
-                    m.vectors |> List.filter (Tuple.first >> (/=) k)
-            in
-            { m | vectors = newVectors }
+        _ ->
+            { m | otherValues = m.otherValues |> List.filter (Tuple.first >> (/=) k) }
 
 
 linearFind : (a -> Bool) -> List a -> Maybe a
@@ -253,23 +146,14 @@ get k m =
         String string ->
             Dict.get string m.strings
 
-        Ref _ ->
-            linearFind (Tuple.first >> (==) k) m.refs
-                |> Maybe.map Tuple.second
-
-        List _ ->
-            linearFind (Tuple.first >> (==) k) m.lists
-                |> Maybe.map Tuple.second
-
         Nil ->
             m.nil
 
-        Bool bool ->
-            if bool then
-                m.bools.true
+        Bool True ->
+            m.true
 
-            else
-                m.bools.false
+        Bool False ->
+            m.false
 
         Keyword keyword ->
             Dict.get keyword m.keywords
@@ -277,31 +161,8 @@ get k m =
         Symbol symbol ->
             Dict.get symbol m.symbols
 
-        Fn _ _ ->
-            linearFind (Tuple.first >> (==) k) m.fns
-                |> Maybe.map Tuple.second
-
-        Map _ ->
-            linearFind (Tuple.first >> (==) k) m.maps
-                |> Maybe.map Tuple.second
-
-        MapEntry _ ->
-            linearFind (Tuple.first >> (==) k) m.mapEntries
-                |> Maybe.map Tuple.second
-
-        Regex _ _ ->
-            linearFind (Tuple.first >> (==) k) m.regexs
-                |> Maybe.map Tuple.second
-
-        Set _ ->
-            linearFind (Tuple.first >> (==) k) m.sets
-                |> Maybe.map Tuple.second
-
-        Throwable _ ->
-            Nothing
-
-        Vector _ ->
-            linearFind (Tuple.first >> (==) k) m.vectors
+        _ ->
+            linearFind (Tuple.first >> (==) k) m.otherValues
                 |> Maybe.map Tuple.second
 
 
@@ -326,10 +187,10 @@ toList m =
             m.nil |> Maybe.map (Tuple.pair Nil >> List.singleton) |> Maybe.withDefault []
 
         trues =
-            m.bools.true |> Maybe.map (Tuple.pair (Bool True) >> List.singleton) |> Maybe.withDefault []
+            m.true |> Maybe.map (Tuple.pair (Bool True) >> List.singleton) |> Maybe.withDefault []
 
         falses =
-            m.bools.false |> Maybe.map (Tuple.pair (Bool False) >> List.singleton) |> Maybe.withDefault []
+            m.false |> Maybe.map (Tuple.pair (Bool False) >> List.singleton) |> Maybe.withDefault []
 
         keywords =
             Dict.toList m.keywords |> List.map (Tuple.mapFirst Keyword)
@@ -345,14 +206,7 @@ toList m =
         ++ falses
         ++ keywords
         ++ symbols
-        ++ m.refs
-        ++ m.fns
-        ++ m.maps
-        ++ m.mapEntries
-        ++ m.lists
-        ++ m.sets
-        ++ m.vectors
-        ++ m.regexs
+        ++ m.otherValues
 
 
 foldl : (Value io -> Located (Value io) -> a -> a) -> a -> ValueMap io -> a
