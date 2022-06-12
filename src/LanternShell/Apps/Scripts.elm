@@ -156,7 +156,7 @@ sleep =
                     )
     in
     Callable.new
-        |> Callable.setArity1 (Callable.fixedArity arity1)
+        |> Callable.setArity1 (Callable.fixedArity (Value.symbol "ms") arity1)
 
 
 savepoint : Callable MyIO
@@ -166,7 +166,7 @@ savepoint =
             Ok (Runtime.sideEffect (Savepoint val))
     in
     Callable.new
-        |> Callable.setArity1 (Callable.fixedArity arity1)
+        |> Callable.setArity1 (Callable.fixedArity (Value.symbol "x") arity1)
 
 
 type alias HttpRequest =
@@ -255,7 +255,7 @@ http =
                     Err exception
     in
     Callable.new
-        |> Callable.setArity1 (Callable.fixedArity arity1)
+        |> Callable.setArity1 (Callable.fixedArity (Value.symbol "req") arity1)
 
 
 toTextPart : Value ui -> Result Exception TextFormat
@@ -459,9 +459,16 @@ ui =
                     )
     in
     Callable.new
-        |> Callable.setArity1 (Callable.fixedArity arity1)
-        |> Callable.setArity2 (Callable.fixedArity arity2)
-        |> Callable.setArity3 (Callable.fixedArity arity3)
+        |> Callable.setArity1 (Callable.fixedArity (Value.symbol "nodes") arity1)
+        |> Callable.setArity2 (Callable.fixedArity ( Value.symbol "nodes", Value.symbol "defaults" ) arity2)
+        |> Callable.setArity3
+            (Callable.fixedArity
+                ( Value.symbol "nodes"
+                , Value.symbol "watch-fn"
+                , Value.symbol "defaults"
+                )
+                arity3
+            )
 
 
 type MyIO
@@ -632,7 +639,7 @@ runWatchFn env watchFn stateMap =
                         (Runtime.apply (Located.unknown watchFn)
                             (Located.unknown (Value.list [ Value.map stateMap ]))
                             env
-                            Enclojure.terminate
+                            Runtime.terminate
                         )
             in
             case evalResult of
@@ -653,7 +660,7 @@ runWatchFn env watchFn stateMap =
 
 defaultEnv : Env MyIO
 defaultEnv =
-    Enclojure.defaultEnv
+    Enclojure.init
         |> Runtime.bindGlobal "http/request"
             (Value.fn (Just "http/request") http)
         |> Runtime.bindGlobal "sleep"
@@ -1218,7 +1225,7 @@ viewConsole context interpreter console options =
                         Savepoint_ step ->
                             let
                                 env =
-                                    Enclojure.getEnv step
+                                    Enclojure.getStepEnv step
 
                                 newEnv =
                                     case interpreter of
@@ -1237,7 +1244,7 @@ viewConsole context interpreter console options =
                                         { onPress =
                                             Just
                                                 (step
-                                                    |> Enclojure.setEnv newEnv
+                                                    |> Enclojure.setStepEnv newEnv
                                                     |> HandleIO
                                                     |> Lantern.App.Message
                                                 )
@@ -1247,7 +1254,7 @@ viewConsole context interpreter console options =
                             Element.column
                                 [ Element.width Element.fill ]
                                 [ Element.paragraph [] [ Element.text "Savepoint", rewindButton ]
-                                , Enclojure.getValue step |> Maybe.map valueRow |> Maybe.withDefault Element.none
+                                , Enclojure.getStepValue step |> Maybe.map valueRow |> Maybe.withDefault Element.none
                                 ]
 
                         Success val ->
