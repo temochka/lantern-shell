@@ -5,8 +5,7 @@ import Element exposing (Element)
 import Element.Background
 import Element.Input
 import Enclojure.Located as Located
-import Enclojure.Common exposing (Exception(..), Number(..), Value(..))
-import Enclojure.Value as Value
+import Enclojure.Value as Value exposing (Value)
 import Enclojure.ValueMap as ValueMap
 import Html.Events
 import Json.Decode
@@ -38,7 +37,7 @@ type Message io
 
 init : Maybe (Flags io) -> ( Model io, Cmd (Lantern.App.Message (Message io)) )
 init flags =
-    ( { value = flags |> Maybe.map .value |> Maybe.withDefault Nil
+    ( { value = flags |> Maybe.map .value |> Maybe.withDefault Value.nil
       , selectedPath = Nothing
       , hoveredPath = Nothing
       }
@@ -75,49 +74,63 @@ renderValue theme path value =
                     ( Lantern.App.Message <| SelectPath path, True )
                 )
         ]
-        (case value of
-            Vector v ->
-                Element.column
-                    []
-                    [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] (Element.text "[")
-                    , v
-                        |> Array.toList
-                        |> List.indexedMap (\i e -> renderValue theme (Array.push (Number (Int i)) path) (Located.getValue e))
-                        |> Element.column [ indent ]
-                    , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] (Element.text "]")
-                    ]
+        (value
+            |> Value.tryOneOf
+                [ Value.tryVector
+                    >> Maybe.map
+                        (\v ->
+                            Element.column
+                                []
+                                [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] (Element.text "[")
+                                , v
+                                    |> Array.toList
+                                    |> List.indexedMap (\i e -> renderValue theme (Array.push (Value.int i) path) (Located.getValue e))
+                                    |> Element.column [ indent ]
+                                , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] (Element.text "]")
+                                ]
+                        )
+                , Value.tryList
+                    >> Maybe.map
+                        (\v ->
+                            Element.column
+                                []
+                                [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "("
+                                , v
+                                    |> List.indexedMap (\i e -> renderValue theme (Array.push (Value.int i) path) (Located.getValue e))
+                                    |> Element.column [ indent ]
+                                , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text ")"
+                                ]
+                        )
+                , Value.tryMap
+                    >> Maybe.map
+                        (\m ->
+                            Element.column
+                                []
+                                [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "{"
+                                , m
+                                    |> ValueMap.toList
+                                    |> List.map
+                                        (\( k, Located.Located _ v ) ->
+                                            Element.row
+                                                [ Element.width Element.fill, Element.alignTop, Element.spacing 10 ]
+                                                [ Element.el [ Element.alignTop ] (renderValue theme (Array.push k path) k)
+                                                , renderValue theme (Array.push k path) v
+                                                ]
+                                        )
+                                    |> Element.column [ indent ]
+                                , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "}"
+                                ]
+                        )
+                ]
+            |> (\me ->
+                    case me of
+                        Just e ->
+                            e
 
-            List v ->
-                Element.column
-                    []
-                    [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "("
-                    , v
-                        |> List.indexedMap (\i e -> renderValue theme (Array.push (Number (Int i)) path) (Located.getValue e))
-                        |> Element.column [ indent ]
-                    , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text ")"
-                    ]
-
-            Map m ->
-                Element.column
-                    []
-                    [ Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "{"
-                    , m
-                        |> ValueMap.toList
-                        |> List.map
-                            (\( k, Located.Located _ v ) ->
-                                Element.row
-                                    [ Element.width Element.fill, Element.alignTop, Element.spacing 10 ]
-                                    [ Element.el [ Element.alignTop ] (renderValue theme (Array.push k path) k)
-                                    , renderValue theme (Array.push k path) v
-                                    ]
-                            )
-                        |> Element.column [ indent ]
-                    , Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <| Element.text "}"
-                    ]
-
-            _ ->
-                Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <|
-                    Element.text (Value.inspect value)
+                        Nothing ->
+                            Element.el [ Element.pointer, Element.mouseOver [ Element.Background.color theme.bgHighlight ] ] <|
+                                Element.text (Value.inspect value)
+               )
         )
 
 
@@ -128,7 +141,7 @@ view ctx model =
             model.hoveredPath
                 |> Maybe.map Just
                 |> Maybe.withDefault model.selectedPath
-                |> Maybe.map (\v -> Value.inspect (Vector (Array.map Located.unknown v)))
+                |> Maybe.map (\v -> Value.inspect (Value.vector v))
                 |> Maybe.withDefault " "
     in
     LanternUi.columnLayout
