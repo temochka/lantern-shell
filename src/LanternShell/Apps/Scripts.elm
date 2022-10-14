@@ -6,6 +6,7 @@ import Element.Background
 import Element.Input
 import Enclojure exposing (Env, EvalResult, Exception, Step)
 import Enclojure.Callable as Callable exposing (Callable)
+import Enclojure.Json
 import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime
 import Enclojure.Value as Value exposing (Value)
@@ -17,6 +18,7 @@ import Keyboard.Event
 import Keyboard.Key exposing (Key(..))
 import Lantern
 import Lantern.App
+import Lantern.Errors
 import Lantern.Http
 import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
@@ -265,6 +267,31 @@ echo =
                             ((\text -> Lantern.echo text (Value.string >> Ok))
                                 >> LanternTask
                                 >> Runtime.sideEffect
+                            )
+                )
+            )
+
+
+readerQuery : Callable MyIO
+readerQuery =
+    Callable.new
+        |> Callable.setArity1
+            (Callable.fixedArity
+                (Value.symbol "query")
+                (\val ->
+                    val
+                        |> Value.tryString
+                        |> Result.fromMaybe (Value.exception "not a string")
+                        |> Result.map
+                            (\query ->
+                                Lantern.readerQuery
+                                    (Lantern.Query.withNoArguments query)
+                                    Enclojure.Json.decodeValue
+                                    (Result.mapError (Lantern.Errors.toString >> Value.exception)
+                                        >> Result.map Value.vectorFromList
+                                    )
+                                    |> LanternTask
+                                    |> Runtime.sideEffect
                             )
                 )
             )
@@ -695,6 +722,8 @@ defaultEnv =
             (Value.fn (Just "http/request") http)
         |> Runtime.bindGlobal "lantern/echo"
             (Value.fn (Just "lantern/echo") echo)
+        |> Runtime.bindGlobal "lantern/reader-query"
+            (Value.fn (Just "lantern/reader-query") readerQuery)
         |> Runtime.bindGlobal "println"
             (Value.fn (Just "println") printlnFn)
         |> Runtime.bindGlobal "sleep"

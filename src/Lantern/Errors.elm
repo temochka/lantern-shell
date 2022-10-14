@@ -1,4 +1,4 @@
-module Lantern.Errors exposing (Error(..))
+module Lantern.Errors exposing (Error(..), toString)
 
 
 type Error
