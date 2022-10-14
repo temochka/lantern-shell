@@ -16,7 +16,6 @@ import Lantern
 import Lantern.App
 import LanternShell.Apps.AppLauncher as AppLauncherApp
 import LanternShell.Apps.DatabaseExplorer as DatabaseExplorerApp
-import LanternShell.Apps.Echo as EchoApp
 import LanternShell.Apps.LogViewer as LogViewerApp
 import LanternShell.Apps.Migrations as MigrationsApp
 import LanternShell.Apps.ReaderQuery as ReaderQueryApp
@@ -38,7 +37,6 @@ type alias LauncherEntry msg =
 
 type App msg
     = AppLauncherApp (AppLauncherApp.Model (LauncherEntry msg))
-    | EchoApp EchoApp.Model
     | DatabaseExplorerApp DatabaseExplorerApp.Model
     | LogViewerApp LogViewerApp.Model
     | MigrationsApp MigrationsApp.Model
@@ -50,7 +48,6 @@ type App msg
 
 type Message msg
     = AppLauncherMsg (AppLauncherApp.Message (LauncherEntry msg))
-    | EchoMsg EchoApp.Message
     | DatabaseExplorerMsg DatabaseExplorerApp.Message
     | LogViewerMsg LogViewerApp.Message
     | MigrationsMsg MigrationsApp.Message
@@ -69,9 +66,6 @@ appId app =
 
         DatabaseExplorerApp _ ->
             "DatabaseExplorer"
-
-        EchoApp _ ->
-            "Echo"
 
         LogViewerApp _ ->
             "LogViewer"
@@ -97,9 +91,6 @@ launcherForId id =
     case id of
         "DatabaseExplorer" ->
             Just databaseExplorer
-
-        "Echo" ->
-            Just echo
 
         "LogViewer" ->
             Just logViewer
@@ -132,9 +123,6 @@ lanternAppFor app =
         DatabaseExplorerApp _ ->
             databaseExplorer
 
-        EchoApp _ ->
-            echo
-
         LogViewerApp _ ->
             logViewer
 
@@ -156,8 +144,7 @@ lanternAppFor app =
 
 all : List (Context msg -> Lantern.App.App () () (App msg) (Message msg))
 all =
-    [ echo
-    , databaseExplorer
+    [ databaseExplorer
     , readerQuery
     , scripts Nothing
     , valueInspector Nothing
@@ -192,33 +179,6 @@ databaseExplorer context =
         , context = \_ -> { theme = context.theme }
         }
         DatabaseExplorerApp.lanternApp
-
-
-echo : Context msg -> Lantern.App.App () () (App msg) (Message msg)
-echo context =
-    Lantern.App.mount
-        { unwrapMsg =
-            \wrappedMsg ->
-                case wrappedMsg of
-                    EchoMsg unwrappedMsg ->
-                        Just unwrappedMsg
-
-                    _ ->
-                        Nothing
-        , unwrapModel =
-            \wrappedModel ->
-                case wrappedModel of
-                    EchoApp unwrappedModel ->
-                        Just unwrappedModel
-
-                    _ ->
-                        Nothing
-        , wrapModel = EchoApp
-        , wrapMsg = EchoMsg
-        , flags = Nothing
-        , context = \_ -> { theme = context.theme }
-        }
-        EchoApp.lanternApp
 
 
 logViewer : Context msg -> Lantern.App.App () () (App msg) (Message msg)
