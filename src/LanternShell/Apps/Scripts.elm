@@ -169,15 +169,7 @@ savepoint =
         |> Callable.setArity1 (Callable.fixedArity (Value.symbol "x") arity1)
 
 
-type alias HttpRequest =
-    { method : String
-    , headers : List ( String, String )
-    , url : String
-    , body : Maybe String
-    }
-
-
-decodeHttpRequest : Value MyIO -> Result Exception HttpRequest
+decodeHttpRequest : Value MyIO -> Result Exception Lantern.Http.RequestPayload
 decodeHttpRequest value =
     value
         |> Value.tryMap
@@ -241,13 +233,14 @@ http =
         arity1 request =
             case decodeHttpRequest request of
                 Ok req ->
-                    { method = req.method
-                    , headers = req.headers
-                    , url = req.url
-                    , body = req.body
-                    , expect = responseToValue
-                    }
-                        |> Http
+                    Lantern.httpRequest
+                        { method = req.method
+                        , headers = req.headers
+                        , url = req.url
+                        , body = req.body
+                        , expect = responseToValue >> Ok
+                        }
+                        |> LanternTask
                         |> Runtime.sideEffect
                         |> Ok
 
@@ -473,9 +466,9 @@ ui =
 
 type MyIO
     = IOTask (Task.Task Exception (Value MyIO))
+    | LanternTask (Task.Task Never (Lantern.Message (Result Exception (Value MyIO))))
     | ShowUI (UI MyIO)
     | Savepoint (Value MyIO)
-    | Http (Lantern.Http.Request (Value MyIO))
 
 
 type Message
@@ -685,19 +678,6 @@ handleEvalResult evalResult env =
 
         Enclojure.RunIO se toStep ->
             case se of
-                Http request ->
-                    ( Running
-                    , Lantern.httpRequest
-                        { method = request.method
-                        , headers = request.headers
-                        , url = request.url
-                        , body = request.body
-                        , expect =
-                            request.expect >> Ok >> toStep >> HandleIO
-                        }
-                        |> Lantern.App.call
-                    )
-
                 IOTask task ->
                     ( Running
                     , task
@@ -707,6 +687,13 @@ handleEvalResult evalResult env =
                                     |> HandleIO
                                     |> Lantern.App.Message
                             )
+                    )
+
+                LanternTask task ->
+                    ( Running
+                    , task
+                        |> Task.map (Lantern.map (toStep >> HandleIO))
+                        |> Lantern.App.call
                     )
 
                 ShowUI uiState ->
