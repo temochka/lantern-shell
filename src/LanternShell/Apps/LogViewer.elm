@@ -42,6 +42,7 @@ view { log, theme } _ =
             |> Element.textColumn
                 [ Element.padding 5
                 , Element.width Element.fill
+                , Element.height Element.fill
                 , Element.scrollbarX
                 , Element.spacing 10
                 , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]

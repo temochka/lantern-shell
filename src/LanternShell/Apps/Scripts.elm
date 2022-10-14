@@ -251,6 +251,42 @@ http =
         |> Callable.setArity1 (Callable.fixedArity (Value.symbol "req") arity1)
 
 
+echo : Callable MyIO
+echo =
+    Callable.new
+        |> Callable.setArity1
+            (Callable.fixedArity
+                (Value.symbol "text")
+                (\val ->
+                    val
+                        |> Value.tryString
+                        |> Result.fromMaybe (Value.exception "not a string")
+                        |> Result.map
+                            ((\text -> Lantern.echo text (Value.string >> Ok))
+                                >> LanternTask
+                                >> Runtime.sideEffect
+                            )
+                )
+            )
+
+
+printlnFn : Callable MyIO
+printlnFn =
+    Callable.new
+        |> Callable.setArity0
+            (Callable.variadicArity
+                { argNames = (), restArgName = Value.symbol "vals" }
+                (\{ rest } ->
+                    rest
+                        |> List.map Value.toString
+                        |> String.join " "
+                        |> Println
+                        |> Runtime.sideEffect
+                        |> Ok
+                )
+            )
+
+
 toTextPart : Value ui -> Result Exception TextFormat
 toTextPart val =
     val
@@ -469,6 +505,7 @@ type MyIO
     | LanternTask (Task.Task Never (Lantern.Message (Result Exception (Value MyIO))))
     | ShowUI (UI MyIO)
     | Savepoint (Value MyIO)
+    | Println String
 
 
 type Message
@@ -656,6 +693,10 @@ defaultEnv =
     Enclojure.init
         |> Runtime.bindGlobal "http/request"
             (Value.fn (Just "http/request") http)
+        |> Runtime.bindGlobal "lantern/echo"
+            (Value.fn (Just "lantern/echo") echo)
+        |> Runtime.bindGlobal "println"
+            (Value.fn (Just "println") printlnFn)
         |> Runtime.bindGlobal "sleep"
             (Value.fn (Just "sleep") sleep)
         |> Runtime.bindGlobal "ui"
@@ -664,22 +705,26 @@ defaultEnv =
             (Value.fn (Just "<o>") savepoint)
 
 
-handleEvalResult : EvalResult MyIO -> Env MyIO -> ( Interpreter, Cmd (Lantern.App.Message Message) )
-handleEvalResult evalResult env =
+handleEvalResult :
+    EvalResult MyIO
+    -> { env : Env MyIO, console : Console }
+    -> ( Interpreter, Console, Cmd (Lantern.App.Message Message) )
+handleEvalResult evalResult { env, console } =
     case evalResult of
         Enclojure.Done val ->
-            ( Done val env, Cmd.none )
+            ( Done val env, console, Cmd.none )
 
         Enclojure.Error err ->
-            ( Panic err env, Cmd.none )
+            ( Panic err env, console, Cmd.none )
 
         Enclojure.Continue step ->
-            ( Running, Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO step)) )
+            ( Running, console, Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO step)) )
 
         Enclojure.RunIO se toStep ->
             case se of
                 IOTask task ->
                     ( Running
+                    , console
                     , task
                         |> Task.attempt
                             (\r ->
@@ -691,18 +736,27 @@ handleEvalResult evalResult env =
 
                 LanternTask task ->
                     ( Running
+                    , console
                     , task
                         |> Task.map (Lantern.map (toStep >> HandleIO))
                         |> Lantern.App.call
                     )
 
+                Println str ->
+                    ( Running
+                    , console |> printLn str
+                    , Cmd.none
+                    )
+
                 ShowUI uiState ->
                     ( ShowingUI { enclojureUi = uiState, fuzzySelects = Dict.empty } env (Ok >> toStep)
+                    , console
                     , Cmd.none
                     )
 
                 Savepoint v ->
                     ( Running
+                    , console
                     , toStep (Ok v)
                         |> HandleIO
                         |> Lantern.App.Message
@@ -717,15 +771,15 @@ runScript model =
         ( evalResult, retEnv ) =
             Enclojure.eval { maxOps = Just stackLimit } defaultEnv model.script.code
 
-        ( interpreter, retCmd ) =
-            handleEvalResult evalResult retEnv
+        ( interpreter, console, retCmd ) =
+            handleEvalResult evalResult
+                { env = retEnv
+                , console = model.console |> printLn ("Starting " ++ scriptName model.script)
+                }
     in
     ( { model
         | interpreter = interpreter
-        , console =
-            model.console
-                |> printLn ("Starting " ++ scriptName model.script)
-                |> printResult interpreter
+        , console = console |> printResult interpreter
       }
     , retCmd
     )
@@ -815,15 +869,15 @@ update msg appModel =
                                     ( evalResult, retEnv ) =
                                         Enclojure.eval { maxOps = Just stackLimit } env code
 
-                                    ( interpreter, retCmd ) =
-                                        handleEvalResult evalResult retEnv
+                                    ( interpreter, console, retCmd ) =
+                                        handleEvalResult evalResult
+                                            { env = retEnv
+                                            , console = model.console |> printLn "Evaluating from REPL"
+                                            }
                                 in
                                 ( { model
                                     | interpreter = interpreter
-                                    , console =
-                                        model.console
-                                            |> printLn "Evaluating from REPL"
-                                            |> printResult interpreter
+                                    , console = console |> printResult interpreter
                                     , repl = ""
                                   }
                                 , retCmd
@@ -872,11 +926,9 @@ update msg appModel =
                         ( evalResult, retEnv ) =
                             Enclojure.continueEval { maxOps = Just stackLimit } step
 
-                        ( interpreter, retCmd ) =
-                            handleEvalResult evalResult retEnv
-
-                        console =
-                            recordSavepoint step model.console
+                        ( interpreter, console, retCmd ) =
+                            handleEvalResult evalResult
+                                { env = retEnv, console = recordSavepoint step model.console }
                     in
                     ( { model | interpreter = interpreter, console = console }, retCmd )
                 )
