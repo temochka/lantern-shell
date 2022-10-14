@@ -191,6 +191,7 @@ refreshLiveQueries pid model =
                     cmd =
                         if liveQueriesChanged then
                             Lantern.liveQueries (liveQueriesCache |> Dict.values |> List.concat)
+                                |> Task.perform identity
                                 |> Cmd.map LanternMessage
 
                         else

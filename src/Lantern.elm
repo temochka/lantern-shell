@@ -30,7 +30,7 @@ import Lantern.Log as Log exposing (Log)
 import Lantern.Query
 import Lantern.Request
 import Lantern.Response
-import Task
+import Task exposing (Task)
 
 
 type alias Error =
@@ -97,7 +97,7 @@ newConnection requestPort =
         }
 
 
-echo : String -> (String -> msg) -> Cmd (Message msg)
+echo : String -> (String -> msg) -> Task Never (Message msg)
 echo payload msg =
     let
         handler response =
@@ -111,14 +111,14 @@ echo payload msg =
         request =
             Lantern.Request.Echo payload
     in
-    Task.perform identity (Task.succeed (Request request handler))
+    Task.succeed (Request request handler)
 
 
 readerQuery :
     Lantern.Query.Query
     -> Json.Decode.Decoder a
     -> (Result Error (List a) -> msg)
-    -> Cmd (Message msg)
+    -> Task Never (Message msg)
 readerQuery query decoder msg =
     let
         request =
@@ -136,12 +136,12 @@ readerQuery query decoder msg =
                 _ ->
                     [ msg (Err (Lantern.Errors.Error "Unexpected response")) ]
     in
-    Task.perform identity (Task.succeed (Request request handler))
+    Task.succeed (Request request handler)
 
 
 httpRequest :
     Lantern.Http.Request msg
-    -> Cmd (Message msg)
+    -> Task Never (Message msg)
 httpRequest req =
     let
         request =
@@ -155,13 +155,13 @@ httpRequest req =
                 _ ->
                     []
     in
-    Task.perform identity (Task.succeed (Request request handler))
+    Task.succeed (Request request handler)
 
 
 writerQuery :
     Lantern.Query.Query
     -> (Result Error Lantern.Query.WriterResult -> msg)
-    -> Cmd (Message msg)
+    -> Task Never (Message msg)
 writerQuery query msg =
     let
         request =
@@ -175,10 +175,10 @@ writerQuery query msg =
                 _ ->
                     [ msg (Err (Lantern.Errors.Error "Unexpected response")) ]
     in
-    Task.perform identity (Task.succeed (Request request handler))
+    Task.succeed (Request request handler)
 
 
-liveQueries : List (LiveQuery msg) -> Cmd (Message msg)
+liveQueries : List (LiveQuery msg) -> Task Never (Message msg)
 liveQueries orderedQueries =
     let
         request =
@@ -205,10 +205,10 @@ liveQueries orderedQueries =
                 _ ->
                     []
     in
-    Task.perform identity (Task.succeed (Request request handler))
+    Task.succeed (Request request handler)
 
 
-migrate : Lantern.Query.Query -> (Bool -> msg) -> Cmd (Message msg)
+migrate : Lantern.Query.Query -> (Bool -> msg) -> Task Never (Message msg)
 migrate query_ msg =
     let
         request =
@@ -222,7 +222,7 @@ migrate query_ msg =
                 _ ->
                     [ msg False ]
     in
-    Task.perform identity (Task.succeed (Request request handler))
+    Task.succeed (Request request handler)
 
 
 update : Message msg -> Connection msg -> ( Connection msg, Cmd msg )

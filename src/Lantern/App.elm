@@ -3,6 +3,7 @@ module Lantern.App exposing (App, Message(..), app, call, liveApp, mount, simple
 import Element exposing (Element)
 import Lantern
 import Lantern.LiveQuery exposing (LiveQuery)
+import Task exposing (Task)
 
 
 type Message msg
@@ -20,9 +21,9 @@ mapMessage f msg =
             LanternMessage (Lantern.map f lanternMessage)
 
 
-call : Cmd (Lantern.Message msg) -> Cmd (Message msg)
-call cmd =
-    Cmd.map LanternMessage cmd
+call : Task Never (Lantern.Message msg) -> Cmd (Message msg)
+call task =
+    Task.perform LanternMessage task
 
 
 type alias App ctx flags model msg =
