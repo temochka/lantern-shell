@@ -297,6 +297,41 @@ readerQuery =
             )
 
 
+writerQuery : Callable MyIO
+writerQuery =
+    Callable.new
+        |> Callable.setArity1
+            (Callable.fixedArity
+                (Value.symbol "query")
+                (\val ->
+                    val
+                        |> Value.tryString
+                        |> Result.fromMaybe (Value.exception "not a string")
+                        |> Result.map
+                            (\query ->
+                                Lantern.writerQuery
+                                    (Lantern.Query.withNoArguments query)
+                                    (Result.mapError (Lantern.Errors.toString >> Value.exception)
+                                        >> Result.map
+                                            (\{ changedRows, lastInsertRowId } ->
+                                                Enclojure.ValueMap.fromList
+                                                    [ ( Value.keyword "changed-rows"
+                                                      , Located.unknown <| Value.int changedRows
+                                                      )
+                                                    , ( Value.keyword "last-insert-row-id"
+                                                      , Located.unknown <| Value.int lastInsertRowId
+                                                      )
+                                                    ]
+                                                    |> Value.map
+                                            )
+                                    )
+                                    |> LanternTask
+                                    |> Runtime.sideEffect
+                            )
+                )
+            )
+
+
 printlnFn : Callable MyIO
 printlnFn =
     Callable.new
@@ -724,6 +759,8 @@ defaultEnv =
             (Value.fn (Just "lantern/echo") echo)
         |> Runtime.bindGlobal "lantern/reader-query"
             (Value.fn (Just "lantern/reader-query") readerQuery)
+        |> Runtime.bindGlobal "lantern/writer-query"
+            (Value.fn (Just "lantern/writer-query") writerQuery)
         |> Runtime.bindGlobal "println"
             (Value.fn (Just "println") printlnFn)
         |> Runtime.bindGlobal "sleep"
