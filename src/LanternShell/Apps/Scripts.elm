@@ -295,6 +295,54 @@ readerQuery =
                             )
                 )
             )
+        |> Callable.setArity2
+            (Callable.fixedArity
+                ( Value.symbol "query"
+                , Value.symbol "args"
+                )
+                (\( queryVal, argsVal ) ->
+                    Result.map2
+                        (\query args ->
+                            Lantern.readerQuery
+                                (Lantern.Query.withArguments query (Dict.toList args))
+                                Enclojure.Json.decodeValue
+                                (Result.mapError (Lantern.Errors.toString >> Value.exception)
+                                    >> Result.map Value.vectorFromList
+                                )
+                                |> LanternTask
+                                |> Runtime.sideEffect
+                        )
+                        (Value.tryString queryVal |> Result.fromMaybe (Value.exception "query is not a string"))
+                        (decodeQueryArgs argsVal)
+                )
+            )
+
+
+decodeQueryArgs : Value io -> Result Exception (Dict String Lantern.Query.Argument)
+decodeQueryArgs argsVal =
+    Value.tryDictOf
+        (Value.tryKeyword >> Maybe.map ((++) "$"))
+        (Value.tryOneOf
+            [ Value.tryInt >> Maybe.map Lantern.Query.Int
+            , Value.tryFloat >> Maybe.map Lantern.Query.Float
+            , Value.tryString >> Maybe.map Lantern.Query.String
+            ]
+        )
+        argsVal
+        |> Result.fromMaybe (Value.exception "args is not a map of keywords to int, float, or string")
+
+
+writerQueryResultToValue : Lantern.Query.WriterResult -> Value io
+writerQueryResultToValue { changedRows, lastInsertRowId } =
+    Enclojure.ValueMap.fromList
+        [ ( Value.keyword "changed-rows"
+          , Located.unknown <| Value.int changedRows
+          )
+        , ( Value.keyword "last-insert-row-id"
+          , Located.unknown <| Value.int lastInsertRowId
+          )
+        ]
+        |> Value.map
 
 
 writerQuery : Callable MyIO
@@ -312,22 +360,28 @@ writerQuery =
                                 Lantern.writerQuery
                                     (Lantern.Query.withNoArguments query)
                                     (Result.mapError (Lantern.Errors.toString >> Value.exception)
-                                        >> Result.map
-                                            (\{ changedRows, lastInsertRowId } ->
-                                                Enclojure.ValueMap.fromList
-                                                    [ ( Value.keyword "changed-rows"
-                                                      , Located.unknown <| Value.int changedRows
-                                                      )
-                                                    , ( Value.keyword "last-insert-row-id"
-                                                      , Located.unknown <| Value.int lastInsertRowId
-                                                      )
-                                                    ]
-                                                    |> Value.map
-                                            )
+                                        >> Result.map writerQueryResultToValue
                                     )
                                     |> LanternTask
                                     |> Runtime.sideEffect
                             )
+                )
+            )
+        |> Callable.setArity2
+            (Callable.fixedArity ( Value.symbol "query", Value.symbol "args" )
+                (\( queryVal, argsVal ) ->
+                    Result.map2
+                        (\query args ->
+                            Lantern.writerQuery
+                                (Lantern.Query.withArguments query (Dict.toList args))
+                                (Result.mapError (Lantern.Errors.toString >> Value.exception)
+                                    >> Result.map writerQueryResultToValue
+                                )
+                                |> LanternTask
+                                |> Runtime.sideEffect
+                        )
+                        (Value.tryString queryVal |> Result.fromMaybe (Value.exception "query is not a string"))
+                        (decodeQueryArgs argsVal)
                 )
             )
 
