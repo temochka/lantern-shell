@@ -832,10 +832,10 @@ handleEvalResult :
 handleEvalResult evalResult { env, console } =
     case evalResult of
         Enclojure.Done val ->
-            ( Done val env, console, Cmd.none )
+            ( Done val env, console |> printResult (Done val env), Cmd.none )
 
         Enclojure.Error err ->
-            ( Panic err env, console, Cmd.none )
+            ( Panic err env, console |> printResult (Panic err env), Cmd.none )
 
         Enclojure.Continue step ->
             ( Running, console, Task.perform identity (Task.succeed (Lantern.App.Message <| HandleIO step)) )
@@ -903,6 +903,14 @@ runScript model =
       }
     , retCmd
     )
+
+
+currentFrameName : Env io -> String
+currentFrameName { stack } =
+    stack
+        |> List.head
+        |> Maybe.map .name
+        |> Maybe.withDefault "<unknown>"
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
@@ -1361,7 +1369,7 @@ viewConsole context interpreter console options =
                     valueRow val =
                         Element.paragraph
                             [ Element.width Element.fill ]
-                            [ Element.text (Value.inspect val)
+                            [ Element.text (Value.inspectType val)
                             , LanternUi.Input.button context.theme
                                 []
                                 { onPress = Just (Lantern.App.Message <| InspectValue val)
@@ -1412,7 +1420,7 @@ viewConsole context interpreter console options =
                             in
                             Element.column
                                 [ Element.width Element.fill ]
-                                [ Element.paragraph [] [ Element.text "Savepoint", rewindButton ]
+                                [ Element.paragraph [] [ Element.text ("Savepoint (" ++ currentFrameName env ++ ")"), rewindButton ]
                                 , Enclojure.getStepValue step |> Maybe.map valueRow |> Maybe.withDefault Element.none
                                 ]
 
@@ -1424,7 +1432,11 @@ viewConsole context interpreter console options =
                                 ]
 
                         Failure ( e, _ ) ->
-                            Element.text <| Value.inspect (Value.throwable e)
+                            Element.column
+                                [ Element.width Element.fill ]
+                                [ Element.text <| Value.inspect (Value.throwable e)
+                                , List.map Element.text (Runtime.prettyTrace e) |> Element.column []
+                                ]
 
                         UiTrace uiState ->
                             Element.column
