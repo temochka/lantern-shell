@@ -20,14 +20,17 @@ queryArguments arguments =
         identity
         (\v ->
             case v of
-                Query.Int i ->
+                Query.Integer i ->
                     Json.Encode.string <| String.fromInt i
 
-                Query.Float f ->
+                Query.Real f ->
                     Json.Encode.string <| String.fromFloat f
 
-                Query.String s ->
+                Query.Text s ->
                     Json.Encode.string s
+
+                Query.Null ->
+                    Json.Encode.null
         )
         arguments
 

@@ -318,18 +318,28 @@ readerQuery =
             )
 
 
-decodeQueryArgs : Value io -> Result Exception (Dict String Lantern.Query.Argument)
+decodeQueryArgs : Value io -> Result Exception (Dict String Lantern.Query.Value)
 decodeQueryArgs argsVal =
     Value.tryDictOf
-        (Value.tryKeyword >> Maybe.map ((++) "$"))
+        (Value.tryOneOf [ Value.tryKeyword, Value.tryString ] >> Maybe.map ((++) "$"))
         (Value.tryOneOf
-            [ Value.tryInt >> Maybe.map Lantern.Query.Int
-            , Value.tryFloat >> Maybe.map Lantern.Query.Float
-            , Value.tryString >> Maybe.map Lantern.Query.String
+            [ Value.tryInt >> Maybe.map Lantern.Query.Integer
+            , Value.tryFloat >> Maybe.map Lantern.Query.Real
+            , Value.tryString >> Maybe.map Lantern.Query.Text
+            , Value.tryNil >> Maybe.map (always Lantern.Query.Null)
+            , Value.tryBool
+                >> Maybe.map
+                    (\bool ->
+                        if bool then
+                            Lantern.Query.Integer 1
+
+                        else
+                            Lantern.Query.Integer 0
+                    )
             ]
         )
         argsVal
-        |> Result.fromMaybe (Value.exception "args is not a map of keywords to int, float, or string")
+        |> Result.fromMaybe (Value.exception "args is not a map of keywords or strings to int, float, or string")
 
 
 writerQueryResultToValue : Lantern.Query.WriterResult -> Value io
@@ -927,7 +937,7 @@ update msg appModel =
                             (\id ->
                                 Lantern.Query.withArguments
                                     "DELETE FROM scripts WHERE id=$id"
-                                    [ ( "$id", id |> Lantern.Query.Int )
+                                    [ ( "$id", id |> Lantern.Query.Integer )
                                     ]
                             )
                         |> Maybe.map (\query -> ( model, Lantern.writerQuery query ScriptSaved |> Lantern.App.call ))
@@ -1146,10 +1156,10 @@ update msg appModel =
                                     (\id ->
                                         Lantern.Query.withArguments
                                             "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
-                                            [ ( "$name", model.script.name |> Lantern.Query.String )
-                                            , ( "$code", model.script.code |> Lantern.Query.String )
-                                            , ( "$input", model.script.input |> Lantern.Query.String )
-                                            , ( "$id", id |> Lantern.Query.Int )
+                                            [ ( "$name", model.script.name |> Lantern.Query.Text )
+                                            , ( "$code", model.script.code |> Lantern.Query.Text )
+                                            , ( "$input", model.script.input |> Lantern.Query.Text )
+                                            , ( "$id", id |> Lantern.Query.Integer )
                                             ]
                                     )
                                 |> Maybe.map (\query -> Lantern.writerQuery query ScriptSaved |> Lantern.App.call)
@@ -1178,9 +1188,9 @@ update msg appModel =
                         query =
                             Lantern.Query.withArguments
                                 "INSERT INTO scripts (name, code, input, created_at, updated_at) VALUES ($name, $code, $input, datetime('now'), datetime('now'))"
-                                [ ( "$name", model.script.name |> Lantern.Query.String )
-                                , ( "$code", model.script.code |> Lantern.Query.String )
-                                , ( "$input", model.script.input |> Lantern.Query.String )
+                                [ ( "$name", model.script.name |> Lantern.Query.Text )
+                                , ( "$code", model.script.code |> Lantern.Query.Text )
+                                , ( "$input", model.script.input |> Lantern.Query.Text )
                                 ]
                     in
                     ( model, Lantern.writerQuery query ScriptCreated |> Lantern.App.call )

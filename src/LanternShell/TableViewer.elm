@@ -47,8 +47,8 @@ liveQueries { rowsPerPage, page, state } toMsg =
                     ++ table
                     ++ " LIMIT $limit OFFSET $offset"
                 )
-                [ ( "$limit", Lantern.Query.Int rowsPerPage )
-                , ( "$offset", Lantern.Query.Int offset )
+                [ ( "$limit", Lantern.Query.Integer rowsPerPage )
+                , ( "$offset", Lantern.Query.Integer offset )
                 ]
 
         countQuery table =

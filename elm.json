@@ -21,7 +21,7 @@
             "elm-community/list-extra": "8.5.2",
             "elm-explorations/markdown": "1.0.0",
             "mdgriffith/elm-ui": "1.1.8",
-            "temochka/enclojure": "1.1.0",
+            "temochka/enclojure": "1.2.0",
             "truqu/elm-base64": "2.0.4",
             "zwilias/elm-html-string": "2.0.2"
         },

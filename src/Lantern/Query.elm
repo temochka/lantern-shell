@@ -4,14 +4,8 @@ import Dict exposing (Dict)
 import Json.Decode
 
 
-type Argument
-    = Int Int
-    | Float Float
-    | String String
-
-
 type alias Arguments =
-    Dict String Argument
+    Dict String Value
 
 
 type alias Query =
@@ -52,7 +46,7 @@ withNoArguments query =
     { source = query, arguments = Dict.empty }
 
 
-withArguments : String -> List ( String, Argument ) -> Query
+withArguments : String -> List ( String, Value ) -> Query
 withArguments source arguments =
     { source = source, arguments = Dict.fromList arguments }
 

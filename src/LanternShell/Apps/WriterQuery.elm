@@ -60,7 +60,7 @@ update msg model =
             let
                 query =
                     { source = model.query
-                    , arguments = Dict.map (\_ v -> Lantern.Query.String v) model.arguments
+                    , arguments = Dict.map (\_ v -> Lantern.Query.Text v) model.arguments
                     }
             in
             ( model
