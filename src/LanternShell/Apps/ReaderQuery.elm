@@ -8,7 +8,7 @@ import Lantern.App
 import Lantern.Query
 import LanternShell.ArgumentParser as ArgumentParser
 import LanternShell.FlexiQuery as FlexiQuery
-import LanternShell.Ui.ResultsTable as ResultsTable
+import LanternShell.TableViewer as TableViewer exposing (TableViewer)
 import LanternUi
 import LanternUi.Input
 import LanternUi.Theme
@@ -21,7 +21,7 @@ type alias Context =
 type alias Model =
     { query : String
     , arguments : Dict String String
-    , result : Maybe (Result Lantern.Error (List FlexiQuery.Result))
+    , result : Maybe (Result Lantern.Error TableViewer.TableViewer)
     }
 
 
@@ -36,6 +36,7 @@ init =
 type Message
     = Update String
     | UpdateArgument String String
+    | UpdateTableViewer TableViewer.TableViewer
     | HandleResult (Result Lantern.Error (List FlexiQuery.Result))
     | Run
 
@@ -73,13 +74,21 @@ update msg model =
                 |> Lantern.App.call
             )
 
+        UpdateTableViewer state ->
+            case model.result of
+                Just (Ok _) ->
+                    ( { model | result = Just (Ok state) }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
         HandleResult result ->
             case result of
                 Err error ->
                     ( { model | result = Just (Err error) }, Cmd.none )
 
                 Ok queryResult ->
-                    ( { model | result = Just (Ok queryResult) }, Cmd.none )
+                    ( { model | result = Just (Ok (TableViewer.new queryResult)) }, Cmd.none )
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)
@@ -113,7 +122,10 @@ view { theme } model =
             { onPress = Just (Lantern.App.Message Run)
             , label = Element.text "Run reader query"
             }
-        , ResultsTable.render (model.result |> Maybe.withDefault (Ok []) |> Result.withDefault [])
+        , model.result
+            |> Maybe.andThen Result.toMaybe
+            |> Maybe.map (TableViewer.render theme (UpdateTableViewer >> Lantern.App.Message))
+            |> Maybe.withDefault Element.none
         ]
 
 

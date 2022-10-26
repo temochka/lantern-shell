@@ -1,4 +1,14 @@
-module LanternUi exposing (boldText, columnLayout, fullWidthColumn, listSpacing, noneAttribute, panel, text, textPanelHeader)
+module LanternUi exposing
+    ( boldText
+    , columnLayout
+    , fullWidthColumn
+    , listSpacing
+    , noneAttribute
+    , panel
+    , popup
+    , text
+    , textPanelHeader
+    )
 
 import Element exposing (Element)
 import Element.Background
@@ -77,6 +87,19 @@ panel theme attributes { content, header } =
             |> Maybe.withDefault Element.none
         , content
         ]
+
+
+popup : Theme -> List (Element.Attribute msg) -> Element msg -> Element msg
+popup theme attrs content =
+    Element.el
+        ([ Element.Background.color theme.bgDefault
+         , Element.Border.color theme.borderDefault
+         , Element.Border.width 1
+         , Element.Font.color theme.fontDefault
+         ]
+            ++ attrs
+        )
+        content
 
 
 columnLayout theme attributes elements =

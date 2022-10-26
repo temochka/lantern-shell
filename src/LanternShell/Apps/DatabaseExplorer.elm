@@ -1,6 +1,6 @@
 module LanternShell.Apps.DatabaseExplorer exposing (Message, Model, init, lanternApp, liveQueries, update, view)
 
-import Dict exposing (Dict)
+import Dict
 import Element exposing (Element)
 import Element.Background
 import Element.Border
@@ -25,11 +25,18 @@ type Message
     = LoadTable String
     | UpdateTableRows (Result Lantern.Error ( List FlexiQuery.Result, List Int ))
     | UpdateTables (Result Lantern.Error (List Table))
+    | UpdateTableViewer TableViewer.TableViewer
+
+
+type CurrentTable
+    = Inactive
+    | Loading { name : String }
+    | Loaded { name : String, viewer : TableViewer.TableViewer, totalRows : Int }
 
 
 type alias Model =
     { tables : List Table
-    , tableViewer : TableViewer.TableViewer
+    , currentTable : CurrentTable
     }
 
 
@@ -47,7 +54,7 @@ tableDecoder =
 init : Model
 init =
     { tables = []
-    , tableViewer = TableViewer.init
+    , currentTable = Inactive
     }
 
 
@@ -55,14 +62,7 @@ update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
 update msg model =
     case msg of
         LoadTable table ->
-            let
-                newTableViewerState =
-                    TableViewer.loadTable model.tableViewer table
-
-                newState =
-                    { model | tableViewer = newTableViewerState }
-            in
-            ( newState
+            ( { model | currentTable = Loading { name = table } }
             , Cmd.none
             )
 
@@ -80,25 +80,56 @@ update msg model =
                     Debug.todo "implement error handling"
 
                 Ok ( rows, count ) ->
+                    model.currentTable
+                        |> selectedTableName
+                        |> Maybe.map
+                            (\tableName ->
+                                let
+                                    newCurrentTable =
+                                        { viewer = TableViewer.new rows
+                                        , totalRows = count |> List.head |> Maybe.withDefault 0
+                                        , name = tableName
+                                        }
+                                in
+                                ( { model | currentTable = Loaded newCurrentTable }, Cmd.none )
+                            )
+                        |> Maybe.withDefault ( model, Cmd.none )
+
+        UpdateTableViewer viewer ->
+            case model.currentTable of
+                Loaded currentTable ->
                     let
-                        newTableViewer =
-                            TableViewer.loadRows
-                                model.tableViewer
-                                rows
-                                (count |> List.head |> Maybe.withDefault 0)
+                        newCurrentTable =
+                            { currentTable | viewer = viewer }
                     in
-                    ( { model | tableViewer = newTableViewer }, Cmd.none )
+                    ( { model | currentTable = Loaded newCurrentTable }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
+
+
+selectedTableName : CurrentTable -> Maybe String
+selectedTableName currentTable =
+    case currentTable of
+        Inactive ->
+            Nothing
+
+        Loaded { name } ->
+            Just name
+
+        Loading { name } ->
+            Just name
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)
-view { theme } { tables, tableViewer } =
+view { theme } { tables, currentTable } =
     let
         tableList =
             tables
                 |> List.map
                     (\{ name } ->
                         Element.Input.button
-                            ((if TableViewer.loadedTable tableViewer == Just name then
+                            ((if selectedTableName currentTable == Just name then
                                 [ Element.Background.color theme.bgActive, Element.Font.color theme.fontContrast ]
 
                               else
@@ -116,30 +147,74 @@ view { theme } { tables, tableViewer } =
             [ Element.column
                 [ Element.alignTop
                 , Element.width (Element.fillPortion 2)
+                , Element.height Element.fill
                 , Element.Border.widthEach { top = 0, left = 0, right = 1, bottom = 0 }
                 , Element.Border.color theme.borderDefault
                 , LanternUi.listSpacing
                 ]
                 (LanternUi.boldText "Tables" :: tableList)
             , Element.column
-                [ Element.width (Element.fillPortion 5), Element.alignTop, LanternUi.listSpacing ]
+                [ Element.width (Element.fillPortion 5), Element.alignTop, LanternUi.listSpacing, Element.height Element.fill, Element.scrollbarX ]
                 [ LanternUi.boldText "Contents"
-                , TableViewer.render tableViewer
+                , case currentTable of
+                    Inactive ->
+                        Element.none
+
+                    Loading _ ->
+                        Element.text "Loading..."
+
+                    Loaded { viewer } ->
+                        TableViewer.render theme (UpdateTableViewer >> Lantern.App.Message) viewer
                 ]
             ]
         ]
 
 
+tableViewerQueries : Model -> List (LiveQuery Message)
+tableViewerQueries model =
+    let
+        page =
+            1
+
+        rowsPerPage =
+            50
+
+        offset =
+            (page - 1) * rowsPerPage
+
+        rowsQuery table =
+            Lantern.Query.withArguments
+                ("SELECT * FROM "
+                    ++ table
+                    ++ " LIMIT $limit OFFSET $offset"
+                )
+                [ ( "$limit", Lantern.Query.Integer rowsPerPage )
+                , ( "$offset", Lantern.Query.Integer offset )
+                ]
+
+        countQuery table =
+            Lantern.Query.withNoArguments
+                ("SELECT COUNT(*) AS 'count' FROM " ++ table)
+
+        query table =
+            Lantern.LiveQuery.prepare2
+                ( rowsQuery table, FlexiQuery.resultDecoder )
+                ( countQuery table, Json.Decode.field "count" Json.Decode.int )
+                UpdateTableRows
+    in
+    model.currentTable
+        |> selectedTableName
+        |> Maybe.map (query >> List.singleton)
+        |> Maybe.withDefault []
+
+
 liveQueries : Model -> List (LiveQuery Message)
-liveQueries { tableViewer } =
+liveQueries model =
     let
         tablesQuery =
             Lantern.LiveQuery.prepare ( Lantern.Query.Query "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name" Dict.empty, tableDecoder ) UpdateTables
-
-        tableViewerQueries =
-            TableViewer.liveQueries tableViewer UpdateTableRows
     in
-    [ tablesQuery ] ++ tableViewerQueries
+    [ tablesQuery ] ++ tableViewerQueries model
 
 
 lanternApp : Lantern.App.App Context () Model Message

@@ -1,151 +1,122 @@
-module LanternShell.TableViewer exposing (State(..), TableViewer, init, liveQueries, loadRows, loadTable, loadedTable, render, rowDecoder)
+module LanternShell.TableViewer exposing (TableViewer, new, render)
 
 import Dict
 import Element exposing (Element)
+import Element.Font as Font
+import Html
 import Json.Decode
 import Lantern
 import Lantern.LiveQuery exposing (LiveQuery)
 import Lantern.Query
 import LanternShell.FlexiQuery as FlexiQuery
 import LanternUi
-
-
-type State
-    = Inactive
-    | Loading String
-    | Loaded String (List FlexiQuery.Result) Int
+import LanternUi.Input
+import LanternUi.Theme
 
 
 type alias TableViewer =
-    { rowsPerPage : Int
-    , page : Int
-    , state : State
+    { results : List FlexiQuery.Result
+    , selected : Maybe ( FlexiQuery.Result, String )
     }
 
 
-init : TableViewer
-init =
-    { rowsPerPage = 10
-    , page = 1
-    , state = Inactive
+new : List FlexiQuery.Result -> TableViewer
+new results =
+    { results = results
+    , selected = Nothing
     }
 
 
-rowDecoder =
-    FlexiQuery.resultDecoder
+monospaceCell : String -> Element msg
+monospaceCell text =
+    Element.paragraph [ Font.family [ Font.typeface "Fira Mono", Font.typeface "Fira Code", Font.typeface "Monaco", Font.monospace ] ] [ Element.text text ]
 
 
-liveQueries : TableViewer -> (Result Lantern.Error ( List FlexiQuery.Result, List Int ) -> msg) -> List (LiveQuery msg)
-liveQueries { rowsPerPage, page, state } toMsg =
+render : LanternUi.Theme.Theme -> (TableViewer -> msg) -> TableViewer -> Element msg
+render theme setState ({ results, selected } as state) =
     let
-        offset =
-            (page - 1) * rowsPerPage
+        renderValue id val =
+            case val of
+                Lantern.Query.Null ->
+                    monospaceCell "NULL"
 
-        rowsQuery table =
-            Lantern.Query.withArguments
-                ("SELECT * FROM "
-                    ++ table
-                    ++ " LIMIT $limit OFFSET $offset"
-                )
-                [ ( "$limit", Lantern.Query.Integer rowsPerPage )
-                , ( "$offset", Lantern.Query.Integer offset )
-                ]
+                Lantern.Query.Integer i ->
+                    monospaceCell <| String.fromInt i
 
-        countQuery table =
-            Lantern.Query.withNoArguments
-                ("SELECT COUNT(*) AS 'count' FROM " ++ table)
+                Lantern.Query.Real r ->
+                    monospaceCell <| String.fromFloat r
 
-        query table =
-            Lantern.LiveQuery.prepare2
-                ( rowsQuery table, rowDecoder )
-                ( countQuery table, Json.Decode.field "count" Json.Decode.int )
-                toMsg
+                Lantern.Query.Text t ->
+                    let
+                        len =
+                            String.length t
+
+                        preview =
+                            String.lines t
+                                |> List.head
+                                |> Maybe.withDefault ""
+                                |> (\firstLine ->
+                                        if String.length firstLine <= 35 then
+                                            firstLine
+
+                                        else
+                                            String.slice 0 32 firstLine
+                                   )
+
+                        button =
+                            if selected == Just id then
+                                LanternUi.Input.button theme
+                                    [ Element.below
+                                        (LanternUi.popup theme
+                                            [ Element.padding 10
+                                            , Element.width (Element.px 300)
+                                            , Element.height (Element.fill |> Element.minimum 200 |> Element.maximum 500)
+                                            , Element.scrollbars
+                                            ]
+                                            (Element.html (Html.pre [] [ Html.text t ]))
+                                        )
+                                    ]
+                                    { onPress = Just <| setState { state | selected = Nothing }
+                                    , label = Element.text "x"
+                                    }
+
+                            else
+                                LanternUi.Input.button theme
+                                    []
+                                    { onPress = Just <| setState { state | selected = Just id }
+                                    , label = Element.text "…"
+                                    }
+                    in
+                    if preview /= t then
+                        Element.paragraph []
+                            [ Element.text preview
+                            , button
+                            ]
+
+                    else
+                        Element.text t
+
+        columns =
+            results
+                |> List.head
+                |> Maybe.map (Dict.keys >> List.sort)
+                |> Maybe.withDefault []
+                |> List.map
+                    (\title ->
+                        { header = LanternUi.boldText title
+                        , width = Element.fill
+                        , view =
+                            \row ->
+                                Dict.get title row
+                                    |> Maybe.map (renderValue ( row, title ))
+                                    |> Maybe.withDefault Element.none
+                        }
+                    )
     in
-    case state of
-        Inactive ->
-            []
-
-        Loading table ->
-            [ query table ]
-
-        Loaded table _ _ ->
-            [ query table ]
-
-
-loadRows : TableViewer -> List FlexiQuery.Result -> Int -> TableViewer
-loadRows tableViewer rows total =
-    case tableViewer.state of
-        Inactive ->
-            tableViewer
-
-        Loading table ->
-            { tableViewer | state = Loaded table rows total }
-
-        Loaded table _ _ ->
-            { tableViewer | state = Loaded table rows total }
-
-
-loadTable : TableViewer -> String -> TableViewer
-loadTable tableViewer table =
-    { tableViewer | state = Loading table, page = 1 }
-
-
-loadedTable : TableViewer -> Maybe String
-loadedTable tableViewer =
-    case tableViewer.state of
-        Inactive ->
-            Nothing
-
-        Loading table ->
-            Just table
-
-        Loaded table _ _ ->
-            Just table
-
-
-render : TableViewer -> Element msg
-render { rowsPerPage, state } =
-    case state of
-        Inactive ->
-            Element.none
-
-        Loading table ->
-            Element.el [] (Element.text <| "loading" ++ table)
-
-        Loaded table results _ ->
-            let
-                valueToString val =
-                    case val of
-                        Lantern.Query.Null ->
-                            ""
-
-                        Lantern.Query.Integer i ->
-                            String.fromInt i
-
-                        Lantern.Query.Real r ->
-                            String.fromFloat r
-
-                        Lantern.Query.Text t ->
-                            t
-
-                columns =
-                    results
-                        |> List.head
-                        |> Maybe.map (Dict.keys >> List.sort)
-                        |> Maybe.withDefault []
-                        |> List.map
-                            (\title ->
-                                { header = LanternUi.boldText title
-                                , width = Element.fill
-                                , view = \row -> Dict.get title row |> Maybe.map valueToString |> Maybe.withDefault "" |> Element.text
-                                }
-                            )
-            in
-            Element.column
-                [ Element.width Element.fill, Element.spacing 10 ]
-                [ Element.text table
-                , Element.table [ Element.spacing 5 ]
-                    { data = results
-                    , columns = columns
-                    }
-                ]
+    Element.column
+        [ Element.width Element.fill, Element.spacing 10 ]
+        [ Element.table [ Element.spacingXY 20 20 ]
+            { data = results
+            , columns = columns
+            }
+        ]
