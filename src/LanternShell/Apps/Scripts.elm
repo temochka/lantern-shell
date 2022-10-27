@@ -1273,7 +1273,7 @@ renderUI context uiModel =
                     if List.isEmpty opts.suggestions then
                         LanternUi.Input.multiline
                             context.theme
-                            []
+                            [ Element.width Element.fill ]
                             { onChange = UpdateInputRequest key inputType >> Lantern.App.Message
                             , placeholder = Nothing
                             , label = Element.Input.labelHidden key
@@ -1298,7 +1298,7 @@ renderUI context uiModel =
                 MaskedTextInput ->
                     LanternUi.Input.password
                         context.theme
-                        []
+                        [ Element.width Element.fill ]
                         { onChange = UpdateInputRequest key inputType >> Lantern.App.Message
                         , placeholder = Nothing
                         , label = Element.Input.labelHidden ""
