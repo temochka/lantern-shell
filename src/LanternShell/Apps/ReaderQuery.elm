@@ -21,7 +21,7 @@ type alias Context =
 type alias Model =
     { query : String
     , arguments : Dict String String
-    , result : Maybe (Result Lantern.Error TableViewer.TableViewer)
+    , result : Maybe (Result Lantern.Error TableViewer)
     }
 
 
@@ -36,7 +36,7 @@ init =
 type Message
     = Update String
     | UpdateArgument String String
-    | UpdateTableViewer TableViewer.TableViewer
+    | UpdateTableViewer TableViewer
     | HandleResult (Result Lantern.Error (List FlexiQuery.Result))
     | Run
 

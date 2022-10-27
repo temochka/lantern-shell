@@ -68,16 +68,16 @@ update msg model =
 
         UpdateTables result ->
             case result of
-                Err err ->
-                    Debug.todo "implement error handling"
+                Err _ ->
+                    ( model, Cmd.none )
 
                 Ok tables ->
                     ( { model | tables = tables }, Cmd.none )
 
         UpdateTableRows result ->
             case result of
-                Err err ->
-                    Debug.todo "implement error handling"
+                Err _ ->
+                    ( model, Cmd.none )
 
                 Ok ( rows, count ) ->
                     model.currentTable

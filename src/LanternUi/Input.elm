@@ -39,7 +39,7 @@ button :
 button theme extraAttrs mainAttrs =
     Element.Input.button
         ([ Element.Background.color theme.bgDefault
-         , Element.padding 7
+         , Element.padding 4
          , Element.Border.rounded 5
          , Element.Border.solid
          , Element.Border.width 1

@@ -291,12 +291,12 @@ update msg (Connection state) =
                         ( Connection state, Browser.Navigation.reload )
 
                     else
-                        ( Connection { state | log = Log.logResponse state.log id response }, Cmd.none )
+                        ( Connection { state | log = Log.logResponse state.log id response payload }, Cmd.none )
 
                 Ok ( id, Lantern.Response.Hello as response ) ->
                     let
                         updatedConnection =
-                            Connection { state | log = Log.logResponse state.log id response }
+                            Connection { state | log = Log.logResponse state.log id response payload }
                     in
                     state.stickyRequest
                         |> Maybe.map (\( request, handler ) -> update (Request request handler) updatedConnection)
@@ -318,7 +318,7 @@ update msg (Connection state) =
                         newState =
                             { state
                                 | requestsInFlight = newRequestsInFlight
-                                , log = Log.logResponse state.log id response
+                                , log = Log.logResponse state.log id response payload
                             }
                     in
                     case handler of
@@ -329,7 +329,7 @@ update msg (Connection state) =
                             ( Connection newState, Cmd.none )
 
                 Err err ->
-                    ( Connection { state | log = Log.log state.log Log.Error (Json.Decode.errorToString err) }, Cmd.none )
+                    ( Connection { state | log = Log.log state.log Log.Error (Json.Decode.errorToString err) (Just payload) }, Cmd.none )
 
 
 log : Connection msg -> Log

@@ -1,11 +1,12 @@
 module LanternShell.Apps.LogViewer exposing (Message, Model, init, lanternApp)
 
 import Element exposing (Element)
-import Element.Background
 import Element.Font
+import Html
 import Lantern.App
 import Lantern.Log exposing (Log)
 import LanternUi
+import LanternUi.Input
 import LanternUi.Theme
 
 
@@ -14,38 +15,74 @@ type alias Context =
 
 
 type alias Model =
-    ()
+    { inspectedLine : Maybe Int }
 
 
-type alias Message =
-    ()
+type Message
+    = InspectLine Int
+    | CloseInspector
 
 
 init : Model
 init =
-    ()
+    { inspectedLine = Nothing }
 
 
 update : Message -> Model -> ( Model, Cmd (Lantern.App.Message Message) )
-update _ model =
-    ( model, Cmd.none )
+update msg model =
+    case msg of
+        InspectLine id ->
+            ( { model | inspectedLine = Just id }, Cmd.none )
+
+        CloseInspector ->
+            ( { model | inspectedLine = Nothing }, Cmd.none )
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)
-view { log, theme } _ =
+view { log, theme } model =
     LanternUi.columnLayout
         theme
         []
         [ log
             |> .lines
-            |> List.map (\( _, line ) -> Element.paragraph [ Element.width Element.fill ] [ Element.text line ])
-            |> Element.textColumn
-                [ Element.padding 5
+            |> List.map
+                (\{ id, text, payload } ->
+                    let
+                        button =
+                            case payload of
+                                Just p ->
+                                    if Just id == model.inspectedLine then
+                                        LanternUi.Input.button theme
+                                            [ Element.below
+                                                (LanternUi.popup theme
+                                                    [ Element.width (Element.px 500)
+                                                    , Element.height (Element.fill |> Element.minimum 400 |> Element.maximum 800)
+                                                    , Element.scrollbars
+                                                    , Element.padding 5
+                                                    ]
+                                                    (Element.html (Html.pre [] [ Html.text p ]))
+                                                )
+                                            ]
+                                            { label = Element.text "Close", onPress = Just <| Lantern.App.Message <| CloseInspector }
+
+                                    else
+                                        LanternUi.Input.button theme [] { label = Element.text "Inspect", onPress = Just <| Lantern.App.Message <| InspectLine id }
+
+                                Nothing ->
+                                    Element.none
+                    in
+                    Element.paragraph [ Element.width Element.fill, Element.spacing 10 ]
+                        [ Element.text text
+                        , Element.text " "
+                        , button
+                        ]
+                )
+            |> Element.column
+                [ Element.padding 10
                 , Element.width Element.fill
                 , Element.height Element.fill
                 , Element.scrollbarX
-                , Element.spacing 10
-                , Element.Font.family [ Element.Font.typeface "Monaco", Element.Font.typeface "Fira Mono", Element.Font.monospace ]
+                , Element.spacing 20
                 ]
         ]
 
