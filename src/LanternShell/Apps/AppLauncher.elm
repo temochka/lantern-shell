@@ -72,7 +72,7 @@ update msg model =
                     ( { model
                         | options =
                             scripts
-                                |> List.map (\s -> ( s.name, UserScript s ))
+                                |> List.map (\s -> ( "Scripts 〉" ++ s.name, UserScript s ))
                                 |> (++) model.nativeApps
                                 |> List.sortBy (Tuple.first >> String.toLower)
                       }
