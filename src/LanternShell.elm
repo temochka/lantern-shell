@@ -63,6 +63,7 @@ type alias Model =
     , windowManager : LanternUi.WindowManager.WindowManager
     , theme : LanternUi.Theme.Theme
     , liveQueriesCache : Dict ProcessTable.Pid (List (LiveQuery Msg))
+    , liveQueriesCacheExpired : Bool
     , navigationKey : Browser.Navigation.Key
     , viewport : { width : Int, height : Int }
     }
@@ -90,19 +91,17 @@ init viewport url key =
             , processTable = ProcessTable.empty
             , theme = initialTheme
             , liveQueriesCache = Dict.empty
+            , liveQueriesCacheExpired = False
             , navigationKey = key
             , viewport = viewport
             }
     in
-    (LanternShell.Apps.appLauncher :: launchers)
-        |> List.foldl
-            (\launcher ( model, cmd ) ->
-                update (LaunchApp (launcher (LanternShell.Apps.appContext model))) model
-                    |> Tuple.mapSecond (\newCmd -> Cmd.batch [ cmd, newCmd ])
-            )
-            ( starterModel
-            , Cmd.none
-            )
+    threadModel starterModel
+        (List.map
+            (\launcher -> launchApp (launcher (LanternShell.Apps.appContext starterModel)))
+            (LanternShell.Apps.appLauncher :: launchers)
+            ++ [ fireLiveQueries ]
+        )
 
 
 
@@ -187,19 +186,30 @@ refreshLiveQueries pid model =
                         Dict.get pid model.liveQueriesCache
                             |> Maybe.map (Lantern.LiveQuery.areEqualLists newLiveQueries >> not)
                             |> Maybe.withDefault True
-
-                    cmd =
-                        if liveQueriesChanged then
-                            Lantern.liveQueries (liveQueriesCache |> Dict.values |> List.concat)
-                                |> Task.perform identity
-                                |> Cmd.map LanternMessage
-
-                        else
-                            Cmd.none
                 in
-                ( { model | liveQueriesCache = liveQueriesCache }, cmd )
+                ( { model
+                    | liveQueriesCache = liveQueriesCache
+                    , liveQueriesCacheExpired = liveQueriesChanged
+                  }
+                , Cmd.none
+                )
             )
         |> Maybe.withDefault ( model, Cmd.none )
+
+
+fireLiveQueries : Model -> ( Model, Cmd Msg )
+fireLiveQueries model =
+    let
+        cmd =
+            if model.liveQueriesCacheExpired then
+                Lantern.liveQueries (model.liveQueriesCache |> Dict.values |> List.concat)
+                    |> Task.perform identity
+                    |> Cmd.map LanternMessage
+
+            else
+                Cmd.none
+    in
+    ( model, cmd )
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -227,36 +237,10 @@ update msg model =
             ( { model | lanternConnection = lanternConnection }, lanternCmd )
 
         LaunchApp launcher ->
-            let
-                context =
-                    LanternShell.Apps.appContext model
-
-                ( appModel, appCmd ) =
-                    launcher.init Nothing
-
-                app =
-                    LanternShell.Apps.lanternAppFor appModel context
-
-                newProcessTable =
-                    ProcessTable.launch appModel
-                        { name = app.name
-                        , arguments = []
-                        }
-                        model.processTable
-
-                pid =
-                    newProcessTable.pid
-            in
-            [ \_ ->
-                ( { model
-                    | processTable = newProcessTable
-                  }
-                , Cmd.map (wrapAppMessage pid) appCmd
-                )
-            , refreshLiveQueries pid
-            , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable)))
-            ]
-                |> threadModel model
+            threadModel model
+                [ launchApp launcher
+                , fireLiveQueries
+                ]
 
         WindowManagerMessage proxiedMsg ->
             let
@@ -301,6 +285,7 @@ update msg model =
                                 )
                             |> Maybe.withDefault ( m, Cmd.none )
                     , refreshLiveQueries pid
+                    , fireLiveQueries
                     ]
                         |> threadModel model
 
@@ -317,6 +302,40 @@ update msg model =
 
                 Browser.External url ->
                     ( model, Browser.Navigation.load url )
+
+
+launchApp : LanternShell.Apps.LauncherEntry Msg -> Model -> ( Model, Cmd Msg )
+launchApp launcher model =
+    let
+        context =
+            LanternShell.Apps.appContext model
+
+        ( appModel, appCmd ) =
+            launcher.init Nothing
+
+        app =
+            LanternShell.Apps.lanternAppFor appModel context
+
+        newProcessTable =
+            ProcessTable.launch appModel
+                { name = app.name
+                , arguments = []
+                }
+                model.processTable
+
+        pid =
+            newProcessTable.pid
+    in
+    [ \_ ->
+        ( { model
+            | processTable = newProcessTable
+          }
+        , Cmd.map (wrapAppMessage pid) appCmd
+        )
+    , refreshLiveQueries pid
+    , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable)))
+    ]
+        |> threadModel model
 
 
 handleShortcuts : Model -> Json.Decode.Decoder Msg
