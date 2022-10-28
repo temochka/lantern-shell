@@ -118,7 +118,11 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
                         |> Maybe.withDefault (onInternalMessage Nop)
 
                 _ ->
-                    onInternalMessage Nop
+                    if model == Nothing then
+                        onInternalMessage (Toggle init)
+
+                    else
+                        onInternalMessage Nop
 
         suggestions =
             (case model of

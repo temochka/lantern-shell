@@ -9,6 +9,7 @@ import Lantern.LiveQuery exposing (LiveQuery)
 import LanternShell.Apps.Scripts exposing (Script)
 import LanternUi.FuzzySelect
 import LanternUi.Theme
+import Task
 
 
 type alias Flags launcher =
@@ -34,6 +35,7 @@ type alias Model launcher =
 
 type Message launcher
     = FuzzySelectMessage LanternUi.FuzzySelect.Message
+    | PrelaunchApp (Launcher launcher)
     | LaunchApp (Launcher launcher)
     | UpdateLauncherQuery String
     | UpdateScripts (Result Lantern.Error (List Script))
@@ -63,6 +65,12 @@ update msg model =
         FuzzySelectMessage proxiedMsg ->
             ( { model | fuzzySelect = LanternUi.FuzzySelect.update proxiedMsg model.fuzzySelect }, Cmd.none )
 
+        PrelaunchApp launcher ->
+            ( { model | appLauncherQuery = "" }
+            , Task.succeed launcher |> Task.perform (LaunchApp >> Lantern.App.Message)
+            )
+
+        -- This never runs in practice, handled in LanternShell.Apps
         LaunchApp _ ->
             ( model, Cmd.none )
 
@@ -98,7 +106,7 @@ view { theme } model =
             , label = Element.Input.labelHidden "Launch app"
             , id = Just "lanternAppLauncher"
             , onInternalMessage = FuzzySelectMessage >> Lantern.App.Message
-            , onOptionSelect = LaunchApp >> Lantern.App.Message
+            , onOptionSelect = PrelaunchApp >> Lantern.App.Message
             , onQueryChange = UpdateLauncherQuery >> Lantern.App.Message
             , state = model.fuzzySelect
             , query = model.appLauncherQuery
