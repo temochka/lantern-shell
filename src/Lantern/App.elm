@@ -32,6 +32,7 @@ type alias App ctx flags model msg =
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : model -> List (LiveQuery msg)
     , subscriptions : model -> Sub (Message msg)
+    , onWindowOpen : Int -> List String -> model -> ( model, Cmd (Message msg) )
     , name : String
     }
 
@@ -55,6 +56,7 @@ liveApp def =
     , update = def.update
     , liveQueries = def.liveQueries
     , subscriptions = def.subscriptions
+    , onWindowOpen = \_ _ model -> ( model, Cmd.none )
     }
 
 
@@ -68,6 +70,7 @@ app :
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : Maybe (model -> List (LiveQuery msg))
     , subscriptions : model -> Sub (Message msg)
+    , onWindowOpen : Int -> List String -> model -> ( model, Cmd (Message msg) )
     }
     -> App ctx flags model msg
 app def =
@@ -77,6 +80,7 @@ app def =
     , update = def.update
     , liveQueries = def.liveQueries |> Maybe.withDefault (always [])
     , subscriptions = def.subscriptions
+    , onWindowOpen = def.onWindowOpen
     }
 
 
@@ -97,6 +101,7 @@ simpleApp def =
     , update = def.update
     , liveQueries = always []
     , subscriptions = always Sub.none
+    , onWindowOpen = \_ _ model -> ( model, Cmd.none )
     }
 
 
@@ -141,6 +146,12 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, flags, context } mountedApp 
                 |> unwrapModel
                 |> Maybe.map (mountedApp.subscriptions >> Sub.map (mapMessage wrapMsg))
                 |> Maybe.withDefault Sub.none
+
+        wrappedOnWindowOpen windowId windowFlags rootModel =
+            rootModel
+                |> unwrapModel
+                |> Maybe.map (mountedApp.onWindowOpen windowId windowFlags >> wrapResult)
+                |> Maybe.withDefault ( rootModel, Cmd.none )
     in
     { name = mountedApp.name
     , init = \_ -> mountedApp.init flags |> wrapResult
@@ -148,4 +159,5 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, flags, context } mountedApp 
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries
     , subscriptions = wrappedSubscriptions
+    , onWindowOpen = wrappedOnWindowOpen
     }

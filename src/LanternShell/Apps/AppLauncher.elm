@@ -128,4 +128,5 @@ lanternApp =
         , view = view
         , update = update
         , subscriptions = always Sub.none
+        , onWindowOpen = \_ _ model -> ( model, Cmd.none )
         }

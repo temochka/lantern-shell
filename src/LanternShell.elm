@@ -83,7 +83,7 @@ init viewport url key =
                 |> (Url.Parser.Query.string "s" |> Url.Parser.query |> Url.Parser.parse)
                 |> Maybe.andThen identity
                 |> Maybe.andThen (LanternUi.WindowManager.deserialize LanternShell.Apps.launcherForId)
-                |> Maybe.withDefault ( LanternUi.WindowManager.new [], [] )
+                |> Maybe.withDefault ( LanternUi.WindowManager.new, [] )
 
         starterModel =
             { lanternConnection = lanternConnection
@@ -98,8 +98,10 @@ init viewport url key =
     in
     threadModel starterModel
         (List.map
-            (\launcher -> launchApp (launcher (LanternShell.Apps.appContext starterModel)))
-            (LanternShell.Apps.appLauncher :: launchers)
+            (\( launcher, flagsPerWindow ) ->
+                launchApp (launcher (LanternShell.Apps.appContext starterModel)) flagsPerWindow
+            )
+            (( LanternShell.Apps.appLauncher, [] ) :: launchers)
             ++ [ fireLiveQueries ]
         )
 
@@ -222,9 +224,11 @@ update msg model =
             let
                 newProcessTable =
                     ProcessTable.kill pid model.processTable
+
+                newWindowManager =
+                    LanternUi.WindowManager.closeWindowsForPid pid model.windowManager
             in
-            [ update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable))) ]
-                |> threadModel { model | processTable = newProcessTable }
+            ( { model | processTable = newProcessTable, windowManager = newWindowManager }, Cmd.none )
 
         FocusAppLauncher ->
             ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
@@ -238,7 +242,7 @@ update msg model =
 
         LaunchApp launcher ->
             threadModel model
-                [ launchApp launcher
+                [ launchApp launcher [ [] ]
                 , fireLiveQueries
                 ]
 
@@ -304,8 +308,32 @@ update msg model =
                     ( model, Browser.Navigation.load url )
 
 
-launchApp : LanternShell.Apps.LauncherEntry Msg -> Model -> ( Model, Cmd Msg )
-launchApp launcher model =
+newWindow : ProcessTable.Pid -> LanternShell.Apps.LauncherEntry Msg -> List String -> Model -> ( Model, Cmd Msg )
+newWindow pid launcher windowFlags model =
+    threadModel model
+        [ update (windowFlags |> LanternUi.WindowManager.NewWindow pid |> WindowManagerMessage)
+        , \m ->
+            pid
+                |> ProcessTable.lookup m.processTable
+                |> Maybe.map ProcessTable.processApp
+                |> Maybe.map
+                    (\appModel ->
+                        let
+                            ( newAppModel, cmd ) =
+                                launcher.onWindowOpen m.windowManager.maxWindowId windowFlags appModel
+                        in
+                        ( { m
+                            | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable
+                          }
+                        , Cmd.map (wrapAppMessage pid) cmd
+                        )
+                    )
+                |> Maybe.withDefault ( m, Cmd.none )
+        ]
+
+
+launchApp : LanternShell.Apps.LauncherEntry Msg -> List (List String) -> Model -> ( Model, Cmd Msg )
+launchApp launcher flagsPerWindow model =
     let
         context =
             LanternShell.Apps.appContext model
@@ -315,6 +343,12 @@ launchApp launcher model =
 
         app =
             LanternShell.Apps.lanternAppFor appModel context
+
+        firstWindowFlags =
+            List.head flagsPerWindow
+
+        otherWindowsFlags =
+            List.tail flagsPerWindow |> Maybe.withDefault []
 
         newProcessTable =
             ProcessTable.launch appModel
@@ -326,15 +360,16 @@ launchApp launcher model =
         pid =
             newProcessTable.pid
     in
-    [ \_ ->
+    (\_ ->
         ( { model
             | processTable = newProcessTable
           }
         , Cmd.map (wrapAppMessage pid) appCmd
         )
-    , refreshLiveQueries pid
-    , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable)))
-    ]
+    )
+        :: (firstWindowFlags |> Maybe.map (newWindow pid launcher) |> Maybe.map List.singleton |> Maybe.withDefault [])
+        ++ List.map (\flags -> newWindow pid launcher flags) otherWindowsFlags
+        ++ [ refreshLiveQueries pid ]
         |> threadModel model
 
 

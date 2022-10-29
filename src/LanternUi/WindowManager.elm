@@ -2,21 +2,22 @@ module LanternUi.WindowManager exposing
     ( Message(..)
     , RenderOptions
     , WindowManager
+    , closeWindowsForPid
     , deserialize
     , new
+    , newWindow
     , nextWindow
     , prevWindow
     , render
     , serialize
-    , syncProcesses
     , update
     )
 
 import Base64
 import Browser.Dom
+import Dict
 import Element exposing (Element)
 import Element.Events
-import Html.Attributes
 import Json.Decode
 import Json.Encode
 import ProcessTable
@@ -25,20 +26,38 @@ import Task
 
 
 type Layout
-    = Stack (List ProcessTable.Pid)
-    | MasterStack (Maybe ProcessTable.Pid) (List ProcessTable.Pid)
+    = Stack (List WindowId)
+    | MasterStack (List WindowId)
+
+
+type alias WindowId =
+    Int
+
+
+type alias Flags =
+    List String
+
+
+type alias Window =
+    { pid : ProcessTable.Pid
+    , id : WindowId
+    , flags : Flags
+    }
 
 
 type alias WindowManager =
-    { focus : Maybe ProcessTable.Pid
+    { focus : Maybe WindowId
     , layout : Layout
+    , windows : Dict.Dict Int Window
+    , windowsPerPid : Dict.Dict ProcessTable.Pid (List WindowId)
+    , maxWindowId : Int
     }
 
 
 type Message
     = Nop
-    | Focus ProcessTable.Pid
-    | SyncProcesses (List ProcessTable.Pid)
+    | Focus WindowId
+    | NewWindow ProcessTable.Pid Flags
     | NextWindow
     | PrevWindow
 
@@ -51,87 +70,109 @@ type alias RenderOptions =
     }
 
 
-new : List ProcessTable.Pid -> WindowManager
-new runningPids =
-    let
-        sortedPids =
-            List.sortBy negate runningPids
-    in
-    { focus = List.head sortedPids
-    , layout = MasterStack (List.head sortedPids) (List.drop 1 sortedPids)
+new : WindowManager
+new =
+    { focus = Nothing
+    , layout = MasterStack []
+    , windows = Dict.empty
+    , windowsPerPid = Dict.empty
+    , maxWindowId = 0
     }
 
 
-layoutToPids layout =
+newWindow : ProcessTable.Pid -> Flags -> WindowManager -> WindowManager
+newWindow pid flags windowManager =
+    let
+        newWindowId =
+            windowManager.maxWindowId + 1
+
+        window =
+            { pid = pid, id = newWindowId, flags = flags }
+
+        newWindowsPerPid =
+            Dict.update pid
+                (\mWids ->
+                    case mWids of
+                        Just wids ->
+                            Just (newWindowId :: wids)
+
+                        Nothing ->
+                            Just [ newWindowId ]
+                )
+                windowManager.windowsPerPid
+
+        newLayout =
+            case windowManager.layout of
+                MasterStack windowIds ->
+                    MasterStack <| (newWindowId :: windowIds)
+
+                Stack windowIds ->
+                    Stack <| (newWindowId :: windowIds)
+    in
+    { windowManager
+        | focus = Just newWindowId
+        , layout = newLayout
+        , windows = Dict.insert newWindowId window windowManager.windows
+        , windowsPerPid = newWindowsPerPid
+        , maxWindowId = newWindowId
+    }
+
+
+closeWindowsForPid : ProcessTable.Pid -> WindowManager -> WindowManager
+closeWindowsForPid pid windowManager =
+    let
+        affectedWindowIds =
+            Dict.get pid windowManager.windowsPerPid |> Maybe.withDefault [] |> Set.fromList
+
+        newWindowsPerPids =
+            Dict.remove pid windowManager.windowsPerPid
+
+        windowFilter =
+            \id -> not (Set.member id affectedWindowIds)
+
+        newWindows =
+            Dict.filter (\k _ -> windowFilter k) windowManager.windows
+
+        newLayout =
+            mapLayout (List.filter windowFilter) windowManager.layout
+
+        newFocus =
+            windowManager.focus
+                |> Maybe.andThen
+                    (\windowId ->
+                        if Set.member windowId affectedWindowIds then
+                            newLayout |> layoutToWindowIds |> List.head
+
+                        else
+                            windowManager.focus
+                    )
+    in
+    { windowManager
+        | focus = newFocus
+        , windows = newWindows
+        , windowsPerPid = newWindowsPerPids
+        , layout = newLayout
+    }
+
+
+layoutToWindowIds : Layout -> List ProcessTable.Pid
+layoutToWindowIds layout =
     case layout of
         Stack windows ->
             windows
 
-        MasterStack masterWindow windows ->
-            (masterWindow |> Maybe.map List.singleton |> Maybe.withDefault []) ++ windows
+        MasterStack windows ->
+            windows
 
 
-pidsToLayout pids layout =
+mapLayout : (List WindowId -> List WindowId) -> Layout -> Layout
+mapLayout f layout =
     case layout of
-        Stack _ ->
-            Stack pids
+        Stack windowIds ->
+            Stack <| f windowIds
 
-        MasterStack _ _ ->
-            MasterStack (List.head pids) (List.drop 1 pids)
-
-
-syncProcesses : List ProcessTable.Pid -> WindowManager -> ( WindowManager, Cmd Message )
-syncProcesses runningPids ({ layout, focus } as windowManager) =
-    let
-        refreshPids wmPids pmPids accPids =
-            case wmPids of
-                pid :: rest ->
-                    (if Set.member pid pmPids then
-                        pid :: accPids
-
-                     else
-                        accPids
-                    )
-                        |> refreshPids rest (Set.remove pid pmPids)
-
-                [] ->
-                    List.sortBy negate (Set.toList pmPids) ++ List.reverse accPids
-
-        currentWmPids =
-            layoutToPids layout
-
-        newWmPids =
-            refreshPids currentWmPids (Set.fromList runningPids) []
-
-        newFocus =
-            if List.head newWmPids == List.head currentWmPids then
-                focus
-                    |> Maybe.andThen
-                        (\f ->
-                            if List.member f newWmPids then
-                                Just f
-
-                            else
-                                Nothing
-                        )
-                    |> (\f ->
-                            if f == Nothing then
-                                List.head newWmPids
-
-                            else
-                                f
-                       )
-
-            else
-                List.head newWmPids
-    in
-    ( { windowManager | layout = pidsToLayout newWmPids layout, focus = newFocus }
-    , if newFocus /= focus then
-        newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
-
-      else
-        Cmd.none
-    )
+        MasterStack windowIds ->
+            MasterStack <| f windowIds
 
 
 layoutName : Layout -> String
@@ -140,21 +181,37 @@ layoutName layout =
         Stack _ ->
             "Stack"
 
-        MasterStack _ _ ->
+        MasterStack _ ->
             "MasterStack"
 
 
 serialize : (ProcessTable.Pid -> String) -> WindowManager -> String
-serialize serializeProcess { layout } =
+serialize serializeProcess { layout, windowsPerPid, windows } =
+    let
+        toSerialize =
+            windowsPerPid |> Dict.toList |> List.map (\( pid, windowIds ) -> ( pid, windowIds |> List.filterMap (\windowId -> Dict.get windowId windows) |> List.map .flags ))
+    in
     Json.Encode.object
         [ ( "l", Json.Encode.string (layoutName layout) )
-        , ( "a", Json.Encode.list (serializeProcess >> Json.Encode.string) (layoutToPids layout) )
+        , ( "a"
+          , Json.Encode.list
+                (\( pid, windowTuples ) ->
+                    Json.Encode.list identity
+                        [ serializeProcess pid |> Json.Encode.string
+                        , List.map
+                            (Json.Encode.list Json.Encode.string)
+                            windowTuples
+                            |> Json.Encode.list identity
+                        ]
+                )
+                toSerialize
+          )
         ]
         |> Json.Encode.encode 0
         |> Base64.encode
 
 
-deserialize : (String -> Maybe launcher) -> String -> Maybe ( WindowManager, List launcher )
+deserialize : (String -> Maybe launcher) -> String -> Maybe ( WindowManager, List ( launcher, List Flags ) )
 deserialize toLauncher serialized =
     let
         toLayout name =
@@ -163,20 +220,20 @@ deserialize toLauncher serialized =
                     Just (Stack [])
 
                 "MasterStack" ->
-                    Just (MasterStack Nothing [])
+                    Just (MasterStack [])
 
                 _ ->
                     Nothing
             )
-                |> Maybe.map (\layout -> { focus = Nothing, layout = layout })
+                |> Maybe.map (\layout -> { new | focus = Nothing, layout = layout })
 
         layoutDecoder =
             Json.Decode.field "l" Json.Decode.string
                 |> Json.Decode.map toLayout
 
         processesDecoder =
-            Json.Decode.field "a" (Json.Decode.list Json.Decode.string)
-                |> Json.Decode.map (List.filterMap toLauncher >> List.reverse >> Just)
+            Json.Decode.field "a" (Json.Decode.list (Json.Decode.map2 Tuple.pair (Json.Decode.index 0 Json.Decode.string) (Json.Decode.index 1 (Json.Decode.list (Json.Decode.list Json.Decode.string)))))
+                |> Json.Decode.map (List.filterMap (\( appName, appFlagsPerWindow ) -> toLauncher appName |> Maybe.map (\l -> ( l, appFlagsPerWindow ))) >> List.reverse >> Just)
 
         jsonDecoder =
             Json.Decode.map2 (Maybe.map2 Tuple.pair)
@@ -196,8 +253,8 @@ update msg windowManager =
         Nop ->
             ( windowManager, Cmd.none )
 
-        Focus pid ->
-            ( { windowManager | focus = Just pid }, Cmd.none )
+        Focus windowId ->
+            ( { windowManager | focus = Just windowId }, Cmd.none )
 
         NextWindow ->
             nextWindow windowManager
@@ -205,13 +262,14 @@ update msg windowManager =
         PrevWindow ->
             prevWindow windowManager
 
-        SyncProcesses pids ->
-            syncProcesses pids windowManager
-
-
-windowId : WindowManager -> ProcessTable.Pid -> String
-windowId windowManager pid =
-    "window-" ++ String.fromInt pid
+        NewWindow pid flags ->
+            let
+                newState =
+                    newWindow pid flags windowManager
+            in
+            ( { newState | focus = Just newState.maxWindowId }
+            , newState.maxWindowId |> String.fromInt |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)
+            )
 
 
 render :
@@ -220,9 +278,9 @@ render :
     -> (Message -> msg)
     -> WindowManager
     -> Element msg
-render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager) =
+render { spacing, padding } renderer wrapMsg ({ focus, layout } as model) =
     let
-        windowPane pid =
+        windowPane pid windowId =
             Element.el
                 [ Element.width Element.fill
                 , Element.height Element.fill
@@ -231,9 +289,9 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                 ]
                 (renderer
                     { pid = pid
-                    , focused = focus |> Maybe.map ((==) pid) |> Maybe.withDefault False
+                    , focused = focus |> Maybe.map ((==) windowId) |> Maybe.withDefault False
                     , tabindex = 0
-                    , id = windowId windowManager pid
+                    , id = String.fromInt windowId
                     }
                 )
     in
@@ -242,7 +300,8 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
             let
                 windowPanes =
                     windows
-                        |> List.map windowPane
+                        |> List.filterMap (\id -> Dict.get id model.windows)
+                        |> List.map (\w -> windowPane w.pid w.id)
             in
             Element.column
                 [ Element.width Element.fill
@@ -253,13 +312,16 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                 ]
                 windowPanes
 
-        MasterStack masterWindow windows ->
+        MasterStack windows ->
             let
-                masterWindowPane =
-                    masterWindow |> Maybe.map windowPane |> Maybe.withDefault Element.none
-
                 windowPanes =
-                    List.map windowPane windows
+                    windows
+                        |> List.filterMap (\id -> Dict.get id model.windows)
+                        |> List.map (\w -> windowPane w.pid w.id)
+
+                ( masterPane, sidePanes ) =
+                    Maybe.map2 Tuple.pair (List.head windowPanes) (List.tail windowPanes)
+                        |> Maybe.withDefault ( Element.none, [] )
             in
             Element.row
                 [ Element.width Element.fill
@@ -276,8 +338,8 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                     , Element.clip
                     , Element.scrollbarY
                     ]
-                    masterWindowPane
-                , if not (List.isEmpty windowPanes) then
+                    masterPane
+                , if not (List.isEmpty sidePanes) then
                     Element.column
                         [ Element.width (Element.fillPortion 2)
                         , Element.height Element.fill
@@ -287,7 +349,7 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
                         , Element.clip
                         , Element.scrollbarY
                         ]
-                        windowPanes
+                        sidePanes
 
                   else
                     Element.none
@@ -297,8 +359,8 @@ render { spacing, padding } renderer wrapMsg ({ focus, layout } as windowManager
 nextWindow : WindowManager -> ( WindowManager, Cmd Message )
 nextWindow ({ focus, layout } as windowManager) =
     let
-        pids =
-            layoutToPids layout
+        windowIds =
+            layoutToWindowIds layout
 
         findNext remainingPids focusedPid =
             case remainingPids of
@@ -314,26 +376,26 @@ nextWindow ({ focus, layout } as windowManager) =
 
         newFocus =
             focus
-                |> Maybe.andThen (findNext pids)
+                |> Maybe.andThen (findNext windowIds)
                 |> (\f ->
                         case f of
                             Just pid ->
                                 Just pid
 
                             Nothing ->
-                                List.head pids
+                                List.head windowIds
                    )
     in
     ( { windowManager | focus = newFocus }
-    , newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
+    , newFocus |> Maybe.map (\windowId -> windowId |> String.fromInt |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
     )
 
 
 prevWindow : WindowManager -> ( WindowManager, Cmd Message )
 prevWindow ({ focus, layout } as windowManager) =
     let
-        pids =
-            layoutToPids layout
+        windowIds =
+            layoutToWindowIds layout
 
         findPrev remainingPids focusedPid =
             case remainingPids of
@@ -342,7 +404,7 @@ prevWindow ({ focus, layout } as windowManager) =
                         Just prevPid
 
                     else if prevPid == focusedPid then
-                        List.reverse pids |> List.head
+                        List.reverse windowIds |> List.head
 
                     else
                         findPrev (pid :: rest) focusedPid
@@ -352,10 +414,10 @@ prevWindow ({ focus, layout } as windowManager) =
 
         newFocus =
             focus
-                |> Maybe.andThen (findPrev pids)
+                |> Maybe.andThen (findPrev windowIds)
                 |> Maybe.map Just
-                |> Maybe.withDefault (List.head pids)
+                |> Maybe.withDefault (List.head windowIds)
     in
     ( { windowManager | focus = newFocus }
-    , newFocus |> Maybe.map (\pid -> pid |> windowId windowManager |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
+    , newFocus |> Maybe.map (\windowId -> windowId |> String.fromInt |> Browser.Dom.focus |> Task.attempt (\_ -> Nop)) |> Maybe.withDefault Cmd.none
     )

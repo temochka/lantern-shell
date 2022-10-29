@@ -1680,4 +1680,5 @@ lanternApp =
         , update = update
         , liveQueries = Just liveQueries
         , subscriptions = always Sub.none
+        , onWindowOpen = \_ _ model -> ( model, Cmd.none )
         }
