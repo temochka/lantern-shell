@@ -11,6 +11,7 @@ import Element.Border
 import Element.Font
 import Html.Attributes
 import Json.Decode
+import Json.Encode
 import Keyboard.Event
 import Lantern
 import Lantern.App
@@ -242,7 +243,7 @@ update msg model =
 
         LaunchApp launcher ->
             threadModel model
-                [ launchApp launcher [ [] ]
+                [ launchApp launcher [ Json.Encode.null ]
                 , fireLiveQueries
                 ]
 
@@ -308,10 +309,10 @@ update msg model =
                     ( model, Browser.Navigation.load url )
 
 
-newWindow : ProcessTable.Pid -> LanternShell.Apps.LauncherEntry Msg -> List String -> Model -> ( Model, Cmd Msg )
-newWindow pid launcher windowFlags model =
+newWindow : ProcessTable.Pid -> LanternShell.Apps.LauncherEntry Msg -> LanternUi.WindowManager.WindowState -> Model -> ( Model, Cmd Msg )
+newWindow pid launcher windowState model =
     threadModel model
-        [ update (windowFlags |> LanternUi.WindowManager.NewWindow pid |> WindowManagerMessage)
+        [ update (windowState |> LanternUi.WindowManager.NewWindow pid |> WindowManagerMessage)
         , \m ->
             pid
                 |> ProcessTable.lookup m.processTable
@@ -320,7 +321,7 @@ newWindow pid launcher windowFlags model =
                     (\appModel ->
                         let
                             ( newAppModel, cmd ) =
-                                launcher.onWindowOpen m.windowManager.maxWindowId windowFlags appModel
+                                launcher.onWindowOpen m.windowManager.maxWindowId windowState appModel
                         in
                         ( { m
                             | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable
@@ -332,7 +333,7 @@ newWindow pid launcher windowFlags model =
         ]
 
 
-launchApp : LanternShell.Apps.LauncherEntry Msg -> List (List String) -> Model -> ( Model, Cmd Msg )
+launchApp : LanternShell.Apps.LauncherEntry Msg -> List LanternUi.WindowManager.WindowState -> Model -> ( Model, Cmd Msg )
 launchApp launcher flagsPerWindow model =
     let
         context =

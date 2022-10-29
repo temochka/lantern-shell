@@ -1,6 +1,7 @@
 module Lantern.App exposing (App, Message(..), app, call, liveApp, mount, simpleApp)
 
 import Element exposing (Element)
+import Json.Encode
 import Lantern
 import Lantern.LiveQuery exposing (LiveQuery)
 import Task exposing (Task)
@@ -32,7 +33,7 @@ type alias App ctx flags model msg =
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : model -> List (LiveQuery msg)
     , subscriptions : model -> Sub (Message msg)
-    , onWindowOpen : Int -> List String -> model -> ( model, Cmd (Message msg) )
+    , onWindowOpen : Int -> Json.Encode.Value -> model -> ( model, Cmd (Message msg) )
     , name : String
     }
 
@@ -70,7 +71,7 @@ app :
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : Maybe (model -> List (LiveQuery msg))
     , subscriptions : model -> Sub (Message msg)
-    , onWindowOpen : Int -> List String -> model -> ( model, Cmd (Message msg) )
+    , onWindowOpen : Int -> Json.Encode.Value -> model -> ( model, Cmd (Message msg) )
     }
     -> App ctx flags model msg
 app def =

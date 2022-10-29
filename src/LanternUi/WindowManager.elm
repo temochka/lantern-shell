@@ -2,6 +2,7 @@ module LanternUi.WindowManager exposing
     ( Message(..)
     , RenderOptions
     , WindowManager
+    , WindowState
     , closeWindowsForPid
     , deserialize
     , new
@@ -34,14 +35,14 @@ type alias WindowId =
     Int
 
 
-type alias Flags =
-    List String
+type alias WindowState =
+    Json.Encode.Value
 
 
 type alias Window =
     { pid : ProcessTable.Pid
     , id : WindowId
-    , flags : Flags
+    , state : WindowState
     }
 
 
@@ -57,7 +58,7 @@ type alias WindowManager =
 type Message
     = Nop
     | Focus WindowId
-    | NewWindow ProcessTable.Pid Flags
+    | NewWindow ProcessTable.Pid WindowState
     | NextWindow
     | PrevWindow
 
@@ -80,14 +81,14 @@ new =
     }
 
 
-newWindow : ProcessTable.Pid -> Flags -> WindowManager -> WindowManager
-newWindow pid flags windowManager =
+newWindow : ProcessTable.Pid -> WindowState -> WindowManager -> WindowManager
+newWindow pid state windowManager =
     let
         newWindowId =
             windowManager.maxWindowId + 1
 
         window =
-            { pid = pid, id = newWindowId, flags = flags }
+            { pid = pid, id = newWindowId, state = state }
 
         newWindowsPerPid =
             Dict.update pid
@@ -189,19 +190,23 @@ serialize : (ProcessTable.Pid -> String) -> WindowManager -> String
 serialize serializeProcess { layout, windowsPerPid, windows } =
     let
         toSerialize =
-            windowsPerPid |> Dict.toList |> List.map (\( pid, windowIds ) -> ( pid, windowIds |> List.filterMap (\windowId -> Dict.get windowId windows) |> List.map .flags ))
+            windowsPerPid
+                |> Dict.toList
+                |> List.map
+                    (\( pid, windowIds ) ->
+                        ( pid
+                        , windowIds |> List.filterMap (\windowId -> Dict.get windowId windows) |> List.map .state
+                        )
+                    )
     in
     Json.Encode.object
         [ ( "l", Json.Encode.string (layoutName layout) )
         , ( "a"
           , Json.Encode.list
-                (\( pid, windowTuples ) ->
+                (\( pid, windowStates ) ->
                     Json.Encode.list identity
                         [ serializeProcess pid |> Json.Encode.string
-                        , List.map
-                            (Json.Encode.list Json.Encode.string)
-                            windowTuples
-                            |> Json.Encode.list identity
+                        , windowStates |> Json.Encode.list identity
                         ]
                 )
                 toSerialize
@@ -211,7 +216,7 @@ serialize serializeProcess { layout, windowsPerPid, windows } =
         |> Base64.encode
 
 
-deserialize : (String -> Maybe launcher) -> String -> Maybe ( WindowManager, List ( launcher, List Flags ) )
+deserialize : (String -> Maybe launcher) -> String -> Maybe ( WindowManager, List ( launcher, List WindowState ) )
 deserialize toLauncher serialized =
     let
         toLayout name =
@@ -232,8 +237,15 @@ deserialize toLauncher serialized =
                 |> Json.Decode.map toLayout
 
         processesDecoder =
-            Json.Decode.field "a" (Json.Decode.list (Json.Decode.map2 Tuple.pair (Json.Decode.index 0 Json.Decode.string) (Json.Decode.index 1 (Json.Decode.list (Json.Decode.list Json.Decode.string)))))
-                |> Json.Decode.map (List.filterMap (\( appName, appFlagsPerWindow ) -> toLauncher appName |> Maybe.map (\l -> ( l, appFlagsPerWindow ))) >> List.reverse >> Just)
+            Json.Decode.field "a" (Json.Decode.list (Json.Decode.map2 Tuple.pair (Json.Decode.index 0 Json.Decode.string) (Json.Decode.index 1 (Json.Decode.list Json.Decode.value))))
+                |> Json.Decode.map
+                    (List.filterMap
+                        (\( appName, windowStates ) ->
+                            toLauncher appName |> Maybe.map (\l -> ( l, windowStates ))
+                        )
+                        >> List.reverse
+                        >> Just
+                    )
 
         jsonDecoder =
             Json.Decode.map2 (Maybe.map2 Tuple.pair)
