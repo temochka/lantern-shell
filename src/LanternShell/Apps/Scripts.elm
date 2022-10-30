@@ -1680,5 +1680,4 @@ lanternApp =
         , update = update
         , liveQueries = Just liveQueries
         , subscriptions = always Sub.none
-        , initWindow = \_ _ model -> ( model, Cmd.none )
         }

@@ -11,7 +11,6 @@ import Element.Border
 import Element.Font
 import Html.Attributes
 import Json.Decode
-import Json.Encode
 import Keyboard.Event
 import Lantern
 import Lantern.App
@@ -84,7 +83,7 @@ init viewport url key =
                 |> (Url.Parser.Query.string "s" |> Url.Parser.query |> Url.Parser.parse)
                 |> Maybe.andThen identity
                 |> Maybe.andThen (LanternUi.WindowManager.deserialize LanternShell.Apps.launcherForId)
-                |> Maybe.withDefault ( LanternUi.WindowManager.new, [] )
+                |> Maybe.withDefault ( LanternUi.WindowManager.new [], [] )
 
         starterModel =
             { lanternConnection = lanternConnection
@@ -99,10 +98,8 @@ init viewport url key =
     in
     threadModel starterModel
         (List.map
-            (\( launcher, flagsPerWindow ) ->
-                launchApp (launcher (LanternShell.Apps.appContext starterModel)) flagsPerWindow
-            )
-            (( LanternShell.Apps.appLauncher, [] ) :: launchers)
+            (\launcher -> launchApp (launcher (LanternShell.Apps.appContext starterModel)))
+            (LanternShell.Apps.appLauncher :: launchers)
             ++ [ fireLiveQueries ]
         )
 
@@ -225,11 +222,9 @@ update msg model =
             let
                 newProcessTable =
                     ProcessTable.kill pid model.processTable
-
-                newWindowManager =
-                    LanternUi.WindowManager.closeWindowsForPid pid model.windowManager
             in
-            ( { model | processTable = newProcessTable, windowManager = newWindowManager }, Cmd.none )
+            [ update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable))) ]
+                |> threadModel { model | processTable = newProcessTable }
 
         FocusAppLauncher ->
             ( model, Browser.Dom.focus "lanternAppLauncher" |> Task.attempt (\_ -> Nop) )
@@ -243,7 +238,7 @@ update msg model =
 
         LaunchApp launcher ->
             threadModel model
-                [ launchApp launcher [ Json.Encode.null ]
+                [ launchApp launcher
                 , fireLiveQueries
                 ]
 
@@ -263,12 +258,7 @@ update msg model =
                 newUrl =
                     Url.Builder.relative [] [ Url.Builder.string "s" serialized ]
             in
-            ( { model | windowManager = newWindowManager }
-            , Cmd.batch
-                [ Cmd.map WindowManagerMessage cmd
-                , Browser.Navigation.replaceUrl model.navigationKey newUrl
-                ]
-            )
+            ( { model | windowManager = newWindowManager }, Cmd.batch [ Cmd.map WindowManagerMessage cmd, Browser.Navigation.replaceUrl model.navigationKey newUrl ] )
 
         AppMessage pid proxiedMsg ->
             case proxiedMsg of
@@ -314,32 +304,8 @@ update msg model =
                     ( model, Browser.Navigation.load url )
 
 
-newWindow : ProcessTable.Pid -> LanternShell.Apps.LauncherEntry Msg -> LanternUi.WindowManager.WindowState -> Model -> ( Model, Cmd Msg )
-newWindow pid launcher windowState model =
-    threadModel model
-        [ update (windowState |> LanternUi.WindowManager.NewWindow pid |> WindowManagerMessage)
-        , \m ->
-            pid
-                |> ProcessTable.lookup m.processTable
-                |> Maybe.map ProcessTable.processApp
-                |> Maybe.map
-                    (\appModel ->
-                        let
-                            ( newAppModel, cmd ) =
-                                launcher.initWindow m.windowManager.maxWindowId windowState appModel
-                        in
-                        ( { m
-                            | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable
-                          }
-                        , Cmd.map (wrapAppMessage pid) cmd
-                        )
-                    )
-                |> Maybe.withDefault ( m, Cmd.none )
-        ]
-
-
-launchApp : LanternShell.Apps.LauncherEntry Msg -> List LanternUi.WindowManager.WindowState -> Model -> ( Model, Cmd Msg )
-launchApp launcher flagsPerWindow model =
+launchApp : LanternShell.Apps.LauncherEntry Msg -> Model -> ( Model, Cmd Msg )
+launchApp launcher model =
     let
         context =
             LanternShell.Apps.appContext model
@@ -349,12 +315,6 @@ launchApp launcher flagsPerWindow model =
 
         app =
             LanternShell.Apps.lanternAppFor appModel context
-
-        firstWindowFlags =
-            List.head flagsPerWindow
-
-        otherWindowsFlags =
-            List.tail flagsPerWindow |> Maybe.withDefault []
 
         newProcessTable =
             ProcessTable.launch appModel
@@ -366,16 +326,15 @@ launchApp launcher flagsPerWindow model =
         pid =
             newProcessTable.pid
     in
-    (\_ ->
+    [ \_ ->
         ( { model
             | processTable = newProcessTable
           }
         , Cmd.map (wrapAppMessage pid) appCmd
         )
-    )
-        :: (firstWindowFlags |> Maybe.map (newWindow pid launcher) |> Maybe.map List.singleton |> Maybe.withDefault [])
-        ++ List.map (\flags -> newWindow pid launcher flags) otherWindowsFlags
-        ++ [ refreshLiveQueries pid ]
+    , refreshLiveQueries pid
+    , update (WindowManagerMessage (LanternUi.WindowManager.SyncProcesses (ProcessTable.userPids newProcessTable)))
+    ]
         |> threadModel model
 
 
