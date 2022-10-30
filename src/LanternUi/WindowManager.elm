@@ -1,6 +1,7 @@
 module LanternUi.WindowManager exposing
     ( Message(..)
     , RenderOptions
+    , WindowId
     , WindowManager
     , WindowState
     , closeWindowsForPid

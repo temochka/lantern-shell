@@ -263,7 +263,12 @@ update msg model =
                 newUrl =
                     Url.Builder.relative [] [ Url.Builder.string "s" serialized ]
             in
-            ( { model | windowManager = newWindowManager }, Cmd.batch [ Cmd.map WindowManagerMessage cmd, Browser.Navigation.replaceUrl model.navigationKey newUrl ] )
+            ( { model | windowManager = newWindowManager }
+            , Cmd.batch
+                [ Cmd.map WindowManagerMessage cmd
+                , Browser.Navigation.replaceUrl model.navigationKey newUrl
+                ]
+            )
 
         AppMessage pid proxiedMsg ->
             case proxiedMsg of
@@ -321,7 +326,7 @@ newWindow pid launcher windowState model =
                     (\appModel ->
                         let
                             ( newAppModel, cmd ) =
-                                launcher.onWindowOpen m.windowManager.maxWindowId windowState appModel
+                                launcher.initWindow m.windowManager.maxWindowId windowState appModel
                         in
                         ( { m
                             | processTable = ProcessTable.mapProcess (always newAppModel) pid m.processTable
