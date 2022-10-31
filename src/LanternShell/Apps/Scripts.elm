@@ -1,4 +1,4 @@
-module LanternShell.Apps.Scripts exposing (Message(..), Model, MyIO, Script, lanternApp, scriptsQuery)
+module LanternShell.Apps.Scripts exposing (Flags(..), Message(..), Model, MyIO, Script, ScriptId, lanternApp, scriptsQuery)
 
 import Dict exposing (Dict)
 import Element exposing (Element)
@@ -14,6 +14,7 @@ import Enclojure.ValueMap exposing (ValueMap)
 import File.Download
 import Html.Events
 import Json.Decode
+import Json.Encode
 import Keyboard.Event
 import Keyboard.Key exposing (Key(..))
 import Lantern
@@ -25,6 +26,7 @@ import Lantern.Query
 import LanternUi
 import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
+import LanternUi.Persistent exposing (Persistent)
 import LanternUi.Theme
 import Process
 import Task
@@ -37,6 +39,10 @@ type alias Context =
 type TextFormat
     = Plain String
     | TextRef InputKey
+
+
+type alias ScriptId =
+    Int
 
 
 type InputCell
@@ -70,7 +76,7 @@ type alias Console =
 
 
 type alias BrowserModel =
-    { scripts : List Script
+    { scripts : List ( ScriptId, Script )
     , query : String
     }
 
@@ -85,12 +91,64 @@ type alias EditorModel =
 
 type Model
     = Browser BrowserModel
-    | Editor EditorModel
-    | Runner EditorModel
+    | Editor (Persistent ScriptId EditorModel)
+    | Runner (Persistent ScriptId EditorModel)
 
 
-type alias Flags =
-    Script
+type Flags
+    = BrowserMode
+    | NewScriptMode
+    | EditScriptMode Int
+    | RunnerMode Int
+
+
+flagsDecoder : Json.Decode.Decoder (Maybe Flags)
+flagsDecoder =
+    Json.Decode.map2
+        (\flagType mId ->
+            case ( flagType, mId ) of
+                ( "b", Nothing ) ->
+                    Just BrowserMode
+
+                ( "e", Just id ) ->
+                    Just <| EditScriptMode id
+
+                ( "n", Nothing ) ->
+                    Just <| NewScriptMode
+
+                ( "r", Just id ) ->
+                    Just <| RunnerMode id
+
+                _ ->
+                    Nothing
+        )
+        (Json.Decode.index 0 Json.Decode.string)
+        (Json.Decode.maybe (Json.Decode.index 1 Json.Decode.int))
+
+
+encodeFlags : Model -> Maybe Json.Encode.Value
+encodeFlags model =
+    case model of
+        Browser _ ->
+            Just <| Json.Encode.list identity [ Json.Encode.string "b" ]
+
+        Editor (LanternUi.Persistent.Loaded id _) ->
+            Just <| Json.Encode.list identity [ Json.Encode.string "e", Json.Encode.int id ]
+
+        Editor (LanternUi.Persistent.Loading id) ->
+            Just <| Json.Encode.list identity [ Json.Encode.string "e", Json.Encode.int id ]
+
+        Editor (LanternUi.Persistent.New _) ->
+            Just <| Json.Encode.list identity [ Json.Encode.string "n" ]
+
+        Runner (LanternUi.Persistent.Loaded id _) ->
+            Just <| Json.Encode.list identity [ Json.Encode.string "r", Json.Encode.int id ]
+
+        Runner (LanternUi.Persistent.Loading id) ->
+            Just <| Json.Encode.list identity [ Json.Encode.string "r", Json.Encode.int id ]
+
+        Runner (LanternUi.Persistent.New _) ->
+            Just <| Json.Encode.list identity [ Json.Encode.string "n" ]
 
 
 stackLimit : Int
@@ -639,7 +697,8 @@ type Message
     | Run
     | Stop
     | UpdateInputRequest InputKey InputCell String
-    | UpdateScripts (Result Lantern.Error (List Script))
+    | UpdateScripts (Result Lantern.Error (List ( ScriptId, Script )))
+    | UpdateScript (Result Lantern.Error (Maybe ( ScriptId, Script )))
     | HandleIO (Step MyIO)
     | InspectValue (Value MyIO)
     | CreateScript
@@ -647,8 +706,8 @@ type Message
     | SaveScript
     | ScriptSaved (Result Lantern.Error Lantern.Query.WriterResult)
     | NewScript
-    | DeleteScript Script
-    | EditScript Script
+    | DeleteScript ScriptId
+    | EditScript ScriptId Script
     | UpdateName String
     | UpdateCode String
     | UpdateRepl String
@@ -659,26 +718,39 @@ type Message
 
 
 init : Maybe Flags -> ( Model, Cmd (Lantern.App.Message Message) )
-init flags =
-    flags
-        |> Maybe.map
-            (\script ->
-                updateRunner
-                    (Runner
-                        { interpreter = Stopped
-                        , script = script
-                        , console = []
-                        , repl = ""
-                        }
-                    )
-                    runScript
-            )
-        |> Maybe.withDefault ( Browser { scripts = [], query = "" }, Cmd.none )
+init =
+    Maybe.withDefault BrowserMode
+        >> (\flags ->
+                case flags of
+                    BrowserMode ->
+                        ( Browser { scripts = [], query = "" }, Cmd.none )
+
+                    EditScriptMode id ->
+                        ( Editor
+                            (LanternUi.Persistent.Loading id)
+                        , Cmd.none
+                        )
+
+                    NewScriptMode ->
+                        ( Editor
+                            (LanternUi.Persistent.New
+                                { interpreter = Stopped
+                                , script = unsavedScript
+                                , console = []
+                                , repl = ""
+                                }
+                            )
+                        , Cmd.none
+                        )
+
+                    RunnerMode id ->
+                        ( Runner (LanternUi.Persistent.Loading id), Cmd.none )
+           )
 
 
-unsavedScript : { id : Maybe Int, code : String, name : String, input : String }
+unsavedScript : { code : String, name : String, input : String }
 unsavedScript =
-    { id = Nothing, code = "", name = "", input = "" }
+    { code = "", name = "", input = "" }
 
 
 type alias UI io =
@@ -742,22 +814,29 @@ updateEditor :
     -> ( Model, Cmd (Lantern.App.Message Message) )
 updateEditor model updateFn =
     case model of
-        Editor m ->
+        Editor (LanternUi.Persistent.Loaded id m) ->
             let
                 ( newM, cmd ) =
                     updateFn m
             in
-            ( Editor newM, cmd )
+            ( Editor (LanternUi.Persistent.Loaded id newM), cmd )
+
+        Runner (LanternUi.Persistent.Loaded id m) ->
+            let
+                ( newM, cmd ) =
+                    updateFn m
+            in
+            ( Runner (LanternUi.Persistent.Loaded id newM), cmd )
 
         _ ->
             ( model, Cmd.none )
 
 
-updateRunner :
+updatePersistentEditor :
     Model
-    -> (EditorModel -> ( EditorModel, Cmd (Lantern.App.Message Message) ))
+    -> (Persistent ScriptId EditorModel -> ( Persistent ScriptId EditorModel, Cmd (Lantern.App.Message Message) ))
     -> ( Model, Cmd (Lantern.App.Message Message) )
-updateRunner model updateFn =
+updatePersistentEditor model updateFn =
     case model of
         Editor m ->
             let
@@ -929,23 +1008,18 @@ update msg appModel =
         DownloadFile filename contentType content ->
             ( appModel, File.Download.string filename contentType content )
 
-        DeleteScript script ->
+        DeleteScript id ->
             updateBrowser appModel
                 (\model ->
-                    script.id
-                        |> Maybe.map
-                            (\id ->
-                                Lantern.Query.withArguments
-                                    "DELETE FROM scripts WHERE id=$id"
-                                    [ ( "$id", id |> Lantern.Query.Integer )
-                                    ]
-                            )
-                        |> Maybe.map (\query -> ( model, Lantern.writerQuery query ScriptSaved |> Lantern.App.call ))
-                        |> Maybe.withDefault ( model, Cmd.none )
+                    Lantern.Query.withArguments
+                        "DELETE FROM scripts WHERE id=$id"
+                        [ ( "$id", id |> Lantern.Query.Integer )
+                        ]
+                        |> (\query -> ( model, Lantern.writerQuery query ScriptSaved |> Lantern.App.call ))
                 )
 
         FuzzySelectMessage id selectMsg ->
-            updateRunner appModel
+            updateEditor appModel
                 (\model ->
                     case model.interpreter of
                         ShowingUI ({ fuzzySelects } as uiState) env toStep ->
@@ -1058,7 +1132,7 @@ update msg appModel =
                 )
 
         HandleIO step ->
-            updateRunner appModel
+            updateEditor appModel
                 (\model ->
                     let
                         ( evalResult, retEnv ) =
@@ -1072,7 +1146,7 @@ update msg appModel =
                 )
 
         UpdateInputRequest name inputType v ->
-            updateRunner
+            updateEditor
                 appModel
                 (\model ->
                     case model.interpreter of
@@ -1146,22 +1220,51 @@ update msg appModel =
                             ( model, Cmd.none )
                 )
 
+        UpdateScript result ->
+            updatePersistentEditor appModel
+                (\model ->
+                    result
+                        |> Result.toMaybe
+                        |> Maybe.andThen identity
+                        |> Maybe.map
+                            (\( _, script ) ->
+                                case model of
+                                    LanternUi.Persistent.Loaded id editor ->
+                                        ( LanternUi.Persistent.Loaded id { editor | script = script }, Cmd.none )
+
+                                    LanternUi.Persistent.Loading id ->
+                                        ( LanternUi.Persistent.Loaded id
+                                            { interpreter = Stopped
+                                            , script = script
+                                            , console = []
+                                            , repl = ""
+                                            }
+                                        , Cmd.none
+                                        )
+
+                                    LanternUi.Persistent.New _ ->
+                                        ( model, Cmd.none )
+                            )
+                        |> Maybe.withDefault ( model, Cmd.none )
+                )
+
         SaveScript ->
-            updateEditor appModel
+            updatePersistentEditor appModel
                 (\model ->
                     let
                         cmd =
-                            model.script.id
-                                |> Maybe.map
-                                    (\id ->
-                                        Lantern.Query.withArguments
-                                            "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
-                                            [ ( "$name", model.script.name |> Lantern.Query.Text )
-                                            , ( "$code", model.script.code |> Lantern.Query.Text )
-                                            , ( "$input", model.script.input |> Lantern.Query.Text )
-                                            , ( "$id", id |> Lantern.Query.Integer )
-                                            ]
-                                    )
+                            Maybe.map2
+                                (\id s ->
+                                    Lantern.Query.withArguments
+                                        "UPDATE ss SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
+                                        [ ( "$name", s.name |> Lantern.Query.Text )
+                                        , ( "$code", s.code |> Lantern.Query.Text )
+                                        , ( "$input", s.input |> Lantern.Query.Text )
+                                        , ( "$id", id |> Lantern.Query.Integer )
+                                        ]
+                                )
+                                (LanternUi.Persistent.id model)
+                                (LanternUi.Persistent.state model |> Maybe.map .script)
                                 |> Maybe.map (\query -> Lantern.writerQuery query ScriptSaved |> Lantern.App.call)
                                 |> Maybe.withDefault Cmd.none
                     in
@@ -1170,12 +1273,14 @@ update msg appModel =
 
         NewScript ->
             ( Editor
-                { interpreter = Stopped
-                , script = unsavedScript
-                , console = []
-                , repl = ""
-                }
-            , Cmd.none
+                (LanternUi.Persistent.New
+                    { interpreter = Stopped
+                    , script = unsavedScript
+                    , console = []
+                    , repl = ""
+                    }
+                )
+            , Lantern.App.reflag
             )
 
         ScriptSaved _ ->
@@ -1197,31 +1302,32 @@ update msg appModel =
                 )
 
         ScriptCreated result ->
-            updateEditor appModel
-                (\model ->
+            updatePersistentEditor appModel
+                (\pModel ->
                     result
-                        |> Result.map
+                        |> Result.toMaybe
+                        |> Maybe.andThen
                             (\writerResult ->
-                                let
-                                    editor =
-                                        model.script
+                                case pModel of
+                                    LanternUi.Persistent.New model ->
+                                        Just ( LanternUi.Persistent.Loaded writerResult.lastInsertRowId model, Lantern.App.reflag )
 
-                                    newEditor =
-                                        { editor | id = Just writerResult.lastInsertRowId }
-                                in
-                                ( { model | script = newEditor }, Cmd.none )
+                                    _ ->
+                                        Nothing
                             )
-                        |> Result.withDefault ( model, Cmd.none )
+                        |> Maybe.withDefault ( pModel, Cmd.none )
                 )
 
-        EditScript script ->
+        EditScript id script ->
             ( Editor
-                { interpreter = Stopped
-                , script = script
-                , console = []
-                , repl = ""
-                }
-            , Cmd.none
+                (LanternUi.Persistent.Loaded id
+                    { interpreter = Stopped
+                    , script = script
+                    , console = []
+                    , repl = ""
+                    }
+                )
+            , Lantern.App.reflag
             )
 
         -- Beware: the Apps namespace hijacks this message and launches the inspector
@@ -1460,8 +1566,8 @@ viewConsole context interpreter console options =
             ]
 
 
-viewEditor : Context -> EditorModel -> Element (Lantern.App.Message Message)
-viewEditor context model =
+viewEditor : Context -> Maybe ScriptId -> EditorModel -> Element (Lantern.App.Message Message)
+viewEditor context mScriptId model =
     let
         runButtonTitle =
             case model.interpreter of
@@ -1482,7 +1588,7 @@ viewEditor context model =
                 { label = Element.text "Eval", onPress = Just <| Lantern.App.Message (Eval model.script.code) }
 
         saveButton =
-            if model.script.id == Nothing then
+            if mScriptId == Nothing then
                 LanternUi.Input.button context.theme
                     []
                     { label = Element.text "Save", onPress = Just <| Lantern.App.Message CreateScript }
@@ -1581,7 +1687,7 @@ viewBrowser context model =
         filteredScripts =
             model.scripts
                 |> List.filter
-                    (\s ->
+                    (\( _, s ) ->
                         String.isEmpty model.query
                             || String.contains (String.toLower model.query) (String.toLower s.name)
                     )
@@ -1589,19 +1695,19 @@ viewBrowser context model =
         scriptsList =
             filteredScripts
                 |> List.map
-                    (\script ->
+                    (\( scriptId, script ) ->
                         Element.row
                             [ Element.width Element.fill
                             , Element.spacing 20
                             ]
                             [ Element.Input.button
                                 [ Element.mouseOver [ Element.Background.color context.theme.bgHighlight ] ]
-                                { onPress = Just (Lantern.App.Message <| EditScript script)
+                                { onPress = Just (Lantern.App.Message <| EditScript scriptId script)
                                 , label = Element.text (scriptName script)
                                 }
                             , LanternUi.Input.button context.theme
                                 []
-                                { onPress = Just (Lantern.App.Message <| DeleteScript script)
+                                { onPress = Just (Lantern.App.Message <| DeleteScript scriptId)
                                 , label = Element.text "Delete"
                                 }
                             ]
@@ -1616,8 +1722,8 @@ viewBrowser context model =
         ]
 
 
-viewRunner : Context -> EditorModel -> Element (Lantern.App.Message Message)
-viewRunner context model =
+viewRunner : Context -> Maybe ScriptId -> EditorModel -> Element (Lantern.App.Message Message)
+viewRunner context _ model =
     viewConsole context model.interpreter model.console { devMode = False }
 
 
@@ -1628,34 +1734,43 @@ view context model =
             viewBrowser context browser
 
         Editor editor ->
-            viewEditor context editor
+            LanternUi.loader (viewEditor context) editor
 
         Runner runner ->
-            viewRunner context runner
+            LanternUi.loader (viewRunner context) runner
 
 
 type alias Script =
-    { id : Maybe Int
-    , name : String
+    { name : String
     , code : String
     , input : String
     }
 
 
-scriptDecoder : Json.Decode.Decoder Script
+scriptDecoder : Json.Decode.Decoder ( ScriptId, Script )
 scriptDecoder =
     Json.Decode.map4
-        Script
-        (Json.Decode.map Just (Json.Decode.field "id" Json.Decode.int))
+        (\id name code input -> ( id, Script name code input ))
+        (Json.Decode.field "id" Json.Decode.int)
         (Json.Decode.field "name" Json.Decode.string)
         (Json.Decode.field "code" Json.Decode.string)
         (Json.Decode.field "input" Json.Decode.string)
 
 
-scriptsQuery : (Result Lantern.Error (List Script) -> msg) -> LiveQuery msg
+scriptsQuery : (Result Lantern.Error (List ( ScriptId, Script )) -> msg) -> LiveQuery msg
 scriptsQuery =
     Lantern.LiveQuery.prepare
         ( Lantern.Query.Query "SELECT id, input, name, code FROM scripts ORDER BY name" Dict.empty, scriptDecoder )
+
+
+scriptQuery : ScriptId -> (Result Lantern.Error (Maybe ( ScriptId, Script )) -> msg) -> LiveQuery msg
+scriptQuery id toMsg =
+    Lantern.LiveQuery.prepare
+        ( Lantern.Query.withArguments "SELECT id, input, name, code FROM scripts WHERE id=$id ORDER BY name"
+            [ ( "$id", Lantern.Query.Integer id ) ]
+        , scriptDecoder
+        )
+        (Result.map List.head >> toMsg)
 
 
 liveQueries : Model -> List (LiveQuery Message)
@@ -1664,11 +1779,17 @@ liveQueries model =
         Browser _ ->
             [ scriptsQuery UpdateScripts ]
 
-        Editor _ ->
-            []
+        Editor ps ->
+            ps
+                |> LanternUi.Persistent.id
+                |> Maybe.map (\id -> [ scriptQuery id UpdateScript ])
+                |> Maybe.withDefault []
 
-        Runner _ ->
-            []
+        Runner ps ->
+            ps
+                |> LanternUi.Persistent.id
+                |> Maybe.map (\id -> [ scriptQuery id UpdateScript ])
+                |> Maybe.withDefault []
 
 
 lanternApp : Lantern.App.App Context Flags Model Message
@@ -1680,4 +1801,6 @@ lanternApp =
         , update = update
         , liveQueries = Just liveQueries
         , subscriptions = always Sub.none
+        , decodeFlags = Json.Decode.decodeValue flagsDecoder >> Result.toMaybe >> Maybe.andThen identity
+        , encodeFlags = encodeFlags
         }

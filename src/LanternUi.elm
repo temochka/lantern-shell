@@ -3,6 +3,7 @@ module LanternUi exposing
     , columnLayout
     , fullWidthColumn
     , listSpacing
+    , loader
     , noneAttribute
     , panel
     , popup
@@ -15,6 +16,7 @@ import Element.Background
 import Element.Border
 import Element.Font
 import Html.Attributes
+import LanternUi.Persistent exposing (Persistent)
 import LanternUi.Theme exposing (Theme)
 
 
@@ -52,6 +54,14 @@ panelHeader theme attributes content =
             ++ attributes
         )
         content
+
+
+loader : (Maybe id -> a -> Element msg) -> Persistent id a -> Element msg
+loader viewFn p =
+    p
+        |> LanternUi.Persistent.state
+        |> Maybe.map (viewFn (LanternUi.Persistent.id p))
+        |> Maybe.withDefault (Element.text "Loading...")
 
 
 type PanelHeader msg

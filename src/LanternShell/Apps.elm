@@ -1,6 +1,7 @@
 module LanternShell.Apps exposing
     ( App
     , Context
+    , Flags
     , LauncherEntry
     , Message(..)
     , all
@@ -32,7 +33,7 @@ type alias Context msg =
 
 
 type alias LauncherEntry msg =
-    Lantern.App.App () () (App msg) (Message msg)
+    Lantern.App.App () (Flags msg) (App msg) (Message msg)
 
 
 type App msg
@@ -55,7 +56,14 @@ type Message msg
     | ScriptsMsg ScriptsApp.Message
     | ValueInspectorMsg (ValueInspectorApp.Message ScriptsApp.MyIO)
     | WriterQueryMsg WriterQueryApp.Message
-    | LaunchAppMsg (Lantern.App.App () () (App msg) (Message msg))
+    | LaunchAppMsg (Lantern.App.App () (Flags msg) (App msg) (Message msg)) (Maybe (Flags msg))
+
+
+type Flags msg
+    = NoFlags
+    | ScriptsFlags ScriptsApp.Flags
+    | AppLauncherFlags (AppLauncherApp.Flags (LauncherEntry msg))
+    | ValueInspectorFlags (ValueInspectorApp.Flags ScriptsApp.MyIO)
 
 
 appId : App msg -> String
@@ -86,7 +94,7 @@ appId app =
             "WriterQuery"
 
 
-launcherForId : String -> Maybe (Context msg -> Lantern.App.App () () (App msg) (Message msg))
+launcherForId : String -> Maybe (Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg))
 launcherForId id =
     case id of
         "DatabaseExplorer" ->
@@ -102,19 +110,19 @@ launcherForId id =
             Just readerQuery
 
         "Scripts" ->
-            Just (scripts Nothing)
+            Just scripts
 
         "WriterQuery" ->
             Just writerQuery
 
         "ValueInspector" ->
-            Just (valueInspector Nothing)
+            Just valueInspector
 
         _ ->
             Nothing
 
 
-lanternAppFor : App msg -> (Context msg -> Lantern.App.App () () (App msg) (Message msg))
+lanternAppFor : App msg -> (Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg))
 lanternAppFor app =
     case app of
         AppLauncherApp _ ->
@@ -133,28 +141,28 @@ lanternAppFor app =
             readerQuery
 
         ScriptsApp _ ->
-            scripts Nothing
+            scripts
 
         ValueInspectorApp _ ->
-            valueInspector Nothing
+            valueInspector
 
         WriterQueryApp _ ->
             writerQuery
 
 
-all : List (Context msg -> Lantern.App.App () () (App msg) (Message msg))
+all : List (Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg))
 all =
     [ databaseExplorer
     , readerQuery
-    , scripts Nothing
-    , valueInspector Nothing
+    , scripts
+    , valueInspector
     , writerQuery
     , migrations
     , logViewer
     ]
 
 
-databaseExplorer : Context msg -> Lantern.App.App () () (App msg) (Message msg)
+databaseExplorer : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
 databaseExplorer context =
     Lantern.App.mount
         { unwrapMsg =
@@ -175,13 +183,14 @@ databaseExplorer context =
                         Nothing
         , wrapModel = DatabaseExplorerApp
         , wrapMsg = DatabaseExplorerMsg
-        , flags = Nothing
+        , wrapFlags = always NoFlags
+        , unwrapFlags = always (Just ())
         , context = \_ -> { theme = context.theme }
         }
         DatabaseExplorerApp.lanternApp
 
 
-logViewer : Context msg -> Lantern.App.App () () (App msg) (Message msg)
+logViewer : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
 logViewer context =
     Lantern.App.mount
         { unwrapMsg =
@@ -202,13 +211,14 @@ logViewer context =
                         Nothing
         , wrapModel = LogViewerApp
         , wrapMsg = LogViewerMsg
-        , flags = Nothing
+        , wrapFlags = always NoFlags
+        , unwrapFlags = always (Just ())
         , context = \_ -> { theme = context.theme, log = Lantern.log context.lanternConnection }
         }
         LogViewerApp.lanternApp
 
 
-migrations : Context msg -> Lantern.App.App () () (App msg) (Message msg)
+migrations : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
 migrations context =
     Lantern.App.mount
         { unwrapMsg =
@@ -229,13 +239,14 @@ migrations context =
                         Nothing
         , wrapModel = MigrationsApp
         , wrapMsg = MigrationsMsg
-        , flags = Nothing
+        , wrapFlags = always NoFlags
+        , unwrapFlags = always (Just ())
         , context = \_ -> { theme = context.theme }
         }
         MigrationsApp.lanternApp
 
 
-readerQuery : Context msg -> Lantern.App.App () () (App msg) (Message msg)
+readerQuery : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
 readerQuery context =
     Lantern.App.mount
         { unwrapMsg =
@@ -256,14 +267,15 @@ readerQuery context =
                         Nothing
         , wrapModel = ReaderQueryApp
         , wrapMsg = ReaderQueryMsg
-        , flags = Nothing
+        , wrapFlags = always NoFlags
+        , unwrapFlags = always (Just ())
         , context = \_ -> { theme = context.theme }
         }
         ReaderQueryApp.lanternApp
 
 
-scripts : Maybe ScriptsApp.Script -> Context msg -> Lantern.App.App () () (App msg) (Message msg)
-scripts script context =
+scripts : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
+scripts context =
     Lantern.App.mount
         { unwrapMsg =
             \wrappedMsg ->
@@ -286,17 +298,25 @@ scripts script context =
             \msg ->
                 case msg of
                     ScriptsApp.InspectValue v ->
-                        LaunchAppMsg (valueInspector (Just { value = v }) context)
+                        LaunchAppMsg (valueInspector context) (Just <| ValueInspectorFlags { value = v })
 
                     otherMsg ->
                         ScriptsMsg otherMsg
-        , flags = script
+        , wrapFlags = ScriptsFlags
+        , unwrapFlags =
+            \flags ->
+                case flags of
+                    ScriptsFlags f ->
+                        Just f
+
+                    _ ->
+                        Nothing
         , context = \_ -> { theme = context.theme }
         }
         ScriptsApp.lanternApp
 
 
-appLauncher : Context msg -> Lantern.App.App () () (App msg) (Message msg)
+appLauncher : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
 appLauncher context =
     Lantern.App.mount
         { unwrapMsg =
@@ -320,32 +340,39 @@ appLauncher context =
             \msg ->
                 case msg of
                     AppLauncherApp.LaunchApp (AppLauncherApp.NativeApp v) ->
-                        LaunchAppMsg v
+                        LaunchAppMsg v Nothing
 
-                    AppLauncherApp.LaunchApp (AppLauncherApp.UserScript v) ->
-                        LaunchAppMsg (scripts (Just v) context)
+                    AppLauncherApp.LaunchApp (AppLauncherApp.UserScript ( id, _ )) ->
+                        LaunchAppMsg (scripts context) (Just <| ScriptsFlags (ScriptsApp.RunnerMode id))
 
                     _ ->
                         AppLauncherMsg msg
-        , flags =
-            Just
-                { nativeApps =
-                    all
-                        |> List.map
-                            (\launcher ->
-                                let
-                                    app =
-                                        launcher context
-                                in
-                                ( app.name, AppLauncherApp.NativeApp app )
-                            )
-                }
+        , unwrapFlags =
+            \flags ->
+                case flags of
+                    AppLauncherFlags _ ->
+                        Just <|
+                            { nativeApps =
+                                all
+                                    |> List.map
+                                        (\launcher ->
+                                            let
+                                                app =
+                                                    launcher context
+                                            in
+                                            ( app.name, AppLauncherApp.NativeApp app )
+                                        )
+                            }
+
+                    _ ->
+                        Nothing
+        , wrapFlags = always NoFlags
         , context = \_ -> { theme = context.theme }
         }
         AppLauncherApp.lanternApp
 
 
-writerQuery : Context msg -> Lantern.App.App () () (App msg) (Message msg)
+writerQuery : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
 writerQuery context =
     Lantern.App.mount
         { unwrapMsg =
@@ -366,14 +393,15 @@ writerQuery context =
                         Nothing
         , wrapModel = WriterQueryApp
         , wrapMsg = WriterQueryMsg
-        , flags = Nothing
+        , wrapFlags = always NoFlags
+        , unwrapFlags = always (Just ())
         , context = \_ -> { theme = context.theme }
         }
         WriterQueryApp.lanternApp
 
 
-valueInspector : Maybe (ValueInspectorApp.Flags ScriptsApp.MyIO) -> Context msg -> Lantern.App.App () () (App msg) (Message msg)
-valueInspector flags context =
+valueInspector : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
+valueInspector context =
     Lantern.App.mount
         { unwrapMsg =
             \wrappedMsg ->
@@ -393,7 +421,15 @@ valueInspector flags context =
                         Nothing
         , wrapModel = ValueInspectorApp
         , wrapMsg = ValueInspectorMsg
-        , flags = flags
+        , wrapFlags = ValueInspectorFlags
+        , unwrapFlags =
+            \flags ->
+                case flags of
+                    ValueInspectorFlags unwrappedFlags ->
+                        Just unwrappedFlags
+
+                    _ ->
+                        Nothing
         , context = \_ -> { theme = context.theme }
         }
         ValueInspectorApp.lanternApp

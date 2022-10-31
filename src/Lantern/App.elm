@@ -1,6 +1,7 @@
-module Lantern.App exposing (App, Message(..), app, call, liveApp, mount, simpleApp)
+module Lantern.App exposing (App, Message(..), app, call, liveApp, mount, reflag, simpleApp)
 
 import Element exposing (Element)
+import Json.Decode
 import Lantern
 import Lantern.LiveQuery exposing (LiveQuery)
 import Task exposing (Task)
@@ -9,6 +10,12 @@ import Task exposing (Task)
 type Message msg
     = Message msg
     | LanternMessage (Lantern.Message msg)
+    | Reflag
+
+
+reflag : Cmd (Message msg)
+reflag =
+    Task.perform (always Reflag) (Task.succeed ())
 
 
 mapMessage : (msgA -> msgB) -> Message msgA -> Message msgB
@@ -19,6 +26,9 @@ mapMessage f msg =
 
         LanternMessage lanternMessage ->
             LanternMessage (Lantern.map f lanternMessage)
+
+        Reflag ->
+            Reflag
 
 
 call : Task Never (Lantern.Message msg) -> Cmd (Message msg)
@@ -33,6 +43,8 @@ type alias App ctx flags model msg =
     , liveQueries : model -> List (LiveQuery msg)
     , subscriptions : model -> Sub (Message msg)
     , name : String
+    , decodeFlags : Json.Decode.Value -> Maybe flags
+    , encodeFlags : model -> Maybe Json.Decode.Value
     }
 
 
@@ -55,6 +67,8 @@ liveApp def =
     , update = def.update
     , liveQueries = def.liveQueries
     , subscriptions = def.subscriptions
+    , decodeFlags = always Nothing
+    , encodeFlags = always Nothing
     }
 
 
@@ -68,6 +82,8 @@ app :
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : Maybe (model -> List (LiveQuery msg))
     , subscriptions : model -> Sub (Message msg)
+    , decodeFlags : Json.Decode.Value -> Maybe flags
+    , encodeFlags : model -> Maybe Json.Decode.Value
     }
     -> App ctx flags model msg
 app def =
@@ -77,6 +93,8 @@ app def =
     , update = def.update
     , liveQueries = def.liveQueries |> Maybe.withDefault (always [])
     , subscriptions = def.subscriptions
+    , decodeFlags = always Nothing
+    , encodeFlags = always Nothing
     }
 
 
@@ -97,6 +115,8 @@ simpleApp def =
     , update = def.update
     , liveQueries = always []
     , subscriptions = always Sub.none
+    , decodeFlags = always Nothing
+    , encodeFlags = always Nothing
     }
 
 
@@ -105,12 +125,13 @@ mount :
     , wrapMsg : appMsg -> rootMsg
     , unwrapModel : rootModel -> Maybe appModel
     , wrapModel : appModel -> rootModel
-    , flags : Maybe appFlags
+    , unwrapFlags : rootFlags -> Maybe appFlags
+    , wrapFlags : appFlags -> rootFlags
     , context : rootModel -> ctx
     }
     -> App ctx appFlags appModel appMsg
     -> App () rootFlags rootModel rootMsg
-mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, flags, context } mountedApp =
+mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, unwrapFlags, wrapFlags, context } mountedApp =
     let
         wrapResult ( appModel, appCmd ) =
             ( wrapModel appModel, Cmd.map (mapMessage wrapMsg) appCmd )
@@ -130,6 +151,12 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, flags, context } mountedApp 
                 |> Maybe.map (mountedApp.view (context rootModel) >> Element.map (mapMessage wrapMsg))
                 |> Maybe.withDefault Element.none
 
+        wrappedInit rootFlags =
+            rootFlags
+                |> Maybe.andThen unwrapFlags
+                |> mountedApp.init
+                |> wrapResult
+
         wrappedLiveQueries rootModel =
             rootModel
                 |> unwrapModel
@@ -143,9 +170,11 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, flags, context } mountedApp 
                 |> Maybe.withDefault Sub.none
     in
     { name = mountedApp.name
-    , init = \_ -> mountedApp.init flags |> wrapResult
+    , init = wrappedInit
     , view = wrappedView
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries
     , subscriptions = wrappedSubscriptions
+    , decodeFlags = mountedApp.decodeFlags >> Maybe.map wrapFlags
+    , encodeFlags = unwrapModel >> Maybe.andThen mountedApp.encodeFlags
     }

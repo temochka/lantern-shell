@@ -144,17 +144,28 @@ layoutName layout =
             "MasterStack"
 
 
-serialize : (ProcessTable.Pid -> String) -> WindowManager -> String
+serialize : (ProcessTable.Pid -> { processName : String, flags : Maybe Json.Encode.Value }) -> WindowManager -> String
 serialize serializeProcess { layout } =
     Json.Encode.object
         [ ( "l", Json.Encode.string (layoutName layout) )
-        , ( "a", Json.Encode.list (serializeProcess >> Json.Encode.string) (layoutToPids layout) )
+        , ( "a"
+          , Json.Encode.list
+                (serializeProcess
+                    >> (\{ processName, flags } ->
+                            Json.Encode.list identity
+                                (Json.Encode.string processName
+                                    :: (Maybe.map List.singleton flags |> Maybe.withDefault [])
+                                )
+                       )
+                )
+                (layoutToPids layout)
+          )
         ]
         |> Json.Encode.encode 0
         |> Base64.encode
 
 
-deserialize : (String -> Maybe launcher) -> String -> Maybe ( WindowManager, List launcher )
+deserialize : (( String, Maybe Json.Decode.Value ) -> Maybe launcher) -> String -> Maybe ( WindowManager, List launcher )
 deserialize toLauncher serialized =
     let
         toLayout name =
@@ -175,7 +186,13 @@ deserialize toLauncher serialized =
                 |> Json.Decode.map toLayout
 
         processesDecoder =
-            Json.Decode.field "a" (Json.Decode.list Json.Decode.string)
+            Json.Decode.field "a"
+                (Json.Decode.list
+                    (Json.Decode.map2 Tuple.pair
+                        (Json.Decode.index 0 Json.Decode.string)
+                        (Json.Decode.maybe (Json.Decode.index 1 Json.Decode.value))
+                    )
+                )
                 |> Json.Decode.map (List.filterMap toLauncher >> List.reverse >> Just)
 
         jsonDecoder =

@@ -170,4 +170,6 @@ lanternApp =
         , subscriptions = \_ -> Sub.none
         , view = view
         , update = update
+        , decodeFlags = always Nothing
+        , encodeFlags = always Nothing
         }

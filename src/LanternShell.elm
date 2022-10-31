@@ -82,7 +82,13 @@ init viewport url key =
             url
                 |> (Url.Parser.Query.string "s" |> Url.Parser.query |> Url.Parser.parse)
                 |> Maybe.andThen identity
-                |> Maybe.andThen (LanternUi.WindowManager.deserialize LanternShell.Apps.launcherForId)
+                |> Maybe.andThen
+                    (LanternUi.WindowManager.deserialize
+                        (\( id, flags ) ->
+                            LanternShell.Apps.launcherForId id
+                                |> Maybe.map (\launcher -> ( launcher, flags ))
+                        )
+                    )
                 |> Maybe.withDefault ( LanternUi.WindowManager.new [], [] )
 
         starterModel =
@@ -98,8 +104,14 @@ init viewport url key =
     in
     threadModel starterModel
         (List.map
-            (\launcher -> launchApp (launcher (LanternShell.Apps.appContext starterModel)))
-            (LanternShell.Apps.appLauncher :: launchers)
+            (\( launcher, flagsAsValue ) ->
+                let
+                    initializedLauncher =
+                        launcher (LanternShell.Apps.appContext starterModel)
+                in
+                launchApp initializedLauncher (flagsAsValue |> Maybe.andThen initializedLauncher.decodeFlags)
+            )
+            (( LanternShell.Apps.appLauncher, Nothing ) :: launchers)
             ++ [ fireLiveQueries ]
         )
 
@@ -143,7 +155,7 @@ type Msg
     | CloseApp ProcessTable.Pid
     | FocusAppLauncher
     | LanternMessage (Lantern.Message Msg)
-    | LaunchApp (LanternShell.Apps.LauncherEntry Msg)
+    | LaunchApp (LanternShell.Apps.LauncherEntry Msg) (Maybe (LanternShell.Apps.Flags Msg))
     | WindowManagerMessage LanternUi.WindowManager.Message
     | UpdateViewport Int Int
     | UrlChange Url.Url
@@ -163,6 +175,9 @@ wrapAppMessage pid msg =
 
         Lantern.App.LanternMessage lanternMessage ->
             LanternMessage (Lantern.map (AppMessage pid) lanternMessage)
+
+        Lantern.App.Reflag ->
+            WindowManagerMessage LanternUi.WindowManager.Nop
 
 
 refreshLiveQueries : ProcessTable.Pid -> Model -> ( Model, Cmd Msg )
@@ -236,9 +251,9 @@ update msg model =
             in
             ( { model | lanternConnection = lanternConnection }, lanternCmd )
 
-        LaunchApp launcher ->
+        LaunchApp launcher flags ->
             threadModel model
-                [ launchApp launcher
+                [ launchApp launcher flags
                 , fireLiveQueries
                 ]
 
@@ -249,9 +264,28 @@ update msg model =
 
                 serialized =
                     LanternUi.WindowManager.serialize
-                        (ProcessTable.lookup model.processTable
-                            >> Maybe.map (ProcessTable.processApp >> LanternShell.Apps.appId)
-                            >> Maybe.withDefault ""
+                        (\pid ->
+                            let
+                                process =
+                                    ProcessTable.lookup model.processTable pid
+
+                                processName =
+                                    process
+                                        |> Maybe.map (ProcessTable.processApp >> LanternShell.Apps.appId)
+                                        |> Maybe.withDefault ""
+
+                                processFlags =
+                                    process
+                                        |> Maybe.andThen
+                                            (\p ->
+                                                let
+                                                    launcher =
+                                                        (p.application |> LanternShell.Apps.lanternAppFor) (appContext model)
+                                                in
+                                                launcher.encodeFlags p.application
+                                            )
+                            in
+                            { processName = processName, flags = processFlags }
                         )
                         newWindowManager
 
@@ -262,8 +296,8 @@ update msg model =
 
         AppMessage pid proxiedMsg ->
             case proxiedMsg of
-                LanternShell.Apps.LaunchAppMsg app ->
-                    update (LaunchApp app) model
+                LanternShell.Apps.LaunchAppMsg app flags ->
+                    update (LaunchApp app flags) model
 
                 _ ->
                     [ \m ->
@@ -304,14 +338,14 @@ update msg model =
                     ( model, Browser.Navigation.load url )
 
 
-launchApp : LanternShell.Apps.LauncherEntry Msg -> Model -> ( Model, Cmd Msg )
-launchApp launcher model =
+launchApp : LanternShell.Apps.LauncherEntry Msg -> Maybe (LanternShell.Apps.Flags Msg) -> Model -> ( Model, Cmd Msg )
+launchApp launcher flags model =
     let
         context =
             LanternShell.Apps.appContext model
 
         ( appModel, appCmd ) =
-            launcher.init Nothing
+            launcher.init flags
 
         app =
             LanternShell.Apps.lanternAppFor appModel context
