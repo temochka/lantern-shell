@@ -111,7 +111,11 @@ init viewport url key =
                 in
                 launchApp initializedLauncher (flagsAsValue |> Maybe.andThen initializedLauncher.decodeFlags)
             )
-            (( LanternShell.Apps.appLauncher, Nothing ) :: launchers)
+            (( LanternShell.Apps.appLauncher
+             , Nothing
+             )
+                :: launchers
+            )
             ++ [ fireLiveQueries ]
         )
 

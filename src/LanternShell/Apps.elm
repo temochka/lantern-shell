@@ -318,6 +318,10 @@ scripts context =
 
 appLauncher : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)
 appLauncher context =
+    let
+        baseApp =
+            AppLauncherApp.lanternApp
+    in
     Lantern.App.mount
         { unwrapMsg =
             \wrappedMsg ->
@@ -350,26 +354,37 @@ appLauncher context =
         , unwrapFlags =
             \flags ->
                 case flags of
-                    AppLauncherFlags _ ->
-                        Just <|
-                            { nativeApps =
-                                all
-                                    |> List.map
-                                        (\launcher ->
-                                            let
-                                                app =
-                                                    launcher context
-                                            in
-                                            ( app.name, AppLauncherApp.NativeApp app )
-                                        )
-                            }
+                    AppLauncherFlags wrappedFlags ->
+                        Just wrappedFlags
 
                     _ ->
                         Nothing
-        , wrapFlags = always NoFlags
+        , wrapFlags =
+            AppLauncherFlags
         , context = \_ -> { theme = context.theme }
         }
-        AppLauncherApp.lanternApp
+        { baseApp
+            | init =
+                \flags ->
+                    AppLauncherApp.init <|
+                        case flags of
+                            Just _ ->
+                                flags
+
+                            Nothing ->
+                                Just
+                                    { nativeApps =
+                                        all
+                                            |> List.map
+                                                (\launcher ->
+                                                    let
+                                                        app =
+                                                            launcher context
+                                                    in
+                                                    ( app.name, AppLauncherApp.NativeApp app )
+                                                )
+                                    }
+        }
 
 
 writerQuery : Context msg -> Lantern.App.App () (Flags msg) (App msg) (Message msg)

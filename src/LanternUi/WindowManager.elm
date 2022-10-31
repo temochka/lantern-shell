@@ -154,7 +154,7 @@ serialize serializeProcess { layout } =
                     >> (\{ processName, flags } ->
                             Json.Encode.list identity
                                 (Json.Encode.string processName
-                                    :: (Maybe.map List.singleton flags |> Maybe.withDefault [])
+                                    :: (flags |> Maybe.map List.singleton |> Maybe.withDefault [])
                                 )
                        )
                 )

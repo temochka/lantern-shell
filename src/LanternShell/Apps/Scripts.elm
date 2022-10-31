@@ -156,6 +156,15 @@ stackLimit =
     100000
 
 
+emptyEditor : EditorModel
+emptyEditor =
+    { interpreter = Stopped
+    , script = emptyScript
+    , console = []
+    , repl = ""
+    }
+
+
 printLn : String -> Console -> Console
 printLn string console =
     ConsoleString string :: console
@@ -732,14 +741,7 @@ init =
                         )
 
                     NewScriptMode ->
-                        ( Editor
-                            (LanternUi.Persistent.New
-                                { interpreter = Stopped
-                                , script = unsavedScript
-                                , console = []
-                                , repl = ""
-                                }
-                            )
+                        ( Editor (LanternUi.Persistent.New emptyEditor)
                         , Cmd.none
                         )
 
@@ -748,8 +750,8 @@ init =
            )
 
 
-unsavedScript : { code : String, name : String, input : String }
-unsavedScript =
+emptyScript : { code : String, name : String, input : String }
+emptyScript =
     { code = "", name = "", input = "" }
 
 
@@ -834,21 +836,25 @@ updateEditor model updateFn =
 
 updatePersistentEditor :
     Model
-    -> (Persistent ScriptId EditorModel -> ( Persistent ScriptId EditorModel, Cmd (Lantern.App.Message Message) ))
+    ->
+        (Persistent ScriptId EditorModel
+         -> Bool -- isRunning
+         -> ( Persistent ScriptId EditorModel, Cmd (Lantern.App.Message Message) )
+        )
     -> ( Model, Cmd (Lantern.App.Message Message) )
 updatePersistentEditor model updateFn =
     case model of
         Editor m ->
             let
                 ( newM, cmd ) =
-                    updateFn m
+                    updateFn m False
             in
             ( Editor newM, cmd )
 
         Runner m ->
             let
                 ( newM, cmd ) =
-                    updateFn m
+                    updateFn m True
             in
             ( Runner newM, cmd )
 
@@ -1222,7 +1228,7 @@ update msg appModel =
 
         UpdateScript result ->
             updatePersistentEditor appModel
-                (\model ->
+                (\model isRunning ->
                     result
                         |> Result.toMaybe
                         |> Maybe.andThen identity
@@ -1233,14 +1239,15 @@ update msg appModel =
                                         ( LanternUi.Persistent.Loaded id { editor | script = script }, Cmd.none )
 
                                     LanternUi.Persistent.Loading id ->
-                                        ( LanternUi.Persistent.Loaded id
-                                            { interpreter = Stopped
-                                            , script = script
-                                            , console = []
-                                            , repl = ""
-                                            }
-                                        , Cmd.none
-                                        )
+                                        let
+                                            editorModel =
+                                                { emptyEditor | script = script }
+                                        in
+                                        if isRunning then
+                                            runScript editorModel |> Tuple.mapFirst (LanternUi.Persistent.Loaded id)
+
+                                        else
+                                            ( LanternUi.Persistent.Loaded id editorModel, Cmd.none )
 
                                     LanternUi.Persistent.New _ ->
                                         ( model, Cmd.none )
@@ -1250,7 +1257,7 @@ update msg appModel =
 
         SaveScript ->
             updatePersistentEditor appModel
-                (\model ->
+                (\model _ ->
                     let
                         cmd =
                             Maybe.map2
@@ -1273,13 +1280,7 @@ update msg appModel =
 
         NewScript ->
             ( Editor
-                (LanternUi.Persistent.New
-                    { interpreter = Stopped
-                    , script = unsavedScript
-                    , console = []
-                    , repl = ""
-                    }
-                )
+                (LanternUi.Persistent.New emptyEditor)
             , Lantern.App.reflag
             )
 
@@ -1303,7 +1304,7 @@ update msg appModel =
 
         ScriptCreated result ->
             updatePersistentEditor appModel
-                (\pModel ->
+                (\pModel _ ->
                     result
                         |> Result.toMaybe
                         |> Maybe.andThen
@@ -1319,14 +1320,7 @@ update msg appModel =
                 )
 
         EditScript id script ->
-            ( Editor
-                (LanternUi.Persistent.Loaded id
-                    { interpreter = Stopped
-                    , script = script
-                    , console = []
-                    , repl = ""
-                    }
-                )
+            ( Editor (LanternUi.Persistent.Loaded id { emptyEditor | script = script })
             , Lantern.App.reflag
             )
 

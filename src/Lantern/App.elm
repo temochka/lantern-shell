@@ -93,8 +93,8 @@ app def =
     , update = def.update
     , liveQueries = def.liveQueries |> Maybe.withDefault (always [])
     , subscriptions = def.subscriptions
-    , decodeFlags = always Nothing
-    , encodeFlags = always Nothing
+    , decodeFlags = def.decodeFlags
+    , encodeFlags = def.encodeFlags
     }
 
 
@@ -176,5 +176,5 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, unwrapFlags, wrapFlags, cont
     , liveQueries = wrappedLiveQueries
     , subscriptions = wrappedSubscriptions
     , decodeFlags = mountedApp.decodeFlags >> Maybe.map wrapFlags
-    , encodeFlags = unwrapModel >> Maybe.andThen mountedApp.encodeFlags
+    , encodeFlags = \model -> unwrapModel model |> Maybe.andThen mountedApp.encodeFlags
     }
