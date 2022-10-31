@@ -16,7 +16,6 @@ import Base64
 import Browser.Dom
 import Element exposing (Element)
 import Element.Events
-import Html.Attributes
 import Json.Decode
 import Json.Encode
 import ProcessTable

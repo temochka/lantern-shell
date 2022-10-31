@@ -717,6 +717,7 @@ type Message
     | NewScript
     | DeleteScript ScriptId
     | EditScript ScriptId Script
+    | ToggleMode
     | UpdateName String
     | UpdateCode String
     | UpdateRepl String
@@ -1340,6 +1341,19 @@ update msg appModel =
                     )
                 )
 
+        ToggleMode ->
+            ( case appModel of
+                Runner m ->
+                    Editor m
+
+                Editor m ->
+                    Runner m
+
+                Browser _ ->
+                    appModel
+            , Cmd.none
+            )
+
 
 renderUI : Context -> UiModel -> Element (Lantern.App.Message Message)
 renderUI context uiModel =
@@ -1557,6 +1571,22 @@ viewConsole context interpreter console options =
         |> Element.column
             [ Element.width Element.fill
             , Element.spacing 10
+            , Element.above
+                (Element.el [ Element.alignRight ]
+                    (LanternUi.Input.button context.theme
+                        []
+                        { label =
+                            Element.text
+                                (if options.devMode then
+                                    "Maximize"
+
+                                 else
+                                    "Debug"
+                                )
+                        , onPress = Just <| Lantern.App.Message ToggleMode
+                        }
+                    )
+                )
             ]
 
 
