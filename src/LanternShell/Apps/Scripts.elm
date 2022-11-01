@@ -61,6 +61,7 @@ type Cell
     | Text (List TextFormat)
     | VStack (List Cell)
     | HStack (List Cell)
+    | Image { width : Maybe Int } String
 
 
 type ConsoleEntry
@@ -560,6 +561,39 @@ toUi val =
                                             (Ok [])
                                         |> Result.map (List.reverse >> HStack)
 
+                                "image" ->
+                                    case args of
+                                        [ imageUrlArg ] ->
+                                            imageUrlArg
+                                                |> Value.tryString
+                                                |> Maybe.map (Image { width = Nothing })
+                                                |> Result.fromMaybe (Value.exception "image URL must be a string")
+
+                                        [ optsArg, imageUrlArg ] ->
+                                            Result.map2
+                                                Image
+                                                (optsArg
+                                                    |> Value.tryDictOf Value.tryKeyword (identity >> Just)
+                                                    |> Result.fromMaybe (Value.exception "image opts must be a map")
+                                                    |> Result.andThen
+                                                        (\optsMap ->
+                                                            let
+                                                                width =
+                                                                    Dict.get "width" optsMap
+                                                                        |> Maybe.map (Value.tryInt >> Result.fromMaybe (Value.exception "image width must be an integer") >> Result.map Just)
+                                                                        |> Maybe.withDefault (Ok Nothing)
+                                                            in
+                                                            Result.map (\w -> { width = w }) width
+                                                        )
+                                                )
+                                                (imageUrlArg
+                                                    |> Value.tryString
+                                                    |> Result.fromMaybe (Value.exception "image URL must be a string")
+                                                )
+
+                                        _ ->
+                                            Err (Value.exception "Invalid number of parameters to :image")
+
                                 "text" ->
                                     args
                                         |> List.foldr (\e a -> toTextPart e |> Result.map2 (\x y -> y :: x) a) (Ok [])
@@ -817,19 +851,23 @@ updateEditor :
     -> ( Model, Cmd (Lantern.App.Message Message) )
 updateEditor model updateFn =
     case model of
-        Editor (LanternUi.Persistent.Loaded id m) ->
+        Editor p ->
             let
                 ( newM, cmd ) =
-                    updateFn m
+                    LanternUi.Persistent.state p
+                        |> Maybe.map (updateFn >> Tuple.mapFirst (\s -> LanternUi.Persistent.mapState (always s) p))
+                        |> Maybe.withDefault ( p, Cmd.none )
             in
-            ( Editor (LanternUi.Persistent.Loaded id newM), cmd )
+            ( Editor newM, cmd )
 
-        Runner (LanternUi.Persistent.Loaded id m) ->
+        Runner p ->
             let
                 ( newM, cmd ) =
-                    updateFn m
+                    LanternUi.Persistent.state p
+                        |> Maybe.map (updateFn >> Tuple.mapFirst (\s -> LanternUi.Persistent.mapState (always s) p))
+                        |> Maybe.withDefault ( p, Cmd.none )
             in
-            ( Runner (LanternUi.Persistent.Loaded id newM), cmd )
+            ( Runner newM, cmd )
 
         _ ->
             ( model, Cmd.none )
@@ -1435,6 +1473,20 @@ renderUI context uiModel =
                         { onPress = Just (DownloadFile name contentType content |> Lantern.App.Message)
                         , label = Element.text "Download"
                         }
+
+        Image options url ->
+            Element.el
+                [ Element.width Element.fill
+                ]
+                (Element.image
+                    [ options.width
+                        |> Maybe.map (Element.px >> Element.width)
+                        |> Maybe.withDefault LanternUi.noneAttribute
+                    ]
+                    { description = ""
+                    , src = url
+                    }
+                )
 
         Text textCells ->
             textCells
