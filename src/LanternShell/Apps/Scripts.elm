@@ -10,6 +10,7 @@ import Enclojure.Json
 import Enclojure.Located as Located
 import Enclojure.Runtime as Runtime
 import Enclojure.Value as Value exposing (Value)
+import Enclojure.ValueKeyMap exposing (ValueKeyMap)
 import Enclojure.ValueMap exposing (ValueMap)
 import File.Download
 import Html.Events
@@ -28,6 +29,7 @@ import LanternUi.FuzzySelect exposing (FuzzySelect)
 import LanternUi.Input
 import LanternUi.Persistent exposing (Persistent)
 import LanternUi.Theme
+import Markdown
 import Process
 import Task
 
@@ -39,6 +41,7 @@ type alias Context =
 type TextFormat
     = Plain String
     | TextRef InputKey
+    | Markdown String
 
 
 type alias ScriptId =
@@ -53,7 +56,7 @@ type InputCell
 
 
 type alias InputKey =
-    String
+    Value MyIO
 
 
 type Cell
@@ -62,6 +65,7 @@ type Cell
     | VStack (List Cell)
     | HStack (List Cell)
     | Image { width : Maybe Int } String
+    | Empty
 
 
 type ConsoleEntry
@@ -85,6 +89,7 @@ type alias BrowserModel =
 type alias EditorModel =
     { interpreter : Interpreter
     , script : Script
+    , serverScript : Maybe Script
     , console : Console
     , repl : String
     }
@@ -161,6 +166,7 @@ emptyEditor : EditorModel
 emptyEditor =
     { interpreter = Stopped
     , script = emptyScript
+    , serverScript = Nothing
     , console = []
     , repl = ""
     }
@@ -481,214 +487,231 @@ printlnFn =
             )
 
 
-toTextPart : Value ui -> Result Exception TextFormat
+toTextPart : Value MyIO -> Result Exception TextFormat
 toTextPart val =
     val
         |> Value.tryOneOf
             [ Value.tryString >> Maybe.map Plain
-            , Value.tryVectorOf Value.tryKeyword
+            , Value.tryVectorOf (identity >> Just)
                 >> Maybe.andThen
-                    (\kws ->
-                        case kws of
-                            [ "$", key ] ->
-                                Just (TextRef key)
-
-                            _ ->
+                    (Value.tryPatternOf2
+                        (\kw v rst ->
+                            if not (List.isEmpty rst) then
                                 Nothing
+
+                            else
+                                case kw of
+                                    "$" ->
+                                        v |> Maybe.map TextRef
+
+                                    "md" ->
+                                        v |> Maybe.andThen Value.tryString |> Maybe.map Markdown
+
+                                    _ ->
+                                        Nothing
+                        )
+                        Value.tryKeyword
+                        (identity >> Just >> Just)
                     )
             ]
         |> Result.fromMaybe
-            (Value.exception "text parts must be plain strings or variable vectors (e.g., [:$ :var])")
+            (Value.exception ("text parts must be plain strings or variable vectors (e.g., [:$ :var]), got: " ++ Value.inspect val))
 
 
-toUi : Value ui -> Result Exception Cell
+toUi : Value MyIO -> Result Exception Cell
 toUi val =
-    val
-        |> Value.tryVectorOf Just
-        |> Result.fromMaybe (Value.exception "cell must be a vector")
-        |> Result.andThen
-            (\cell ->
-                if List.length cell > 0 then
-                    Ok cell
+    if val == Value.nil then
+        Ok Empty
 
-                else
-                    Err (Value.exception "empty vector is not a valid cell")
-            )
-        |> Result.andThen
-            (\v ->
-                let
-                    args =
-                        List.drop 1 v
-                in
-                v
-                    |> List.head
-                    |> Maybe.andThen Value.tryKeyword
-                    |> Result.fromMaybe (Value.exception "type error: cell type must be a keyword")
-                    |> Result.andThen
-                        (\cellType ->
-                            case cellType of
-                                "v-stack" ->
-                                    args
-                                        |> List.foldl
-                                            (\e acc ->
-                                                acc
-                                                    |> Result.andThen
-                                                        (\l ->
-                                                            toUi e
-                                                                |> Result.map
-                                                                    (\retCell ->
-                                                                        retCell :: l
-                                                                    )
-                                                        )
-                                            )
-                                            (Ok [])
-                                        |> Result.map (List.reverse >> VStack)
+    else
+        val
+            |> Value.tryVectorOf Just
+            |> Result.fromMaybe (Value.exception "cell must be a vector")
+            |> Result.andThen
+                (\cell ->
+                    if List.length cell > 0 then
+                        Ok cell
 
-                                "h-stack" ->
-                                    args
-                                        |> List.foldl
-                                            (\e acc ->
-                                                acc
-                                                    |> Result.andThen
-                                                        (\l ->
-                                                            toUi e
-                                                                |> Result.map
-                                                                    (\retCell ->
-                                                                        retCell :: l
-                                                                    )
-                                                        )
-                                            )
-                                            (Ok [])
-                                        |> Result.map (List.reverse >> HStack)
-
-                                "image" ->
-                                    case args of
-                                        [ imageUrlArg ] ->
-                                            imageUrlArg
-                                                |> Value.tryString
-                                                |> Maybe.map (Image { width = Nothing })
-                                                |> Result.fromMaybe (Value.exception "image URL must be a string")
-
-                                        [ optsArg, imageUrlArg ] ->
-                                            Result.map2
-                                                Image
-                                                (optsArg
-                                                    |> Value.tryDictOf Value.tryKeyword (identity >> Just)
-                                                    |> Result.fromMaybe (Value.exception "image opts must be a map")
-                                                    |> Result.andThen
-                                                        (\optsMap ->
-                                                            let
-                                                                width =
-                                                                    Dict.get "width" optsMap
-                                                                        |> Maybe.map (Value.tryInt >> Result.fromMaybe (Value.exception "image width must be an integer") >> Result.map Just)
-                                                                        |> Maybe.withDefault (Ok Nothing)
-                                                            in
-                                                            Result.map (\w -> { width = w }) width
-                                                        )
+                    else
+                        Err (Value.exception "empty vector is not a valid cell")
+                )
+            |> Result.andThen
+                (\v ->
+                    let
+                        args =
+                            List.drop 1 v
+                    in
+                    v
+                        |> List.head
+                        |> Maybe.andThen Value.tryKeyword
+                        |> Result.fromMaybe (Value.exception "type error: cell type must be a keyword")
+                        |> Result.andThen
+                            (\cellType ->
+                                case cellType of
+                                    "v-stack" ->
+                                        args
+                                            |> List.foldl
+                                                (\e acc ->
+                                                    acc
+                                                        |> Result.andThen
+                                                            (\l ->
+                                                                toUi e
+                                                                    |> Result.map
+                                                                        (\retCell ->
+                                                                            retCell :: l
+                                                                        )
+                                                            )
                                                 )
-                                                (imageUrlArg
+                                                (Ok [])
+                                            |> Result.map (List.reverse >> VStack)
+
+                                    "h-stack" ->
+                                        args
+                                            |> List.foldl
+                                                (\e acc ->
+                                                    acc
+                                                        |> Result.andThen
+                                                            (\l ->
+                                                                toUi e
+                                                                    |> Result.map
+                                                                        (\retCell ->
+                                                                            retCell :: l
+                                                                        )
+                                                            )
+                                                )
+                                                (Ok [])
+                                            |> Result.map (List.reverse >> HStack)
+
+                                    "image" ->
+                                        case args of
+                                            [ imageUrlArg ] ->
+                                                imageUrlArg
                                                     |> Value.tryString
+                                                    |> Maybe.map (Image { width = Nothing })
                                                     |> Result.fromMaybe (Value.exception "image URL must be a string")
+
+                                            [ optsArg, imageUrlArg ] ->
+                                                Result.map2
+                                                    Image
+                                                    (optsArg
+                                                        |> Value.tryDictOf Value.tryKeyword (identity >> Just)
+                                                        |> Result.fromMaybe (Value.exception "image opts must be a map")
+                                                        |> Result.andThen
+                                                            (\optsMap ->
+                                                                let
+                                                                    width =
+                                                                        Dict.get "width" optsMap
+                                                                            |> Maybe.map (Value.tryInt >> Result.fromMaybe (Value.exception "image width must be an integer") >> Result.map Just)
+                                                                            |> Maybe.withDefault (Ok Nothing)
+                                                                in
+                                                                Result.map (\w -> { width = w }) width
+                                                            )
+                                                    )
+                                                    (imageUrlArg
+                                                        |> Value.tryString
+                                                        |> Result.fromMaybe (Value.exception "image URL must be a string")
+                                                    )
+
+                                            _ ->
+                                                Err (Value.exception "Invalid number of parameters to :image")
+
+                                    "text" ->
+                                        args
+                                            |> List.foldr (\e a -> toTextPart e |> Result.map2 (\x y -> y :: x) a) (Ok [])
+                                            |> Result.map Text
+
+                                    "text-input" ->
+                                        args
+                                            |> List.head
+                                            |> Result.fromMaybe (Value.exception "missing required key argument to :text-input")
+                                            |> Result.andThen
+                                                (\key ->
+                                                    let
+                                                        options =
+                                                            args
+                                                                |> List.drop 1
+                                                                |> List.head
+                                                                |> Maybe.andThen Value.tryMap
+                                                                |> Maybe.withDefault Enclojure.ValueMap.empty
+
+                                                        suggestions =
+                                                            options
+                                                                |> Enclojure.ValueMap.get (Value.keyword "suggestions")
+                                                                |> Maybe.map Located.getValue
+                                                                |> Maybe.andThen (Value.trySequenceOf Value.tryString)
+                                                                |> Maybe.withDefault []
+                                                    in
+                                                    Ok (Input key (TextInput { suggestions = suggestions }))
                                                 )
 
-                                        _ ->
-                                            Err (Value.exception "Invalid number of parameters to :image")
+                                    "button" ->
+                                        args
+                                            |> List.head
+                                            |> Result.fromMaybe (Value.exception "missing required key argument to :button")
+                                            |> Result.andThen
+                                                (\key ->
+                                                    let
+                                                        options =
+                                                            args
+                                                                |> List.drop 1
+                                                                |> List.head
+                                                                |> Maybe.andThen Value.tryMap
+                                                                |> Maybe.withDefault Enclojure.ValueMap.empty
 
-                                "text" ->
-                                    args
-                                        |> List.foldr (\e a -> toTextPart e |> Result.map2 (\x y -> y :: x) a) (Ok [])
-                                        |> Result.map Text
+                                                        title =
+                                                            Enclojure.ValueMap.get (Value.keyword "title") options
+                                                                |> Maybe.map Located.getValue
+                                                                |> Maybe.andThen Value.tryString
+                                                                |> Maybe.withDefault
+                                                                    (key
+                                                                        |> Value.tryOneOf [ Value.tryString, Value.tryKeyword ]
+                                                                        |> Maybe.withDefault "OK"
+                                                                    )
+                                                    in
+                                                    Ok (Input key (Button { title = title }))
+                                                )
 
-                                "text-input" ->
-                                    args
-                                        |> List.head
-                                        |> Maybe.andThen Value.tryKeyword
-                                        |> Result.fromMaybe (Value.exception "missing required key argument to :text-input")
-                                        |> Result.andThen
-                                            (\key ->
-                                                let
-                                                    options =
-                                                        args
-                                                            |> List.drop 1
-                                                            |> List.head
-                                                            |> Maybe.andThen Value.tryMap
-                                                            |> Maybe.withDefault Enclojure.ValueMap.empty
+                                    "download" ->
+                                        args
+                                            |> Value.tryPatternOf2
+                                                (\key content restArgs ->
+                                                    let
+                                                        options =
+                                                            restArgs
+                                                                |> List.head
+                                                                |> Maybe.andThen Value.tryMap
+                                                                |> Maybe.withDefault Enclojure.ValueMap.empty
 
-                                                    suggestions =
-                                                        options
-                                                            |> Enclojure.ValueMap.get (Value.keyword "suggestions")
-                                                            |> Maybe.map Located.getValue
-                                                            |> Maybe.andThen (Value.trySequenceOf Value.tryString)
-                                                            |> Maybe.withDefault []
-                                                in
-                                                Ok (Input key (TextInput { suggestions = suggestions }))
-                                            )
+                                                        contentType =
+                                                            Enclojure.ValueMap.get (Value.keyword "content-type") options
+                                                                |> Maybe.map Located.getValue
+                                                                |> Maybe.andThen Value.tryString
+                                                                |> Maybe.withDefault "text/plain"
 
-                                "button" ->
-                                    args
-                                        |> List.head
-                                        |> Maybe.andThen Value.tryKeyword
-                                        |> Result.fromMaybe (Value.exception "missing required key argument to :button")
-                                        |> Result.andThen
-                                            (\key ->
-                                                let
-                                                    options =
-                                                        args
-                                                            |> List.drop 1
-                                                            |> List.head
-                                                            |> Maybe.andThen Value.tryMap
-                                                            |> Maybe.withDefault Enclojure.ValueMap.empty
-
-                                                    title =
-                                                        Enclojure.ValueMap.get (Value.keyword "title") options
-                                                            |> Maybe.map Located.getValue
-                                                            |> Maybe.andThen Value.tryString
-                                                            |> Maybe.withDefault key
-                                                in
-                                                Ok (Input key (Button { title = title }))
-                                            )
-
-                                "download" ->
-                                    args
-                                        |> Value.tryPatternOf2
-                                            (\key content restArgs ->
-                                                let
-                                                    options =
-                                                        restArgs
-                                                            |> List.head
-                                                            |> Maybe.andThen Value.tryMap
-                                                            |> Maybe.withDefault Enclojure.ValueMap.empty
-
-                                                    contentType =
-                                                        Enclojure.ValueMap.get (Value.keyword "content-type") options
-                                                            |> Maybe.map Located.getValue
-                                                            |> Maybe.andThen Value.tryString
-                                                            |> Maybe.withDefault "text/plain"
-
-                                                    name =
-                                                        Enclojure.ValueMap.get (Value.keyword "name") options
-                                                            |> Maybe.map Located.getValue
-                                                            |> Maybe.andThen Value.tryString
-                                                            |> Maybe.withDefault "download.txt"
-                                                in
-                                                Just
-                                                    (Input key
-                                                        (Download
-                                                            { name = name
-                                                            , content = content
-                                                            , contentType = contentType
-                                                            }
+                                                        name =
+                                                            Enclojure.ValueMap.get (Value.keyword "name") options
+                                                                |> Maybe.map Located.getValue
+                                                                |> Maybe.andThen Value.tryString
+                                                                |> Maybe.withDefault "download.txt"
+                                                    in
+                                                    Just
+                                                        (Input key
+                                                            (Download
+                                                                { name = name
+                                                                , content = content
+                                                                , contentType = contentType
+                                                                }
+                                                            )
                                                         )
-                                                    )
-                                            )
-                                            Value.tryKeyword
-                                            Value.tryString
-                                        |> Result.fromMaybe (Value.exception "type error: invalid arguments to download cell")
+                                                )
+                                                (identity >> Just)
+                                                Value.tryString
+                                            |> Result.fromMaybe (Value.exception "type error: invalid arguments to download cell")
 
-                                _ ->
-                                    Err (Value.exception ("type error: " ++ cellType ++ " is not a supported cell type"))
-                        )
-            )
+                                    _ ->
+                                        Err (Value.exception ("type error: " ++ cellType ++ " is not a supported cell type"))
+                            )
+                )
 
 
 ui : Callable MyIO
@@ -736,7 +759,7 @@ type MyIO
 
 
 type Message
-    = FuzzySelectMessage String LanternUi.FuzzySelect.Message
+    = FuzzySelectMessage InputKey LanternUi.FuzzySelect.Message
     | Run
     | Stop
     | UpdateInputRequest InputKey InputCell String
@@ -798,7 +821,9 @@ type alias UI io =
 
 
 type alias UiModel =
-    { fuzzySelects : Dict String FuzzySelect, enclojureUi : UI MyIO }
+    { fuzzySelects : ValueKeyMap MyIO FuzzySelect
+    , enclojureUi : UI MyIO
+    }
 
 
 type Interpreter
@@ -1003,7 +1028,7 @@ handleEvalResult evalResult { env, console } =
                     )
 
                 ShowUI uiState ->
-                    ( ShowingUI { enclojureUi = uiState, fuzzySelects = Dict.empty } env (Ok >> toStep)
+                    ( ShowingUI { enclojureUi = uiState, fuzzySelects = Enclojure.ValueKeyMap.empty } env (Ok >> toStep)
                     , console
                     , Cmd.none
                     )
@@ -1069,15 +1094,20 @@ update msg appModel =
                     case model.interpreter of
                         ShowingUI ({ fuzzySelects } as uiState) env toStep ->
                             let
-                                updatedFuzzySelects =
-                                    Dict.update id
-                                        (Maybe.withDefault LanternUi.FuzzySelect.hidden
-                                            >> LanternUi.FuzzySelect.update selectMsg
-                                            >> Just
-                                        )
-                                        fuzzySelects
+                                updatedFuzzySelect =
+                                    Enclojure.ValueKeyMap.get id fuzzySelects
+                                        |> Maybe.withDefault LanternUi.FuzzySelect.hidden
+                                        |> LanternUi.FuzzySelect.update selectMsg
                             in
-                            ( { model | interpreter = ShowingUI { uiState | fuzzySelects = updatedFuzzySelects } env toStep }
+                            ( { model
+                                | interpreter =
+                                    ShowingUI
+                                        { uiState
+                                            | fuzzySelects = Enclojure.ValueKeyMap.insert id updatedFuzzySelect fuzzySelects
+                                        }
+                                        env
+                                        toStep
+                              }
                             , Cmd.none
                             )
 
@@ -1200,7 +1230,7 @@ update msg appModel =
                                 Button _ ->
                                     let
                                         exitCode =
-                                            Value.keyword name
+                                            name
 
                                         state =
                                             Value.map enclojureUi.state
@@ -1222,7 +1252,7 @@ update msg appModel =
                                 _ ->
                                     let
                                         updatedState =
-                                            Enclojure.ValueMap.insert (Value.keyword name)
+                                            Enclojure.ValueMap.insert name
                                                 (Located.unknown (Value.string v))
                                                 uiState.enclojureUi.state
                                                 |> runWatchFn env uiState.enclojureUi.watchFn
@@ -1275,12 +1305,12 @@ update msg appModel =
                             (\( _, script ) ->
                                 case model of
                                     LanternUi.Persistent.Loaded id editor ->
-                                        ( LanternUi.Persistent.Loaded id { editor | script = script }, Cmd.none )
+                                        ( LanternUi.Persistent.Loaded id { editor | serverScript = Just script }, Cmd.none )
 
                                     LanternUi.Persistent.Loading id ->
                                         let
                                             editorModel =
-                                                { emptyEditor | script = script }
+                                                { emptyEditor | script = script, serverScript = Just script }
                                         in
                                         if isRunning then
                                             runScript editorModel |> Tuple.mapFirst (LanternUi.Persistent.Loaded id)
@@ -1302,7 +1332,7 @@ update msg appModel =
                             Maybe.map2
                                 (\id s ->
                                     Lantern.Query.withArguments
-                                        "UPDATE ss SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
+                                        "UPDATE scripts SET name=$name, code=$code, input=$input, updated_at=datetime('now') WHERE id=$id"
                                         [ ( "$name", s.name |> Lantern.Query.Text )
                                         , ( "$code", s.code |> Lantern.Query.Text )
                                         , ( "$input", s.input |> Lantern.Query.Text )
@@ -1403,6 +1433,9 @@ renderUI context uiModel =
             uiModel
     in
     case cell of
+        Empty ->
+            Element.none
+
         VStack cells ->
             cells
                 |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, watchFn = watchFn, state = state } })
@@ -1416,7 +1449,7 @@ renderUI context uiModel =
         Input key inputType ->
             let
                 val =
-                    Enclojure.ValueMap.get (Value.keyword key) state
+                    Enclojure.ValueMap.get key state
                         |> Maybe.map (Located.getValue >> Value.toString)
                         |> Maybe.withDefault ""
             in
@@ -1428,7 +1461,7 @@ renderUI context uiModel =
                             [ Element.width Element.fill ]
                             { onChange = UpdateInputRequest key inputType >> Lantern.App.Message
                             , placeholder = Nothing
-                            , label = Element.Input.labelHidden key
+                            , label = Element.Input.labelHidden (Value.inspect key)
                             , text = val
                             , spellcheck = False
                             }
@@ -1443,7 +1476,9 @@ renderUI context uiModel =
                             , options = List.map2 Tuple.pair opts.suggestions opts.suggestions
                             , placeholder = Nothing
                             , query = val
-                            , state = Dict.get key fuzzySelects |> Maybe.withDefault LanternUi.FuzzySelect.hidden
+                            , state =
+                                Enclojure.ValueKeyMap.get key fuzzySelects
+                                    |> Maybe.withDefault LanternUi.FuzzySelect.hidden
                             , id = Nothing
                             }
 
@@ -1496,10 +1531,13 @@ renderUI context uiModel =
                             Plain t ->
                                 Element.text t
 
+                            Markdown t ->
+                                Element.html (Markdown.toHtml [] t)
+
                             TextRef key ->
                                 let
                                     val =
-                                        Enclojure.ValueMap.get (Value.keyword key) state
+                                        Enclojure.ValueMap.get key state
                                             |> Maybe.map (Located.getValue >> Value.toString)
                                             |> Maybe.withDefault ""
                                 in
