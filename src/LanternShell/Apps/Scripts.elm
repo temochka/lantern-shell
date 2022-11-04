@@ -717,37 +717,64 @@ toUi val =
 ui : Callable MyIO
 ui =
     let
-        arity1 val =
-            toUi val
-                |> Result.map
-                    (\cell ->
-                        Runtime.sideEffect <| ShowUI { cell = cell, watchFn = Value.nil, state = Enclojure.ValueMap.empty }
-                    )
+        arity0 { rest } =
+            let
+                optsArg =
+                    rest |> List.head |> Maybe.andThen Value.tryMap
 
-        arity2 ( uiVal, defaultsMap ) =
-            arity3 ( uiVal, Value.nil, defaultsMap )
+                restArgs =
+                    if optsArg == Nothing then
+                        rest
 
-        arity3 ( uiVal, watchFn, defaultsMap ) =
+                    else
+                        List.drop 1 rest
+
+                opts =
+                    optsArg |> Maybe.withDefault Enclojure.ValueMap.empty
+            in
+            case restArgs of
+                [ uiVal ] ->
+                    arity3 uiVal Value.nil (Value.map Enclojure.ValueMap.empty) opts
+
+                [ uiVal, defaultsMap ] ->
+                    arity3 uiVal Value.nil defaultsMap opts
+
+                [ uiVal, watchFn, defaultsMap ] ->
+                    arity3 uiVal watchFn defaultsMap opts
+
+                _ ->
+                    Err
+                        (Value.exception
+                            ("ui called with invalid number of arguments ("
+                                ++ String.fromInt (List.length rest)
+                                ++ ")"
+                            )
+                        )
+
+        arity3 uiVal watchFn defaultsMap opts =
             defaultsMap
                 |> Value.tryMap
                 |> Result.fromMaybe (Value.exception ("type error: expected a map of defaults, got " ++ Value.inspect defaultsMap))
                 |> Result.andThen
                     (\m ->
                         toUi uiVal
-                            |> Result.map (\cell -> Runtime.sideEffect <| ShowUI { cell = cell, watchFn = watchFn, state = m })
+                            |> Result.map
+                                (\cell ->
+                                    Runtime.sideEffect <|
+                                        ShowUI
+                                            { id =
+                                                Enclojure.ValueMap.get (Value.keyword "id") opts
+                                                    |> Maybe.map Located.getValue
+                                                    |> Maybe.withDefault Value.nil
+                                            , cell = cell
+                                            , watchFn = watchFn
+                                            , state = m
+                                            }
+                                )
                     )
     in
     Callable.new
-        |> Callable.setArity1 (Callable.fixedArity (Value.symbol "nodes") arity1)
-        |> Callable.setArity2 (Callable.fixedArity ( Value.symbol "nodes", Value.symbol "defaults" ) arity2)
-        |> Callable.setArity3
-            (Callable.fixedArity
-                ( Value.symbol "nodes"
-                , Value.symbol "watch-fn"
-                , Value.symbol "defaults"
-                )
-                arity3
-            )
+        |> Callable.setArity0 (Callable.variadicArity { argNames = (), restArgName = Value.symbol "args" } arity0)
 
 
 type MyIO
@@ -814,7 +841,8 @@ emptyScript =
 
 
 type alias UI io =
-    { state : ValueMap io
+    { id : Value io
+    , state : ValueMap io
     , cell : Cell
     , watchFn : Value io
     }
@@ -1442,12 +1470,12 @@ renderUI context uiModel =
 
         VStack cells ->
             cells
-                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, watchFn = watchFn, state = state } })
+                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { id = uiModel.enclojureUi.id, cell = c, watchFn = watchFn, state = state } })
                 |> Element.column [ Element.width Element.fill, Element.alignTop, Element.spacing 10 ]
 
         HStack cells ->
             cells
-                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, watchFn = watchFn, state = state } })
+                |> List.map (\c -> renderUI context { uiModel | enclojureUi = { id = uiModel.enclojureUi.id, cell = c, watchFn = watchFn, state = state } })
                 |> Element.row [ Element.width Element.fill, Element.spacing 10, Element.alignTop ]
 
         Input key inputType ->
@@ -1577,11 +1605,38 @@ isDevModeOnlyEntry entry =
             False
 
 
+dedupeUis : Maybe (Value MyIO) -> List ConsoleEntry -> List ConsoleEntry
+dedupeUis lastUiId entries =
+    case entries of
+        ((UiTrace uiModel) as entry) :: rest ->
+            case lastUiId of
+                Just id ->
+                    if uiModel.enclojureUi.id /= Value.nil then
+                        if Value.isEqual uiModel.enclojureUi.id id then
+                            dedupeUis lastUiId rest
+
+                        else
+                            entry :: dedupeUis (Just uiModel.enclojureUi.id) rest
+
+                    else
+                        entry :: dedupeUis Nothing rest
+
+                Nothing ->
+                    entry :: dedupeUis (Just uiModel.enclojureUi.id) rest
+
+        entry :: rest ->
+            entry :: dedupeUis lastUiId rest
+
+        [] ->
+            []
+
+
 viewConsole : Context -> Interpreter -> Console -> ConsoleOptions -> Element (Lantern.App.Message Message)
 viewConsole context interpreter console options =
     activeUi interpreter
         |> Maybe.map (\uiState -> UiTrace uiState :: console)
         |> Maybe.withDefault console
+        |> dedupeUis Nothing
         |> List.filter (\entry -> options.devMode || not (isDevModeOnlyEntry entry))
         |> List.take 20
         |> List.indexedMap
