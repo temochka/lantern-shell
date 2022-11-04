@@ -1023,8 +1023,12 @@ handleEvalResult evalResult { env, console } =
 
                 Println str ->
                     ( Running
-                    , console |> printLn str
-                    , Cmd.none
+                    , str |> String.lines |> List.foldr printLn console
+                    , toStep (Ok Value.nil)
+                        |> HandleIO
+                        |> Lantern.App.Message
+                        |> Task.succeed
+                        |> Task.perform identity
                     )
 
                 ShowUI uiState ->
@@ -1444,7 +1448,7 @@ renderUI context uiModel =
         HStack cells ->
             cells
                 |> List.map (\c -> renderUI context { uiModel | enclojureUi = { cell = c, watchFn = watchFn, state = state } })
-                |> Element.row [ Element.width Element.fill ]
+                |> Element.row [ Element.width Element.fill, Element.spacing 10, Element.alignTop ]
 
         Input key inputType ->
             let
@@ -1458,7 +1462,9 @@ renderUI context uiModel =
                     if List.isEmpty opts.suggestions then
                         LanternUi.Input.multiline
                             context.theme
-                            [ Element.width Element.fill ]
+                            [ Element.width Element.fill
+                            , Element.alignTop
+                            ]
                             { onChange = UpdateInputRequest key inputType >> Lantern.App.Message
                             , placeholder = Nothing
                             , label = Element.Input.labelHidden (Value.inspect key)
@@ -1485,7 +1491,7 @@ renderUI context uiModel =
                 MaskedTextInput ->
                     LanternUi.Input.password
                         context.theme
-                        [ Element.width Element.fill ]
+                        [ Element.width Element.fill, Element.alignTop ]
                         { onChange = UpdateInputRequest key inputType >> Lantern.App.Message
                         , placeholder = Nothing
                         , label = Element.Input.labelHidden ""
@@ -1496,7 +1502,7 @@ renderUI context uiModel =
                 Button { title } ->
                     LanternUi.Input.button
                         context.theme
-                        []
+                        [ Element.alignTop ]
                         { onPress = Just (UpdateInputRequest key inputType "" |> Lantern.App.Message)
                         , label = Element.text title
                         }
@@ -1504,7 +1510,7 @@ renderUI context uiModel =
                 Download { name, contentType, content } ->
                     LanternUi.Input.button
                         context.theme
-                        []
+                        [ Element.alignTop ]
                         { onPress = Just (DownloadFile name contentType content |> Lantern.App.Message)
                         , label = Element.text "Download"
                         }
@@ -1512,6 +1518,7 @@ renderUI context uiModel =
         Image options url ->
             Element.el
                 [ Element.width Element.fill
+                , Element.alignTop
                 ]
                 (Element.image
                     [ options.width
@@ -1543,7 +1550,7 @@ renderUI context uiModel =
                                 in
                                 Element.text val
                     )
-                |> Element.paragraph []
+                |> Element.paragraph [ Element.alignTop ]
 
 
 activeUi : Interpreter -> Maybe UiModel

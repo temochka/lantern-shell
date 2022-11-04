@@ -164,6 +164,7 @@ fuzzySelect theme { label, onQueryChange, onInternalMessage, onOptionSelect, opt
         , Element.below suggestions
         , Element.Border.color theme.borderDefault
         , Element.Background.color theme.bgDefault
+        , Element.alignTop
         , Element.Events.onFocus (onInternalMessage (Toggle init))
         , Element.Events.onLoseFocus (onInternalMessage (Toggle Nothing))
         , Element.Font.color theme.fontDefault
