@@ -23,7 +23,7 @@ CREATE TABLE flashcards
 , interval_back integer
 , created_at integer
 , image_back text
-, title_front text);
+, title_front text, is_marked_for_correction boolean);
 
 CREATE TABLE notes (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,5 +51,5 @@ CREATE TABLE scripts (
   updated_at DATETIME NOT NULL
 );
 
-INSERT INTO schema_migrations (version) VALUES (20221020033642);
+INSERT INTO schema_migrations (version) VALUES (20221105175538);
 
