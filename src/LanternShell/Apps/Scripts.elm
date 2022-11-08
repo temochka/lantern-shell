@@ -1549,7 +1549,12 @@ renderUI context uiModel =
         HStack cells ->
             cells
                 |> List.map (\c -> renderUI context { uiModel | enclojureUi = { id = uiModel.enclojureUi.id, cell = c, watchFn = watchFn, state = state } })
-                |> Element.row [ Element.width Element.fill, Element.spacing 10, Element.alignTop ]
+                |> Element.row
+                    [ Element.width Element.fill
+                    , Element.spacing 10
+                    , Element.alignTop
+                    , Element.scrollbarX
+                    ]
 
         Input key inputType ->
             let
@@ -1741,7 +1746,6 @@ viewConsole context interpreter console options =
                 in
                 Element.el
                     [ Element.width Element.fill
-                    , Element.scrollbarX
                     , if i == 0 then
                         Element.alpha 1.0
 
@@ -1803,7 +1807,8 @@ viewConsole context interpreter console options =
 
                         UiTrace uiState ->
                             Element.column
-                                [ Element.width Element.fill ]
+                                [ Element.width Element.fill
+                                ]
                                 [ renderUI context uiState ]
                     )
             )
