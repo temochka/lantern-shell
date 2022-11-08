@@ -1553,7 +1553,6 @@ renderUI context uiModel =
                     [ Element.width Element.fill
                     , Element.spacing 10
                     , Element.alignTop
-                    , Element.scrollbarX
                     ]
 
         Input key inputType ->
