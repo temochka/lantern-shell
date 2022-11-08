@@ -1,0 +1,1 @@
+ALTER TABLE flashcards ADD COLUMN is_marked_for_correction boolean

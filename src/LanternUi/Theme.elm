@@ -27,7 +27,7 @@ brblack =
 
 black : Element.Color
 black =
-    Element.rgb255 7 54 66
+    Element.rgb255 0x07 0x36 0x42
 
 
 brgreen : Element.Color
@@ -86,7 +86,7 @@ blue =
 
 cyan : Element.Color
 cyan =
-    Element.rgb255 42 161 152
+    Element.rgb255 0x2A 0xA1 0x98
 
 
 

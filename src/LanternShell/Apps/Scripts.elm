@@ -52,6 +52,7 @@ type InputCell
     = TextInput { suggestions : List String }
     | MaskedTextInput
     | Button { title : String }
+    | Checkbox { label : String }
     | Download { name : String, contentType : String, content : String }
 
 
@@ -644,6 +645,30 @@ toUi val =
                                                     Ok (Input key (TextInput { suggestions = suggestions }))
                                                 )
 
+                                    "checkbox" ->
+                                        args
+                                            |> List.head
+                                            |> Result.fromMaybe (Value.exception "missing required key argument to :checkbox")
+                                            |> Result.andThen
+                                                (\key ->
+                                                    case args of
+                                                        [ _ ] ->
+                                                            Ok (Input key (Checkbox { label = key |> Value.tryOneOf [ Value.tryString, Value.tryKeyword ] |> Maybe.withDefault "" }))
+
+                                                        [ _, labelVal ] ->
+                                                            labelVal
+                                                                |> Value.tryString
+                                                                |> Result.fromMaybe
+                                                                    (Value.exception "checkbox label must be a string")
+                                                                |> Result.map
+                                                                    (\label ->
+                                                                        Input key (Checkbox { label = label })
+                                                                    )
+
+                                                        _ ->
+                                                            Err <| Value.exception ("invalid number of parameters (" ++ String.fromInt (List.length args) ++ ") passed to :checkbox")
+                                                )
+
                                     "button" ->
                                         args
                                             |> List.head
@@ -1060,7 +1085,12 @@ handleEvalResult evalResult { env, console } =
                     )
 
                 ShowUI uiState ->
-                    ( ShowingUI { enclojureUi = uiState, fuzzySelects = Enclojure.ValueKeyMap.empty } env (Ok >> toStep)
+                    ( ShowingUI
+                        { enclojureUi = uiState
+                        , fuzzySelects = Enclojure.ValueKeyMap.empty
+                        }
+                        env
+                        (Ok >> toStep)
                     , console
                     , Cmd.none
                     )
@@ -1279,6 +1309,49 @@ update msg appModel =
                                         |> Lantern.App.Message
                                         |> Task.succeed
                                         |> Task.perform identity
+                                    )
+
+                                Checkbox _ ->
+                                    let
+                                        currentValue =
+                                            Enclojure.ValueKeyMap.get name enclojureUi.state
+                                                |> Maybe.map Located.getValue
+                                                |> Maybe.withDefault (Value.boolean False)
+
+                                        newValue =
+                                            if Value.isTruthy currentValue then
+                                                Value.boolean False
+
+                                            else
+                                                Value.boolean True
+
+                                        updatedState =
+                                            Enclojure.ValueKeyMap.insert name (Located.unknown newValue) enclojureUi.state
+                                                |> runWatchFn env uiState.enclojureUi.watchFn
+
+                                        ( interpreter, console ) =
+                                            case updatedState of
+                                                Ok st ->
+                                                    let
+                                                        updatedUi =
+                                                            { enclojureUi | state = st }
+                                                    in
+                                                    ( ShowingUI { uiState | enclojureUi = updatedUi } env toStep
+                                                    , model.console
+                                                    )
+
+                                                Err ex ->
+                                                    let
+                                                        i =
+                                                            Panic ex env
+                                                    in
+                                                    ( i, printResult i model.console )
+
+                                        updatedModel =
+                                            { model | interpreter = interpreter, console = console }
+                                    in
+                                    ( updatedModel
+                                    , Cmd.none
                                     )
 
                                 _ ->
@@ -1527,6 +1600,19 @@ renderUI context uiModel =
                         , show = False
                         }
 
+                Checkbox { label } ->
+                    Element.Input.checkbox
+                        []
+                        { onChange = always (UpdateInputRequest key inputType "" |> Lantern.App.Message)
+                        , icon = Element.Input.defaultCheckbox
+                        , checked =
+                            uiModel.enclojureUi.state
+                                |> Enclojure.ValueKeyMap.get key
+                                |> Maybe.map (Located.getValue >> Value.isTruthy)
+                                |> Maybe.withDefault False
+                        , label = Element.Input.labelRight [] (Element.text label)
+                        }
+
                 Button { title } ->
                     LanternUi.Input.button
                         context.theme
@@ -1655,6 +1741,7 @@ viewConsole context interpreter console options =
                 in
                 Element.el
                     [ Element.width Element.fill
+                    , Element.scrollbarX
                     , if i == 0 then
                         Element.alpha 1.0
 
