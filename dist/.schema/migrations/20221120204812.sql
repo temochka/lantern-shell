@@ -1,0 +1,1 @@
+ALTER TABLE flashcards ADD COLUMN dictionary_json TEXT;
