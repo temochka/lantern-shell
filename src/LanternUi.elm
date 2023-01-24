@@ -65,12 +65,12 @@ loader viewFn p =
 
 
 type PanelHeader msg
-    = TextPanelHeader (List (Element.Attribute msg)) String
+    = TextPanelHeader (List (Element.Attribute msg)) String (List (Element msg))
 
 
-textPanelHeader : List (Element.Attribute msg) -> String -> PanelHeader msg
-textPanelHeader attributes str =
-    TextPanelHeader attributes str
+textPanelHeader : List (Element.Attribute msg) -> String -> List (Element msg) -> PanelHeader msg
+textPanelHeader =
+    TextPanelHeader
 
 
 panel : Theme -> List (Element.Attribute msg) -> { content : Element msg, header : Maybe (PanelHeader msg) } -> Element msg
@@ -91,8 +91,9 @@ panel theme attributes { content, header } =
         )
         [ header
             |> Maybe.map
-                (\(TextPanelHeader attrs str) ->
-                    panelHeader theme attrs (Element.text str)
+                (\(TextPanelHeader attrs str addOns) ->
+                    Element.row [ Element.width Element.fill ]
+                        (panelHeader theme attrs (Element.text str) :: addOns)
                 )
             |> Maybe.withDefault Element.none
         , content

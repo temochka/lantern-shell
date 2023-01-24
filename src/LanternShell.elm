@@ -17,6 +17,7 @@ import Lantern.App
 import Lantern.LiveQuery exposing (LiveQuery(..))
 import LanternShell.Apps
 import LanternUi
+import LanternUi.Input
 import LanternUi.Theme
 import LanternUi.WindowManager
 import ProcessTable exposing (ProcessTable)
@@ -179,6 +180,9 @@ wrapAppMessage pid msg =
 
         Lantern.App.LanternMessage lanternMessage ->
             LanternMessage (Lantern.map (AppMessage pid) lanternMessage)
+
+        Lantern.App.Close ->
+            CloseApp pid
 
         Lantern.App.Reflag ->
             WindowManagerMessage LanternUi.WindowManager.Nop
@@ -434,6 +438,7 @@ renderApp model { focused, id, tabindex } process =
                     , Element.htmlAttribute (Html.Attributes.tabindex tabindex)
                     ]
                     process.name
+                    [ LanternUi.Input.button model.theme [ Element.alignRight ] { onPress = Just <| Lantern.App.Close, label = Element.text "⨯" } ]
                 )
         }
         |> Element.map (wrapAppMessage process.pid)
@@ -480,7 +485,7 @@ view model =
             ]
             [ renderAppLauncher model
             , Element.el
-                [ Element.paddingEach { top = 0, bottom = 10, left = 20, right = 20 }
+                [ Element.paddingEach { top = 0, bottom = 5, left = 5, right = 5 }
                 , Element.width Element.fill
                 , Element.height Element.fill
                 , Element.scrollbarY

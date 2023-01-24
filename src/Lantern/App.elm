@@ -10,6 +10,7 @@ import Task exposing (Task)
 type Message msg
     = Message msg
     | LanternMessage (Lantern.Message msg)
+    | Close
     | Reflag
 
 
@@ -27,6 +28,9 @@ mapMessage f msg =
         LanternMessage lanternMessage ->
             LanternMessage (Lantern.map f lanternMessage)
 
+        Close ->
+            Close
+
         Reflag ->
             Reflag
 
@@ -39,6 +43,7 @@ call task =
 type alias App ctx flags model msg =
     { init : Maybe flags -> ( model, Cmd (Message msg) )
     , view : ctx -> model -> Element (Message msg)
+    , titleBarAddOns : ctx -> model -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : model -> List (LiveQuery msg)
     , subscriptions : model -> Sub (Message msg)
@@ -69,6 +74,7 @@ liveApp def =
     , subscriptions = def.subscriptions
     , decodeFlags = always Nothing
     , encodeFlags = always Nothing
+    , titleBarAddOns = \_ _ -> Element.none
     }
 
 
@@ -79,6 +85,7 @@ app :
         ctx
         -> model
         -> Element (Message msg)
+    , titleBarAddOns : ctx -> model -> Element (Message msg)
     , update : msg -> model -> ( model, Cmd (Message msg) )
     , liveQueries : Maybe (model -> List (LiveQuery msg))
     , subscriptions : model -> Sub (Message msg)
@@ -90,6 +97,7 @@ app def =
     { name = def.name
     , init = def.init
     , view = def.view
+    , titleBarAddOns = def.titleBarAddOns
     , update = def.update
     , liveQueries = def.liveQueries |> Maybe.withDefault (always [])
     , subscriptions = def.subscriptions
@@ -112,6 +120,7 @@ simpleApp def =
     { name = def.name
     , init = \_ -> ( def.init, Cmd.none )
     , view = def.view
+    , titleBarAddOns = \_ _ -> Element.none
     , update = def.update
     , liveQueries = always []
     , subscriptions = always Sub.none
@@ -151,6 +160,12 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, unwrapFlags, wrapFlags, cont
                 |> Maybe.map (mountedApp.view (context rootModel) >> Element.map (mapMessage wrapMsg))
                 |> Maybe.withDefault Element.none
 
+        wrappedTitleBarAddOns _ rootModel =
+            rootModel
+                |> unwrapModel
+                |> Maybe.map (mountedApp.titleBarAddOns (context rootModel) >> Element.map (mapMessage wrapMsg))
+                |> Maybe.withDefault Element.none
+
         wrappedInit rootFlags =
             rootFlags
                 |> Maybe.andThen unwrapFlags
@@ -172,6 +187,7 @@ mount { unwrapMsg, wrapMsg, unwrapModel, wrapModel, unwrapFlags, wrapFlags, cont
     { name = mountedApp.name
     , init = wrappedInit
     , view = wrappedView
+    , titleBarAddOns = wrappedTitleBarAddOns
     , update = wrappedUpdate
     , liveQueries = wrappedLiveQueries
     , subscriptions = wrappedSubscriptions

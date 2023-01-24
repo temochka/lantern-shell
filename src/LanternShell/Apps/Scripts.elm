@@ -2065,6 +2065,7 @@ lanternApp =
         { name = "Scripts"
         , init = init
         , view = view
+        , titleBarAddOns = \_ _ -> Element.none
         , update = update
         , liveQueries = Just liveQueries
         , subscriptions = always Sub.none

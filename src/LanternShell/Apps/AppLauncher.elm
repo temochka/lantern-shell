@@ -96,7 +96,7 @@ view { theme } model =
     Element.row
         [ Element.width Element.fill
         , Element.spacing 10
-        , Element.paddingXY 25 10
+        , Element.paddingXY 5 10
         ]
         [ Element.el [ Element.Font.color theme.fontContrastInactive ] (Element.text ">")
         , LanternUi.FuzzySelect.fuzzySelect
@@ -126,6 +126,7 @@ lanternApp =
         , liveQueries = Just liveQueries
         , init = init
         , view = view
+        , titleBarAddOns = \_ _ -> Element.none
         , update = update
         , subscriptions = always Sub.none
         , decodeFlags = always Nothing

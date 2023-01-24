@@ -169,6 +169,7 @@ lanternApp =
         , liveQueries = Nothing
         , subscriptions = \_ -> Sub.none
         , view = view
+        , titleBarAddOns = \_ _ -> Element.none
         , update = update
         , decodeFlags = always Nothing
         , encodeFlags = always Nothing
