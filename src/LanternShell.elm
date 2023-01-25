@@ -418,8 +418,14 @@ renderApp model { focused, id, tabindex } process =
         app =
             ProcessTable.processApp process
 
+        launcher =
+            LanternShell.Apps.lanternAppFor app (LanternShell.Apps.appContext model)
+
         content =
-            (LanternShell.Apps.lanternAppFor app (LanternShell.Apps.appContext model)).view () app
+            launcher.view () app
+
+        titleBarAddOns =
+            launcher.titleBarAddOns () app
 
         border =
             if focused then
@@ -438,7 +444,9 @@ renderApp model { focused, id, tabindex } process =
                     , Element.htmlAttribute (Html.Attributes.tabindex tabindex)
                     ]
                     process.name
-                    [ LanternUi.Input.button model.theme [ Element.alignRight ] { onPress = Just <| Lantern.App.Close, label = Element.text "⨯" } ]
+                    [ titleBarAddOns
+                    , LanternUi.Input.button model.theme [ Element.alignRight ] { onPress = Just <| Lantern.App.Close, label = Element.text "⨯" }
+                    ]
                 )
         }
         |> Element.map (wrapAppMessage process.pid)

@@ -92,7 +92,7 @@ panel theme attributes { content, header } =
         [ header
             |> Maybe.map
                 (\(TextPanelHeader attrs str addOns) ->
-                    Element.row [ Element.width Element.fill ]
+                    Element.row [ Element.width Element.fill, Element.spacing 10 ]
                         (panelHeader theme attrs (Element.text str) :: addOns)
                 )
             |> Maybe.withDefault Element.none

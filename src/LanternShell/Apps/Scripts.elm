@@ -1721,6 +1721,33 @@ dedupeUis lastUiId entries =
             []
 
 
+titleBarAddOns : Context -> Model -> Element (Lantern.App.Message Message)
+titleBarAddOns context model =
+    let
+        mLabel =
+            case model of
+                Browser _ ->
+                    Nothing
+
+                Runner _ ->
+                    Just "Edit"
+
+                Editor _ ->
+                    Just "Expand"
+    in
+    mLabel
+        |> Maybe.map
+            (\label ->
+                LanternUi.Input.button context.theme
+                    [ Element.alignRight ]
+                    { label =
+                        Element.text label
+                    , onPress = Just <| Lantern.App.Message ToggleMode
+                    }
+            )
+        |> Maybe.withDefault Element.none
+
+
 viewConsole : Context -> Interpreter -> Console -> ConsoleOptions -> Element (Lantern.App.Message Message)
 viewConsole context interpreter console options =
     activeUi interpreter
@@ -1814,22 +1841,6 @@ viewConsole context interpreter console options =
         |> Element.column
             [ Element.width Element.fill
             , Element.spacing 10
-            , Element.above
-                (Element.el [ Element.alignRight ]
-                    (LanternUi.Input.button context.theme
-                        []
-                        { label =
-                            Element.text
-                                (if options.devMode then
-                                    "Maximize"
-
-                                 else
-                                    "Debug"
-                                )
-                        , onPress = Just <| Lantern.App.Message ToggleMode
-                        }
-                    )
-                )
             ]
 
 
@@ -2065,7 +2076,7 @@ lanternApp =
         { name = "Scripts"
         , init = init
         , view = view
-        , titleBarAddOns = \_ _ -> Element.none
+        , titleBarAddOns = titleBarAddOns
         , update = update
         , liveQueries = Just liveQueries
         , subscriptions = always Sub.none
