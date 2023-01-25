@@ -1,5 +1,6 @@
 module LanternShell.Apps.Scripts exposing (Flags(..), Message(..), Model, MyIO, Script, ScriptId, lanternApp, scriptsQuery)
 
+import Browser.Dom
 import Dict exposing (Dict)
 import Element exposing (Element)
 import Element.Background
@@ -13,6 +14,7 @@ import Enclojure.Value as Value exposing (Value)
 import Enclojure.ValueKeyMap exposing (ValueKeyMap)
 import Enclojure.ValueMap exposing (ValueMap)
 import File.Download
+import Html.Attributes
 import Html.Events
 import Json.Decode
 import Json.Encode
@@ -93,6 +95,7 @@ type alias EditorModel =
     , serverScript : Maybe Script
     , console : Console
     , repl : String
+    , showHistory : Bool
     }
 
 
@@ -170,6 +173,7 @@ emptyEditor =
     , serverScript = Nothing
     , console = []
     , repl = ""
+    , showHistory = True
     }
 
 
@@ -826,6 +830,7 @@ type Message
     | NewScript
     | DeleteScript ScriptId
     | EditScript ScriptId Script
+    | ToggleHistoryVisibility
     | ToggleMode
     | UpdateName String
     | UpdateCode String
@@ -945,10 +950,22 @@ updateEditor model updateFn =
                         |> Maybe.map (updateFn >> Tuple.mapFirst (\s -> LanternUi.Persistent.mapState (always s) p))
                         |> Maybe.withDefault ( p, Cmd.none )
             in
-            ( Runner newM, cmd )
+            ( Runner newM
+            , Cmd.batch [ cmd, scrollToConsoleTop ]
+            )
 
         _ ->
             ( model, Cmd.none )
+
+
+scrollToConsoleTop : Cmd (Lantern.App.Message Message)
+scrollToConsoleTop =
+    Browser.Dom.getViewportOf "lantern-shell-console-top"
+        |> Task.andThen
+            (\info ->
+                Browser.Dom.setViewportOf "lantern-shell-desktop" 0 info.viewport.y
+            )
+        |> Task.attempt (\_ -> Lantern.App.Message NoOp)
 
 
 updatePersistentEditor :
@@ -973,7 +990,7 @@ updatePersistentEditor model updateFn =
                 ( newM, cmd ) =
                     updateFn m True
             in
-            ( Runner newM, cmd )
+            ( Runner newM, Cmd.batch [ cmd, scrollToConsoleTop ] )
 
         _ ->
             ( model, Cmd.none )
@@ -1527,6 +1544,19 @@ update msg appModel =
             , Cmd.none
             )
 
+        ToggleHistoryVisibility ->
+            ( case appModel of
+                Runner (LanternUi.Persistent.Loaded id m) ->
+                    Runner (LanternUi.Persistent.Loaded id { m | showHistory = not m.showHistory })
+
+                Editor (LanternUi.Persistent.Loaded id m) ->
+                    Editor (LanternUi.Persistent.Loaded id { m | showHistory = not m.showHistory })
+
+                _ ->
+                    appModel
+            , Cmd.none
+            )
+
 
 renderUI : Context -> UiModel -> Element (Lantern.App.Message Message)
 renderUI context uiModel =
@@ -1682,7 +1712,9 @@ activeUi interpreter =
 
 
 type alias ConsoleOptions =
-    { devMode : Bool }
+    { devMode : Bool
+    , historyLines : Int
+    }
 
 
 isDevModeOnlyEntry : ConsoleEntry -> Bool
@@ -1724,7 +1756,7 @@ dedupeUis lastUiId entries =
 titleBarAddOns : Context -> Model -> Element (Lantern.App.Message Message)
 titleBarAddOns context model =
     let
-        mLabel =
+        mToggleModeLabel =
             case model of
                 Browser _ ->
                     Nothing
@@ -1734,18 +1766,44 @@ titleBarAddOns context model =
 
                 Editor _ ->
                     Just "Expand"
+
+        mHistoryVisibility =
+            case model of
+                Runner (LanternUi.Persistent.Loaded _ { showHistory }) ->
+                    Just showHistory
+
+                Editor (LanternUi.Persistent.Loaded _ { showHistory }) ->
+                    Just showHistory
+
+                _ ->
+                    Nothing
     in
-    mLabel
-        |> Maybe.map
-            (\label ->
-                LanternUi.Input.button context.theme
-                    [ Element.alignRight ]
-                    { label =
-                        Element.text label
-                    , onPress = Just <| Lantern.App.Message ToggleMode
-                    }
-            )
-        |> Maybe.withDefault Element.none
+    Element.row [ Element.width Element.fill, Element.spacing 10 ]
+        [ mHistoryVisibility
+            |> Maybe.map
+                (\historyVisibility ->
+                    Element.el [ Element.alignRight ]
+                        (Element.Input.checkbox []
+                            { onChange = \_ -> Lantern.App.Message ToggleHistoryVisibility
+                            , icon = Element.Input.defaultCheckbox
+                            , checked = historyVisibility
+                            , label = Element.Input.labelRight [] (Element.text "History")
+                            }
+                        )
+                )
+            |> Maybe.withDefault Element.none
+        , mToggleModeLabel
+            |> Maybe.map
+                (\label ->
+                    LanternUi.Input.button context.theme
+                        [ Element.alignRight ]
+                        { label =
+                            Element.text label
+                        , onPress = Just <| Lantern.App.Message ToggleMode
+                        }
+                )
+            |> Maybe.withDefault Element.none
+        ]
 
 
 viewConsole : Context -> Interpreter -> Console -> ConsoleOptions -> Element (Lantern.App.Message Message)
@@ -1755,7 +1813,7 @@ viewConsole context interpreter console options =
         |> Maybe.withDefault console
         |> dedupeUis Nothing
         |> List.filter (\entry -> options.devMode || not (isDevModeOnlyEntry entry))
-        |> List.take 20
+        |> List.take options.historyLines
         |> List.indexedMap
             (\i entry ->
                 let
@@ -1772,6 +1830,11 @@ viewConsole context interpreter console options =
                 in
                 Element.el
                     [ Element.width Element.fill
+                    , if i == 0 then
+                        Element.htmlAttribute (Html.Attributes.id "lantern-shell-console-top")
+
+                      else
+                        LanternUi.noneAttribute
                     , if i == 0 then
                         Element.alpha 1.0
 
@@ -1909,6 +1972,13 @@ viewEditor context mScriptId model =
                 _ ->
                     ( NoOp |> Lantern.App.Message, False )
 
+        historyLines =
+            if model.showHistory then
+                20
+
+            else
+                1
+
         repl =
             Element.column [ Element.width Element.fill, Element.spacing 20 ]
                 [ LanternUi.Input.code context.theme
@@ -1923,7 +1993,7 @@ viewEditor context mScriptId model =
                     , label = Just <| Element.text "REPL"
                     }
                 , Element.paragraph [] [ Element.text "Console" ]
-                , viewConsole context model.interpreter model.console { devMode = True }
+                , viewConsole context model.interpreter model.console { devMode = True, historyLines = historyLines }
                 ]
     in
     LanternUi.columnLayout
@@ -2002,7 +2072,15 @@ viewBrowser context model =
 
 viewRunner : Context -> Maybe ScriptId -> EditorModel -> Element (Lantern.App.Message Message)
 viewRunner context _ model =
-    viewConsole context model.interpreter model.console { devMode = False }
+    let
+        historyLines =
+            if model.showHistory then
+                20
+
+            else
+                1
+    in
+    viewConsole context model.interpreter model.console { devMode = False, historyLines = historyLines }
 
 
 view : Context -> Model -> Element (Lantern.App.Message Message)

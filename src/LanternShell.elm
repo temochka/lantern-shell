@@ -493,7 +493,8 @@ view model =
             ]
             [ renderAppLauncher model
             , Element.el
-                [ Element.paddingEach { top = 0, bottom = 5, left = 5, right = 5 }
+                [ Element.htmlAttribute (Html.Attributes.id "lantern-shell-desktop")
+                , Element.paddingEach { top = 0, bottom = 5, left = 5, right = 5 }
                 , Element.width Element.fill
                 , Element.height Element.fill
                 , Element.scrollbarY
